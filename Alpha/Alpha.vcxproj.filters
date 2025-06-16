@@ -1,0 +1,85 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="來源檔案">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Parser">
+      <UniqueIdentifier>{6b6a679b-1677-4d3a-9c2f-d4fb680f776e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\Weight">
+      <UniqueIdentifier>{70952437-903b-4a35-8220-0aaea98262c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\Tech">
+      <UniqueIdentifier>{9e709677-5f2e-4304-b138-255e25ebb837}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\LEF">
+      <UniqueIdentifier>{942cee52-a011-4d77-8a34-f21b78b975fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\DEF">
+      <UniqueIdentifier>{57184eec-f96a-49d8-ad36-68709e754325}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\SDC">
+      <UniqueIdentifier>{c9f4c13a-6ed2-4b24-850d-acc172240ad2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser\Verilog">
+      <UniqueIdentifier>{39da93b9-1ba2-4a99-80c2-4babffa9efc9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DataStructures">
+      <UniqueIdentifier>{486b20a0-ee00-4335-8253-8ed9c3163133}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ParserWeights.cpp">
+      <Filter>Parser\Weight</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserLEF.cpp">
+      <Filter>Parser\LEF</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserDEF.cpp">
+      <Filter>Parser\DEF</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserVerilog.cpp">
+      <Filter>Parser\Verilog</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserSDC.cpp">
+      <Filter>Parser\SDC</Filter>
+    </ClCompile>
+    <ClCompile Include="ParserTech.cpp">
+      <Filter>Parser\Tech</Filter>
+    </ClCompile>
+    <ClCompile Include="Alpha.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
+    <ClCompile Include="Parser.cpp">
+      <Filter>Parser</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ParserWeights.h">
+      <Filter>Parser\Weight</Filter>
+    </ClInclude>
+    <ClInclude Include="ParserLEF.h">
+      <Filter>Parser\LEF</Filter>
+    </ClInclude>
+    <ClInclude Include="DataStructures.h">
+      <Filter>DataStructures</Filter>
+    </ClInclude>
+    <ClInclude Include="ParserDEF.h">
+      <Filter>Parser\DEF</Filter>
+    </ClInclude>
+    <ClInclude Include="ParserVerilog.h">
+      <Filter>Parser\Verilog</Filter>
+    </ClInclude>
+    <ClInclude Include="ParserSDC.h">
+      <Filter>Parser\SDC</Filter>
+    </ClInclude>
+    <ClInclude Include="ParserTech.h">
+      <Filter>Parser\Tech</Filter>
+    </ClInclude>
+    <ClInclude Include="Parser.h">
+      <Filter>Parser</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
