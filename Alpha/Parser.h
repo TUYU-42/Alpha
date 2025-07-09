@@ -7,14 +7,15 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <set>
 
-// Forward declarations for other parsers
+// Forward declarations
 class DefParser;
 class VerilogParser;
 class SdcParser;
 class TechParser;
+class LibParser;  // 新增 LibParser
 
-// Main Parser Manager Class
 class Parser {
 private:
     // Parser instances
@@ -24,6 +25,7 @@ private:
     std::unique_ptr<VerilogParser> verilogParser_;
     std::unique_ptr<SdcParser> sdcParser_;
     std::unique_ptr<TechParser> techParser_;
+    std::unique_ptr<LibParser> libParser_;  // 新增
 
     // File paths
     std::string baseName_;
@@ -36,6 +38,11 @@ private:
     bool verilogLoaded_;
     bool sdcLoaded_;
     bool techLoaded_;
+    bool libLoaded_;  // 新增
+
+    // 競賽專用資料
+    std::vector<std::string> initialCellList_;  // 從 weight 檔案取得
+    std::set<std::string> finalCellList_;       // 經過 lib 處理後的最終列表
 
     // Helper methods
     std::string constructFilePath(const std::string& base, const std::string& extension) const;
@@ -47,13 +54,33 @@ public:
         const std::string& outputName = "output");
     ~Parser();
 
-    // Copy constructor and assignment operator (deleted for now)
+    // Disable copy
     Parser(const Parser&) = delete;
     Parser& operator=(const Parser&) = delete;
 
-    // Move constructor and assignment operator
+    // Enable move
     Parser(Parser&&) = default;
     Parser& operator=(Parser&&) = default;
+
+    // 競賽專用介面
+    bool parseLibWithCellList(const std::vector<std::string>& libFiles,
+        const std::vector<std::string>& initialCellList);
+    bool parseLEFWithCellList(const std::vector<std::string>& lefFiles,
+        const std::set<std::string>& finalCellList);
+
+    // Cell list management
+    void setInitialCellList(const std::vector<std::string>& cellList) {
+        initialCellList_ = cellList;
+    }
+    void setFinalCellList(const std::set<std::string>& cellList) {
+        finalCellList_ = cellList;
+    }
+    const std::vector<std::string>& getInitialCellList() const {
+        return initialCellList_;
+    }
+    const std::set<std::string>& getFinalCellList() const {
+        return finalCellList_;
+    }
 
     // Main parsing interface
     bool parseAllFiles();
@@ -66,6 +93,7 @@ public:
     bool parseVerilog(const std::string& filename = "");
     bool parseSDC(const std::string& filename = "");
     bool parseTech(const std::string& filename = "");
+    bool parseLib(const std::string& filename = "");  // 新增
 
     // Data access methods (const versions)
     const LefParser* getLefParser() const { return lefParser_.get(); }
@@ -74,6 +102,7 @@ public:
     const VerilogParser* getVerilogParser() const { return verilogParser_.get(); }
     const SdcParser* getSdcParser() const { return sdcParser_.get(); }
     const TechParser* getTechParser() const { return techParser_.get(); }
+    const LibParser* getLibParser() const { return libParser_.get(); }  // 新增
 
     // Data access methods (non-const versions)
     LefParser* getLefParser() { return lefParser_.get(); }
@@ -82,6 +111,7 @@ public:
     VerilogParser* getVerilogParser() { return verilogParser_.get(); }
     SdcParser* getSdcParser() { return sdcParser_.get(); }
     TechParser* getTechParser() { return techParser_.get(); }
+    LibParser* getLibParser() { return libParser_.get(); }  // 新增
 
     // Status methods
     bool isLefLoaded() const { return lefLoaded_; }
@@ -90,6 +120,7 @@ public:
     bool isVerilogLoaded() const { return verilogLoaded_; }
     bool isSdcLoaded() const { return sdcLoaded_; }
     bool isTechLoaded() const { return techLoaded_; }
+    bool isLibLoaded() const { return libLoaded_; }  // 新增
     bool allFilesLoaded() const;
 
     // Configuration methods
@@ -102,6 +133,7 @@ public:
     void analyzeFlipFlops();
     void calculateStatistics();
     void performCellTypeAnalysis();
+    void performBankingOptimization();  // 新增：多位元正反器優化
 
     // Output methods
     void printSummary() const;

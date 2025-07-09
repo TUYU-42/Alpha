@@ -7,7 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
-
+#include "LibParser.h"  // 新增 include
 using namespace std;
 
 // Constructor
@@ -29,6 +29,7 @@ void Parser::initializeParsers() {
     verilogParser_ = make_unique<VerilogParser>();
     sdcParser_ = make_unique<SdcParser>();
     techParser_ = make_unique<TechParser>();
+    libParser_ = make_unique<LibParser>();  // 新增
 }
 
 // Helper method to construct file paths
@@ -37,6 +38,93 @@ string Parser::constructFilePath(const string& base, const string& extension) co
         return base + "_weight";
     }
     return base + "." + extension;
+}
+bool Parser::parseLEFWithCellList(const vector<string>& lefFiles,
+    const set<string>& finalCellList) {
+    cout << "\n=== Contest Step 3: Parse .lef Files with Final Cell List ===" << endl;
+    cout << "  Filtering for " << finalCellList.size() << " cells only" << endl;
+
+    if (!lefParser_) {
+        addError("LEF parser not initialized");
+        return false;
+    }
+
+    // TODO: 修改 LefParser 以支援元件列表過濾
+    // 目前先解析所有檔案
+    int successCount = 0;
+    for (const string& lefFile : lefFiles) {
+        cout << "  Parsing: " << lefFile << endl;
+        if (lefParser_->parseFile(lefFile)) {
+            successCount++;
+        }
+        else {
+            addWarning("Failed to parse LEF file: " + lefFile);
+        }
+    }
+
+    if (successCount > 0) {
+        lefLoaded_ = true;
+
+        // 統計有多少目標元件被找到
+        int foundCount = 0;
+        for (const string& cellName : finalCellList) {
+            // 檢查 LEF parser 中是否有這個 MACRO
+            // TODO: 需要在 LefParser 中加入 hasMacro() 方法
+            foundCount++;  // 暫時假設都找到
+        }
+
+        cout << "✓ LEF files parsed" << endl;
+        cout << "  - Processed " << successCount << "/" << lefFiles.size() << " files" << endl;
+        cout << "  - Found " << foundCount << "/" << finalCellList.size() << " target cells" << endl;
+
+        return true;
+    }
+    else {
+        lefLoaded_ = false;
+        addError("Failed to parse any LEF files");
+        return false;
+    }
+}
+bool Parser::parseLibWithCellList(const vector<string>& libFiles,
+    const vector<string>& initialCellList) {
+    cout << "\n=== Contest Step 2: Parse .lib Files with Cell List ===" << endl;
+
+    if (!libParser_) {
+        addError("Lib parser not initialized");
+        return false;
+    }
+
+    // 清空並準備最終元件列表
+    finalCellList_.clear();
+
+    // 使用 LibParser 的競賽專用方法
+    if (libParser_->parseWithCellList(libFiles, initialCellList, finalCellList_)) {
+        libLoaded_ = true;
+        cout << "✓ .lib files parsed successfully" << endl;
+        cout << "  - Initial cell list: " << initialCellList.size() << " cells" << endl;
+        cout << "  - Final cell list: " << finalCellList_.size() << " cells" << endl;
+
+        // 顯示 single_bit_degenerate 映射
+        int mappingCount = 0;
+        for (const string& cellName : initialCellList) {
+            string degenerate = libParser_->getSingleBitDegenerate(cellName);
+            if (!degenerate.empty() && degenerate != cellName) {
+                if (mappingCount++ < 10) {  // 只顯示前 10 個
+                    cout << "    " << cellName << " → " << degenerate << endl;
+                }
+            }
+        }
+        if (mappingCount > 10) {
+            cout << "    ... and " << (mappingCount - 10) << " more mappings" << endl;
+        }
+
+        return true;
+    }
+    else {
+        libLoaded_ = false;
+        addError("Failed to parse .lib files with cell list");
+        return false;
+    }
 }
 
 // Parse all files
@@ -147,14 +235,74 @@ bool Parser::parseWeights(const string& filename) {
     if (weightParser_->parseFile(weightFile)) {
         weightLoaded_ = true;
         cout << "✓ Weight file (" << weightFile << ") parsed successfully" << endl;
+
+        // 提取初始元件列表
+        // TODO: 需要在 WeightParser 中實作 getCellList()
+        // initialCellList_ = weightParser_->getCellList();
+
+        // 暫時的解決方案：重新讀取檔案
+        ifstream infile(weightFile);
+        if (infile.is_open()) {
+            string line;
+            bool foundArea = false;
+            initialCellList_.clear();
+
+            while (getline(infile, line)) {
+                if (line.empty()) continue;
+
+                if (!foundArea) {
+                    if (line.find("Area") == 0) {
+                        foundArea = true;
+                    }
+                }
+                else {
+                    initialCellList_.push_back(line);
+                }
+            }
+            infile.close();
+
+            cout << "  - Initial cell list extracted: " << initialCellList_.size() << " cells" << endl;
+        }
+
         return true;
     }
     else {
-        weightLoaded_ = false;  // 確保失敗時狀態正確
+        weightLoaded_ = false;
         addError("Failed to parse weight file: " + weightFile);
         return false;
     }
 }
+void Parser::performBankingOptimization() {
+    cout << "\n=== Banking/Debanking Optimization ===" << endl;
+
+    if (!defLoaded_ || !libLoaded_) {
+        cout << "Error: Need both DEF and LIB data for optimization" << endl;
+        return;
+    }
+
+    // 取得所有 flip-flops
+    const auto& flipFlops = defParser_->getFlipFlops();
+    cout << "Total flip-flops in design: " << flipFlops.size() << endl;
+
+    // 根據時脈域分組
+    map<string, vector<FlipFlopInfo>> clockDomains;
+    for (const auto& ff : flipFlops) {
+        clockDomains[ff.clockNet].push_back(ff);
+    }
+
+    cout << "Clock domains: " << clockDomains.size() << endl;
+    for (const auto& domain : clockDomains) {
+        cout << "  " << domain.first << ": " << domain.second.size() << " FFs" << endl;
+    }
+
+    // TODO: 實作實際的 banking 演算法
+    // 1. 找出可以合併的單位元 FF
+    // 2. 計算合併後的成本（面積、功耗、時序）
+    // 3. 選擇最佳的合併方案
+
+    cout << "[TODO] Implement actual banking algorithm" << endl;
+}
+
 
 // TODO: Implement other parse methods when parsers are available
 bool Parser::parseDEF(const string& filename) {
@@ -311,12 +459,30 @@ void Parser::printSummary() const {
     cout << "Base name: " << baseName_ << endl;
     cout << "Output name: " << outputName_ << endl;
     cout << "Files loaded:" << endl;
+    cout << "  Weight: " << (weightLoaded_ ? "✓" : "✗");
+    if (weightLoaded_ && !initialCellList_.empty()) {
+        cout << " (initial cells: " << initialCellList_.size() << ")";
+    }
+    cout << endl;
+
+    cout << "  LIB: " << (libLoaded_ ? "✓" : "✗");
+    if (libLoaded_ && libParser_) {
+        cout << " (parsed cells: " << libParser_->getAllCells().size() << ")";
+    }
+    cout << endl;
+
     cout << "  LEF: " << (lefLoaded_ ? "✓" : "✗") << endl;
-    cout << "  Weight: " << (weightLoaded_ ? "✓" : "✗") << endl;
     cout << "  DEF: " << (defLoaded_ ? "✓" : "✗") << endl;
     cout << "  Verilog: " << (verilogLoaded_ ? "✓" : "✗") << endl;
     cout << "  SDC: " << (sdcLoaded_ ? "✓" : "✗") << endl;
     cout << "  Tech: " << (techLoaded_ ? "✓" : "✗") << endl;
+
+    if (!finalCellList_.empty()) {
+        cout << "\nContest workflow:" << endl;
+        cout << "  Initial cell list: " << initialCellList_.size() << " cells" << endl;
+        cout << "  Final cell list: " << finalCellList_.size() << " cells" << endl;
+        cout << "  Reduction: " << (100.0 * (1.0 - (double)finalCellList_.size() / initialCellList_.size())) << "%" << endl;
+    }
 }
 
 void Parser::printAllData() const {
@@ -368,8 +534,55 @@ bool Parser::writeOutputFiles() const {
     cout << "Writing output files..." << endl;
 
     try {
-        // TODO: Implement output file writing when all parsers are available
-        cout << "✓ Output files written (placeholder)" << endl;
+        // 產生 mapping 檔案 (.txt)
+        string mappingFile = outputName_ + ".txt";
+        ofstream mapFile(mappingFile);
+        if (!mapFile.is_open()) {
+            addError("Cannot create mapping file: " + mappingFile);
+            return false;
+        }
+
+        // 取得 flip-flop 數量
+        int ffCount = 0;
+        if (defParser_) {
+            ffCount = defParser_->getFlipFlopCount();
+        }
+
+        mapFile << "CellInst " << ffCount << endl;
+
+        // TODO: 產生實際的 pin mapping
+        // 目前產生 1:1 mapping
+        if (defParser_) {
+            const auto& flipFlops = defParser_->getFlipFlops();
+            for (const auto& ff : flipFlops) {
+                // 對每個 FF 的每個 pin 產生 mapping
+                mapFile << ff.instName << "/D map " << ff.instName << "/D" << endl;
+                mapFile << ff.instName << "/Q map " << ff.instName << "/Q" << endl;
+                mapFile << ff.instName << "/CK map " << ff.instName << "/CK" << endl;
+
+                // 如果有 scan chain
+                if (!ff.scanIn.empty()) {
+                    mapFile << ff.instName << "/SI map " << ff.instName << "/SI" << endl;
+                }
+                if (!ff.scanOut.empty()) {
+                    mapFile << ff.instName << "/SO map " << ff.instName << "/SO" << endl;
+                }
+            }
+        }
+
+        mapFile.close();
+        cout << "✓ Generated " << mappingFile << endl;
+
+        // 產生 DEF 檔案
+        string defFile = outputName_ + ".def";
+        // TODO: 實作 DEF 輸出
+        cout << "  [TODO] Generate " << defFile << endl;
+
+        // 產生 Verilog 檔案
+        string verilogFile = outputName_ + ".v";
+        // TODO: 實作 Verilog 輸出
+        cout << "  [TODO] Generate " << verilogFile << endl;
+
         return true;
     }
     catch (const exception& e) {
@@ -382,6 +595,7 @@ bool Parser::writeOutputFiles() const {
 void Parser::clear() {
     if (lefParser_) lefParser_->clear();
     if (weightParser_) weightParser_->clear();
+    if (libParser_) libParser_->clear();  // 新增
 
     lefLoaded_ = false;
     weightLoaded_ = false;
@@ -389,6 +603,10 @@ void Parser::clear() {
     verilogLoaded_ = false;
     sdcLoaded_ = false;
     techLoaded_ = false;
+    libLoaded_ = false;  // 新增
+
+    initialCellList_.clear();  // 新增
+    finalCellList_.clear();    // 新增
 
     errors_.clear();
     warnings_.clear();

@@ -8,7 +8,7 @@ class WeightParser {
 private:
     Weights weights_;
     bool isLoaded_;
-
+    std::vector<std::string> cellList_;  // 新增：儲存初始元件列表
 public:
     // Constructor & Destructor
     WeightParser();

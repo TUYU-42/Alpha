@@ -25,45 +25,67 @@ bool WeightParser::parseFile(const string& filename) {
 
     try {
         string line;
+        bool parsingCells = false;  // 標記是否開始解析元件列表
+
+        // 清空舊的資料
+        cellList_.clear();
+
         while (getline(infile, line)) {
-            // Skip empty lines and comments
+            // 跳過空行
             if (line.empty() || line[0] == '#') continue;
 
-            istringstream iss(line);
-            string key;
-            double value;
+            // 如果還沒開始解析元件列表，嘗試解析權重參數
+            if (!parsingCells) {
+                istringstream iss(line);
+                string key;
+                double value;
 
-            if (!(iss >> key >> value)) {
-                // Skip malformed lines
-                continue;
-            }
-
-            // Parse weight parameters
-            if (key == "Alpha") {
-                weights_.Alpha = value;
-            }
-            else if (key == "Beta") {
-                weights_.Beta = value;
-            }
-            else if (key == "Gamma") {
-                weights_.Gamma = value;
-            }
-            else if (key == "TNS") {
-                weights_.TNS = value;
-            }
-            else if (key == "TPO") {
-                weights_.TPO = value;
-            }
-            else if (key == "Area") {
-                weights_.Area = value;
+                if (iss >> key >> value) {
+                    // 解析權重參數
+                    if (key == "Alpha") {
+                        weights_.Alpha = value;
+                    }
+                    else if (key == "Beta") {
+                        weights_.Beta = value;
+                    }
+                    else if (key == "Gamma") {
+                        weights_.Gamma = value;
+                    }
+                    else if (key == "TNS") {
+                        weights_.TNS = value;
+                    }
+                    else if (key == "TPO") {
+                        weights_.TPO = value;
+                    }
+                    else if (key == "Area") {
+                        weights_.Area = value;
+                        parsingCells = true;  // Area 之後開始元件列表
+                    }
+                    else {
+                        // 如果不是已知的權重參數，可能是元件名稱
+                        cellList_.push_back(line);
+                        parsingCells = true;
+                    }
+                }
+                else {
+                    // 無法解析為 key-value，應該是元件名稱
+                    cellList_.push_back(line);
+                    parsingCells = true;
+                }
             }
             else {
-                cerr << "Warning: Unknown weight parameter: " << key << endl;
+                // 已經在解析元件列表，所有行都是元件名稱
+                cellList_.push_back(line);
             }
         }
 
         infile.close();
         isLoaded_ = true;
+
+        cout << "Weight file parsed:" << endl;
+        cout << "  Weight parameters loaded" << endl;
+        cout << "  Initial cell list: " << cellList_.size() << " cells" << endl;
+
         return true;
     }
     catch (const exception& e) {
@@ -127,9 +149,9 @@ void WeightParser::clear() {
     weights_.TNS = 0.0;
     weights_.TPO = 0.0;
     weights_.Area = 0.0;
+    cellList_.clear();  // 清空元件列表
     isLoaded_ = false;
 }
-
 void WeightParser::printWeights() const {
     cout << "\n=== Weight Parameters ===" << endl;
     cout << fixed << setprecision(6);
@@ -139,6 +161,21 @@ void WeightParser::printWeights() const {
     cout << "TNS:   " << weights_.TNS << endl;
     cout << "TPO:   " << weights_.TPO << endl;
     cout << "Area:  " << weights_.Area << endl;
+
+    if (!cellList_.empty()) {
+        cout << "\n=== Initial Cell List ===" << endl;
+        cout << "Total cells: " << cellList_.size() << endl;
+
+        // 顯示前 10 個元件作為範例
+        int count = 0;
+        for (const string& cell : cellList_) {
+            cout << "  " << cell << endl;
+            if (++count >= 10 && cellList_.size() > 10) {
+                cout << "  ... and " << (cellList_.size() - 10) << " more cells" << endl;
+                break;
+            }
+        }
+    }
 }
 
 bool WeightParser::validateWeights() const {

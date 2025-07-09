@@ -1,11 +1,5 @@
 ﻿#include "Parser.h"
 #include "DataStructures.h"
-#include "ParserLEF.h"
-#include "ParserWeights.h"
-#include "ParserDEF.h"
-#include "ParserVerilog.h"
-#include "ParserSDC.h"
-#include "ParserTech.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -16,496 +10,262 @@
 using namespace std;
 using namespace std::chrono;
 
+// 競賽專用的命令列參數結構
+struct ContestArgs {
+    vector<string> weightFiles;
+    vector<string> lefFiles;
+    vector<string> libFiles;
+    vector<string> defFiles;
+    vector<string> verilogFiles;
+    vector<string> sdcFiles;
+    vector<string> tfFiles;
+    string outputName;
+};
+
 void printUsage(const char* programName) {
     cout << "Usage: " << programName << " [options]" << endl;
-    cout << "Options:" << endl;
-    cout << "  -h, --help              Show this help message" << endl;
-    cout << "  -b, --base <basename>   Set base filename (default: testcase1)" << endl;
-    cout << "  -o, --output <name>     Set output filename (default: output)" << endl;
-    cout << "  -f, --file <file>       Parse specific file" << endl;
-    cout << "  -v, --verbose           Enable verbose output" << endl;
-    cout << "  -q, --quiet             Suppress non-essential output" << endl;
-    cout << "  --lef-only              Parse only LEF files" << endl;
-    cout << "  --weight-only           Parse only Weight files" << endl;
-    cout << "  --def-only              Parse only DEF files" << endl;
-    cout << "  --verilog-only          Parse only Verilog files" << endl;
-    cout << "  --sdc-only              Parse only SDC files" << endl;
-    cout << "  --tech-only             Parse only Technology files" << endl;
-    cout << "  --stats                 Show detailed statistics" << endl;
-    cout << "  --no-analysis           Skip analysis phase" << endl;
-    cout << "  --no-output             Skip output file generation" << endl;
-    cout << "  --benchmark             Show timing information" << endl;
+    cout << "Contest format:" << endl;
+    cout << "  -weight <file>         Weight file (required)" << endl;
+    cout << "  -lib <file1> <file2>   Library files (.lib)" << endl;
+    cout << "  -lef <file1> <file2>   LEF files" << endl;
+    cout << "  -def <file1> <file2>   DEF files" << endl;
+    cout << "  -v <file1> <file2>     Verilog files" << endl;
+    cout << "  -sdc <file1> <file2>   SDC files" << endl;
+    cout << "  -tf <file1> <file2>    Technology files" << endl;
+    cout << "  -out <name>            Output name (required)" << endl;
 }
 
 void printBanner() {
     cout << "=========================================" << endl;
-    cout << "  ICCAD Contest Problem B Parser    " << endl;
-    cout << "   File Parser        " << endl;
+    cout << "  ICCAD Contest Problem B Parser" << endl;
+    cout << "  Multi-bit Flip-Flop Optimization" << endl;
     cout << "=========================================" << endl;
 }
 
-void printTimestamp() {
-    auto now = system_clock::now();
-    auto time_t = system_clock::to_time_t(now);
+// 解析競賽格式的命令列參數
+ContestArgs parseContestArgs(int argc, char* argv[]) {
+    ContestArgs args;
 
-#ifdef _WIN32
-    // Windows 安全版本
-    struct tm timeinfo;
-    if (localtime_s(&timeinfo, &time_t) == 0) {
-        cout << "Execution started at: " << put_time(&timeinfo, "%Y-%m-%d %H:%M:%S") << endl;
+    for (int i = 1; i < argc; i++) {
+        string arg = argv[i];
+
+        if (arg == "-weight") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.weightFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-lib") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.libFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-lef") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.lefFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-def") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.defFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-v") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.verilogFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-sdc") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.sdcFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-tf") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.tfFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-out") {
+            if (i + 1 < argc) {
+                args.outputName = argv[++i];
+            }
+        }
+        else if (arg == "-h" || arg == "--help") {
+            printUsage(argv[0]);
+            exit(0);
+        }
     }
-    else {
-        cout << "Execution started at: [time unavailable]" << endl;
-    }
-#else
-    // Unix/Linux 版本
-    struct tm* timeinfo = localtime(&time_t);
-    if (timeinfo) {
-        cout << "Execution started at: " << put_time(timeinfo, "%Y-%m-%d %H:%M:%S") << endl;
-    }
-    else {
-        cout << "Execution started at: [time unavailable]" << endl;
-    }
-#endif
+
+    return args;
 }
 
-void analyzeFlipFlopDesign(const DefParser* defParser) {
-    if (!defParser || !defParser->isLoaded()) {
-        cout << "DEF parser not loaded or available" << endl;
-        return;
+// 執行競賽專用的三步驟工作流程
+bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
+    cout << "\n=== Executing Contest Workflow ===" << endl;
+
+    // STEP 1: 解析 Weight 檔案，取得初始元件列表
+    cout << "\n=== STEP 1: Parse Weight File ===" << endl;
+    if (args.weightFiles.empty()) {
+        cerr << "Error: No weight file specified" << endl;
+        return false;
     }
 
-    cout << "\n=== Flip-Flop Design Analysis ===" << endl;
-
-    // 確保我們有最新的數據
-    const auto& flipFlops = defParser->getFlipFlops();
-    const auto& components = defParser->getComponents();
-
-    cout << "Data verification:" << endl;
-    cout << "  DefParser->getFlipFlopCount(): " << defParser->getFlipFlopCount() << endl;
-    cout << "  flipFlops.size(): " << flipFlops.size() << endl;
-    cout << "  components.size(): " << components.size() << endl;
-
-    // Cell type statistics
-    map<string, int> cellTypeStats;
-    int totalFF = 0, totalLogic = 0, totalBuffer = 0;
-
-    for (const auto& comp : components) {
-        cellTypeStats[comp.cellType]++;
-
-        // 使用相同的檢測邏輯
-        if (DefUtils::isFlipFlopCell(comp.cellType)) {
-            totalFF++;
-        }
-        else if (comp.cellType.find("AND") != string::npos ||
-            comp.cellType.find("OR") != string::npos ||
-            comp.cellType.find("NAND") != string::npos ||
-            comp.cellType.find("NOR") != string::npos ||
-            comp.cellType.find("AN2") != string::npos ||
-            comp.cellType.find("OR2") != string::npos) {
-            totalLogic++;
-        }
-        else if (comp.cellType.find("BUF") != string::npos ||
-            comp.cellType.find("INV") != string::npos) {
-            totalBuffer++;
-        }
+    if (!parser.parseWeights(args.weightFiles[0])) {
+        cerr << "Error: Failed to parse weight file" << endl;
+        return false;
     }
 
-    cout << "\nDesign Statistics:" << endl;
-    cout << "  Total Components: " << components.size() << endl;
-    cout << "  Flip-Flops: " << totalFF << " ("
-        << fixed << setprecision(1) << (components.size() > 0 ? 100.0 * totalFF / components.size() : 0.0) << "%)" << endl;
-    cout << "  Logic Gates: " << totalLogic << " ("
-        << fixed << setprecision(1) << (components.size() > 0 ? 100.0 * totalLogic / components.size() : 0.0) << "%)" << endl;
-    cout << "  Buffers/Inverters: " << totalBuffer << " ("
-        << fixed << setprecision(1) << (components.size() > 0 ? 100.0 * totalBuffer / components.size() : 0.0) << "%)" << endl;
+    // 取得初始元件列表
+    vector<string> initialCellList;
+    if (parser.getWeightParser()) {
+        // TODO: 需要在 WeightParser 中加入 getCellList() 方法
+        // initialCellList = parser.getWeightParser()->getCellList();
 
-    // 驗證分析結果
-    cout << "\nFlip-flop analysis verification:" << endl;
-    cout << "  Components with FF pattern: " << totalFF << endl;
-    cout << "  Stored flip-flops: " << flipFlops.size() << endl;
+        // 暫時的解決方案：從 weight 檔案重新讀取
+        ifstream weightFile(args.weightFiles[0]);
+        string line;
+        bool foundArea = false;
 
-    if (totalFF != static_cast<int>(flipFlops.size())) {
-        cout << "    Mismatch detected! Re-analyzing..." << endl;
-        // 強制重新分析
-        const_cast<DefParser*>(defParser)->analyzeFlipFlops();
-        cout << "  After re-analysis: " << defParser->getFlipFlopCount() << endl;
+        while (getline(weightFile, line)) {
+            if (line.empty()) continue;
+
+            if (!foundArea) {
+                if (line.find("Area") == 0) {
+                    foundArea = true;
+                }
+            }
+            else {
+                // Area 之後的都是元件名稱
+                initialCellList.push_back(line);
+            }
+        }
+        weightFile.close();
     }
 
-    // Clock domain analysis
-    if (!flipFlops.empty()) {
-        cout << "\nClock Domain Analysis:" << endl;
-        map<string, vector<string>> clockDomains;
-        for (const auto& ff : flipFlops) {
-            clockDomains[ff.clockNet].push_back(ff.instName);
-        }
+    cout << "  Initial cell list: " << initialCellList.size() << " cells" << endl;
 
-        for (const auto& domain : clockDomains) {
-            cout << "  Clock '" << domain.first << "': " << domain.second.size() << " flip-flops" << endl;
+    // STEP 2: 解析 .lib 檔案，建立最終元件列表
+    if (!args.libFiles.empty()) {
+        cout << "\n=== STEP 2: Parse .lib Files with Cell List ===" << endl;
+
+        // TODO: 實作 parseLibWithCellList
+        // 這裡需要新增一個 LibParser 類別
+        cout << "  [TODO] Need to implement LibParser for contest workflow" << endl;
+
+        // 暫時使用初始列表作為最終列表
+        set<string> finalCellList(initialCellList.begin(), initialCellList.end());
+        parser.setFinalCellList(finalCellList);
+    }
+
+    // STEP 3: 解析 .lef 檔案，只處理最終列表中的元件
+    if (!args.lefFiles.empty()) {
+        cout << "\n=== STEP 3: Parse .lef Files with Final Cell List ===" << endl;
+
+        for (const string& lefFile : args.lefFiles) {
+            if (!parser.parseLEF(lefFile)) {
+                cerr << "Warning: Failed to parse LEF file: " << lefFile << endl;
+            }
         }
     }
 
-    // Top cell types
-    cout << "\nTop 10 Cell Types:" << endl;
-    vector<pair<string, int>> sortedCells(cellTypeStats.begin(), cellTypeStats.end());
-    sort(sortedCells.begin(), sortedCells.end(),
-        [](const pair<string, int>& a, const pair<string, int>& b) {
-            return a.second > b.second;
-        });
+    // STEP 4: 解析設計檔案
+    cout << "\n=== STEP 4: Parse Design Files ===" << endl;
 
-    for (size_t i = 0; i < min(sortedCells.size(), size_t(10)); ++i) {
-        bool isFF = DefUtils::isFlipFlopCell(sortedCells[i].first);
-        cout << "  " << left << setw(25) << sortedCells[i].first
-            << right << setw(6) << sortedCells[i].second
-            << (isFF ? " (FF)" : "") << endl;
-    }
-}
-
-void analyzeTimingConstraints(const SdcParser* sdcParser) {
-    if (!sdcParser || !sdcParser->isLoaded()) return;
-
-    cout << "\n=== Timing Constraints Analysis ===" << endl;
-
-    const auto& clocks = sdcParser->getClocks();
-    const auto& constraints = sdcParser->getConstraints();
-
-    cout << "Clock Information:" << endl;
-    for (const auto& clock : clocks) {
-        double frequency = (clock.period > 0) ? 1000.0 / clock.period : 0.0; // MHz
-        cout << "  " << clock.name << ": " << clock.period << " ns ("
-            << fixed << setprecision(1) << frequency << " MHz)" << endl;
-    }
-
-    cout << "\nConstraint Summary:" << endl;
-    map<string, int> constraintTypes;
-    for (const auto& constraint : constraints) {
-        constraintTypes[constraint.type]++;
-    }
-
-    for (const auto& type : constraintTypes) {
-        cout << "  " << type.first << ": " << type.second << endl;
-    }
-}
-
-void generateDesignReport(const string& outputName,
-    const DefParser* defParser,
-    const VerilogParser* verilogParser,
-    const SdcParser* sdcParser,
-    const LefParser* lefParser) {
-    ofstream report(outputName + "_report.txt");
-    if (!report.is_open()) {
-        cerr << "Warning: Could not create design report file" << endl;
-        return;
-    }
-
-    try {
-        report << "ICCAD Contest Problem B - Design Analysis Report" << endl;
-        report << "Generated: " << __DATE__ << " " << __TIME__ << endl;
-        report << "=============================================" << endl << endl;
-
-        if (defParser && defParser->isLoaded()) {
-            report << "DEF File Analysis:" << endl;
-            report << "  Components: " << defParser->getComponentCount() << endl;
-            report << "  Nets: " << defParser->getNetCount() << endl;
-            report << "  Pins: " << defParser->getPinCount() << endl;
-            report << "  Flip-Flops: " << defParser->getFlipFlopCount() << endl;
-            report << endl;
+    // 解析 DEF
+    if (!args.defFiles.empty()) {
+        if (!parser.parseDEF(args.defFiles[0])) {
+            cerr << "Error: Failed to parse DEF file" << endl;
+            return false;
         }
-
-        if (verilogParser && verilogParser->isLoaded()) {
-            report << "Verilog File Analysis:" << endl;
-            report << "  Modules: " << verilogParser->getModuleCount() << endl;
-            report << "  Instances: " << verilogParser->getInstanceCount() << endl;
-
-            auto cellStats = verilogParser->getCellTypeStatistics();
-            report << "  Cell Types: " << cellStats.size() << endl;
-            report << endl;
-        }
-
-        if (sdcParser && sdcParser->isLoaded()) {
-            report << "SDC File Analysis:" << endl;
-            report << "  Commands: " << sdcParser->getCommandCount() << endl;
-            report << "  Clocks: " << sdcParser->getClockCount() << endl;
-            report << "  Constraints: " << sdcParser->getConstraintCount() << endl;
-            report << endl;
-        }
-
-        if (lefParser && lefParser->isLoaded()) {
-            report << "LEF File Analysis:" << endl;
-            report << "  Macros: " << lefParser->getMacroCount() << endl;
-            report << "  Layers: " << lefParser->getLayerCount() << endl;
-            report << "  Sites: " << lefParser->getSiteCount() << endl;
-            report << "  Vias: " << lefParser->getViaCount() << endl;
-            report << endl;
-        }
-
-        report.close();
-        cout << "✓ Design report generated: " << outputName << "_report.txt" << endl;
     }
-    catch (const exception& e) {
-        report.close();
-        cerr << "Error generating design report: " << e.what() << endl;
+
+    // 解析 Verilog
+    if (!args.verilogFiles.empty()) {
+        if (!parser.parseVerilog(args.verilogFiles[0])) {
+            cerr << "Warning: Failed to parse Verilog file" << endl;
+        }
     }
+
+    // 解析其他檔案
+    if (!args.sdcFiles.empty()) {
+        parser.parseSDC(args.sdcFiles[0]);
+    }
+
+    if (!args.tfFiles.empty()) {
+        parser.parseTech(args.tfFiles[0]);
+    }
+
+    return true;
 }
 
 int main(int argc, char* argv[]) {
     auto startTime = high_resolution_clock::now();
 
-    // Default parameters
-    string baseName = "testcase1";
-    string outputName = "output";
-    bool verbose = false;
-    bool quiet = false;
-    bool showStats = false;
-    bool noAnalysis = false;
-    bool noOutput = false;
-    bool benchmark = false;
-    bool lefOnly = false, weightOnly = false, defOnly = false;
-    bool verilogOnly =false , sdcOnly = false, techOnly = false;
-    vector<string> specificFiles;
+    printBanner();
 
-    // Parse command line arguments
-    for (int i = 1; i < argc; ++i) {
-        string arg = argv[i];
+    // 解析命令列參數
+    ContestArgs args = parseContestArgs(argc, argv);
 
-        if (arg == "-h" || arg == "--help") {
-            printUsage(argv[0]);
-            return 0;
-        }
-        else if (arg == "-b" || arg == "--base") {
-            if (i + 1 < argc) {
-                baseName = argv[++i];
-            }
-            else {
-                cerr << "Error: " << arg << " requires an argument" << endl;
-                return 1;
-            }
-        }
-        else if (arg == "-o" || arg == "--output") {
-            if (i + 1 < argc) {
-                outputName = argv[++i];
-            }
-            else {
-                cerr << "Error: " << arg << " requires an argument" << endl;
-                return 1;
-            }
-        }
-        else if (arg == "-f" || arg == "--file") {
-            if (i + 1 < argc) {
-                specificFiles.push_back(argv[++i]);
-            }
-            else {
-                cerr << "Error: " << arg << " requires an argument" << endl;
-                return 1;
-            }
-        }
-        else if (arg == "-v" || arg == "--verbose") verbose = true;
-        else if (arg == "-q" || arg == "--quiet") quiet = true;
-        else if (arg == "--stats") showStats = true;
-        else if (arg == "--no-analysis") noAnalysis = true;
-        else if (arg == "--no-output") noOutput = true;
-        else if (arg == "--benchmark") benchmark = true;
-        else if (arg == "--lef-only") lefOnly = true;
-        else if (arg == "--weight-only") weightOnly = true;
-        else if (arg == "--def-only") defOnly = true;
-        else if (arg == "--verilog-only") verilogOnly = true;
-        else if (arg == "--sdc-only") sdcOnly = true;
-        else if (arg == "--tech-only") techOnly = true;
-        else {
-            // Try to infer base name from first argument
-            if (i == 1 && specificFiles.empty()) {
-                baseName = ParserUtils::extractBaseName(arg);
-            }
-        }
+    // 驗證必要參數
+    if (args.weightFiles.empty() || args.outputName.empty()) {
+        cerr << "Error: Missing required arguments" << endl;
+        printUsage(argv[0]);
+        return 1;
     }
 
+    // 顯示解析到的檔案
+    cout << "\nParsed command line:" << endl;
+    cout << "  Weight files: " << args.weightFiles.size() << endl;
+    cout << "  Library files: " << args.libFiles.size() << endl;
+    cout << "  LEF files: " << args.lefFiles.size() << endl;
+    cout << "  DEF files: " << args.defFiles.size() << endl;
+    cout << "  Verilog files: " << args.verilogFiles.size() << endl;
+    cout << "  SDC files: " << args.sdcFiles.size() << endl;
+    cout << "  Tech files: " << args.tfFiles.size() << endl;
+    cout << "  Output name: " << args.outputName << endl;
+
     try {
-        if (!quiet) {
-            printBanner();
-            printTimestamp();
-            cout << endl;
+        // 建立 Parser 物件
+        Parser parser("", args.outputName);
+
+        // 執行競賽工作流程
+        if (!executeContestWorkflow(parser, args)) {
+            cerr << "Error: Contest workflow failed" << endl;
+            return 1;
         }
 
-        // Create parser manager
-        Parser parser(baseName, outputName);
-
-        bool overallSuccess = true;
-
-        // Parse files based on command line options
-        if (lefOnly) {
-            cout << "LEF-only mode" << endl;
-            if (!parser.parseLEF()) {
-                cerr << "Failed to parse LEF file" << endl;
-                return 1;
-            }
-        }
-        else if (weightOnly) {
-            cout << "Weight-only mode" << endl;
-            if (!parser.parseWeights()) {
-                cerr << "Failed to parse weight file" << endl;
-                return 1;
-            }
-        }
-        else if (defOnly) {
-            cout << "DEF-only mode" << endl;
-            if (!parser.parseDEF()) {
-                cerr << "Failed to parse DEF file" << endl;
-                return 1;
-            }
-        }
-        else if (verilogOnly) {
-            cout << "Verilog-only mode" << endl;
-            if (!parser.parseVerilog()) {
-                cerr << "Failed to parse Verilog file" << endl;
-                return 1;
-            }
-        }
-        else if (sdcOnly) {
-            cout << "SDC-only mode" << endl;
-            if (!parser.parseSDC()) {
-                cerr << "Failed to parse SDC file" << endl;
-                return 1;
-            }
-        }
-        else if (techOnly) {
-            cout << "Technology-only mode" << endl;
-            if (!parser.parseTech()) {
-                cerr << "Failed to parse Technology file" << endl;
-                return 1;
-            }
-        }
-        else if (!specificFiles.empty()) {
-            cout << "Parsing specific files:" << endl;
-            for (const auto& file : specificFiles) {
-                string ext = ParserUtils::getFileExtension(file);
-                if (!parser.parseFile(file, ext)) {
-                    cerr << "Failed to parse file: " << file << endl;
-                    overallSuccess = false;
-                }
-            }
-        }
-        else {
-            // Parse all files using the parser manager
-            if (!parser.parseAllFiles()) {
-                cerr << "Some files failed to parse" << endl;
-                overallSuccess = false;
-            }
-        }
-        // Analysis phase
-        if (!noAnalysis && !quiet) {
+        // 分析與優化
+        if (parser.isDefLoaded()) {
             cout << "\n=== Analysis Phase ===" << endl;
 
-            if (parser.isDefLoaded()) {
-                analyzeFlipFlopDesign(parser.getDefParser());
-            }
+            // 分析 Flip-Flops
+            parser.analyzeFlipFlops();
 
-            if (parser.isSdcLoaded()) {
-                analyzeTimingConstraints(parser.getSdcParser());
-            }
-
-            if (parser.isLefLoaded() && verbose) {
-                cout << "\n=== LEF Macro Details ===" << endl;
-                parser.getLefParser()->printMacroDetails(showStats ? 20 : 5);
-            }
+            // TODO: 實作 banking/debanking 演算法
+            cout << "\n[TODO] Implement multi-bit flip-flop optimization" << endl;
         }
 
-        // Statistics display
-        if (showStats || verbose) {
-            cout << "\n=== Detailed Statistics ===" << endl;
-
-            if (parser.isWeightLoaded()) {
-                parser.getWeightParser()->printWeights();
-            }
-
-            if (parser.isLefLoaded()) {
-                parser.getLefParser()->printSummary();
-            }
-
-            if (parser.isDefLoaded()) {
-                parser.getDefParser()->printSummary();
-            }
-
-            if (parser.isVerilogLoaded()) {
-                parser.getVerilogParser()->printSummary();
-            }
-
-            if (parser.isSdcLoaded()) {
-                parser.getSdcParser()->printSummary();
-            }
-
-            if (parser.isTechLoaded()) {
-                parser.getTechParser()->printSummary();
-            }
+        // 產生輸出檔案
+        cout << "\n=== Output Generation ===" << endl;
+        if (!parser.writeOutputFiles()) {
+            cerr << "Error: Failed to write output files" << endl;
+            return 1;
         }
 
-        // Output generation phase
-        if (!noOutput) {
-            cout << "\n=== Output Generation ===" << endl;
-
-            if (!parser.writeOutputFiles()) {
-                cerr << "Failed to write some output files" << endl;
-                overallSuccess = false;
-            }
-
-            // Generate design report using Parser's methods
-            generateDesignReport(outputName,
-                parser.getDefParser(),
-                parser.getVerilogParser(),
-                parser.getSdcParser(),
-                parser.getLefParser());
-        }
-
-        // Final summary
+        // 顯示執行統計
         auto endTime = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(endTime - startTime);
 
         cout << "\n=== Execution Summary ===" << endl;
-        cout << "Base name: " << baseName << endl;
-        cout << "Output prefix: " << outputName << endl;
-        cout << "Files processed:" << endl;
-        cout << "  LEF: " << (parser.isLefLoaded() ? "✓" : "✗") << endl;
-        cout << "  Weight: " << (parser.isWeightLoaded() ? "✓" : "✗") << endl;
-        cout << "  DEF: " << (parser.isDefLoaded() ? "✓" : "✗") << endl;
-        cout << "  Verilog: " << (parser.isVerilogLoaded() ? "✓" : "✗") << endl;
-        cout << "  SDC: " << (parser.isSdcLoaded() ? "✓" : "✗") << endl;
-        cout << "  Technology: " << (parser.isTechLoaded() ? "✓" : "✗") << endl;
+        parser.printSummary();
+        cout << "Execution time: " << duration.count() << " ms" << endl;
 
-        if (benchmark) {
-            cout << "Execution time: " << duration.count() << " ms" << endl;
-        }
+        cout << "\n=== Processing completed successfully! ===" << endl;
 
-        // Show parsing status
-        parser.printParsingStatus();
-
-        cout << "\nStatus: " << (overallSuccess ? "SUCCESS" : "PARTIAL SUCCESS") << endl;
-
-        // Show key metrics if available
-        if (parser.isDefLoaded() && !quiet) {
-            cout << "\nKey Design Metrics:" << endl;
-            cout << "  Total Components: " << parser.getDefParser()->getComponentCount() << endl;
-            cout << "  Flip-Flops: " << parser.getDefParser()->getFlipFlopCount() << endl;
-            cout << "  Nets: " << parser.getDefParser()->getNetCount() << endl;
-        }
-
-        if (parser.isLefLoaded() && !quiet) {
-            cout << "  Available Macros: " << parser.getLefParser()->getMacroCount() << endl;
-        }
-
-        if (parser.isSdcLoaded() && !quiet) {
-            cout << "  Clock Domains: " << parser.getSdcParser()->getClockCount() << endl;
-        }
-
-        cout << "\n=== Processing completed! ===" << endl;
-
-        return overallSuccess ? 0 : 1;
+        return 0;
 
     }
     catch (const exception& e) {
         cerr << "Fatal error: " << e.what() << endl;
-        return 1;
-    }
-    catch (...) {
-        cerr << "Unknown fatal error occurred" << endl;
         return 1;
     }
 }
