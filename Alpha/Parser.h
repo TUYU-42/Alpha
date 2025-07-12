@@ -8,6 +8,7 @@
 #include <vector>
 #include <memory>
 #include <set>
+#include <unordered_map>
 
 // Forward declarations
 class DefParser;
@@ -40,9 +41,9 @@ private:
     bool techLoaded_;
     bool libLoaded_;  // 新增
 
-    // 競賽專用資料
+    // ??專用資料
     std::vector<std::string> initialCellList_;  // 從 weight 檔案取得
-    std::set<std::string> finalCellList_;       // 經過 lib 處理後的最終列表
+    std::set<std::string> finalCellList_;       // ?過 lib ?理後的最終列表
 
     // Helper methods
     std::string constructFilePath(const std::string& base, const std::string& extension) const;
@@ -62,7 +63,7 @@ public:
     Parser(Parser&&) = default;
     Parser& operator=(Parser&&) = default;
 
-    // 競賽專用介面
+    // ??專用介面
     bool parseLibWithCellList(const std::vector<std::string>& libFiles,
         const std::vector<std::string>& initialCellList);
     bool parseLEFWithCellList(const std::vector<std::string>& lefFiles,
@@ -75,6 +76,7 @@ public:
     void setFinalCellList(const std::set<std::string>& cellList) {
         finalCellList_ = cellList;
     }
+
     const std::vector<std::string>& getInitialCellList() const {
         return initialCellList_;
     }
@@ -103,6 +105,7 @@ public:
     const SdcParser* getSdcParser() const { return sdcParser_.get(); }
     const TechParser* getTechParser() const { return techParser_.get(); }
     const LibParser* getLibParser() const { return libParser_.get(); }  // 新增
+    const std::unordered_map<std::string, LefMacroInfo>& getMacroMap() const { return macroMap_; }
 
     // Data access methods (non-const versions)
     LefParser* getLefParser() { return lefParser_.get(); }
@@ -133,7 +136,7 @@ public:
     void analyzeFlipFlops();
     void calculateStatistics();
     void performCellTypeAnalysis();
-    void performBankingOptimization();  // 新增：多位元正反器優化
+    void performBankingOptimization();  // 新增：多位元正反器?化
 
     // Output methods
     void printSummary() const;
@@ -153,6 +156,10 @@ private:
     // Error tracking
     mutable std::vector<std::string> errors_;
     mutable std::vector<std::string> warnings_;
+    // macro MAP
+    std::unordered_map<std::string, LefMacroInfo> macroMap_;
+    void buildMacroMap();
+
 
     void addError(const std::string& error) const;
     void addWarning(const std::string& warning) const;

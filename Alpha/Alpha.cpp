@@ -1,5 +1,6 @@
 ﻿#include "Parser.h"
 #include "DataStructures.h"
+#include "place.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -239,6 +240,19 @@ int main(int argc, char* argv[]) {
 
             // 分析 Flip-Flops
             parser.analyzeFlipFlops();
+
+            // ====== 新增 Placer 實例化與測試 ======
+            // 取出 macroMap_（你可能有 getter，例如 getMacroMap()）
+            const auto& macroMap = parser.getMacroMap();
+
+            // 取得 components
+            const auto& components = parser.getDefParser()->getComponents();
+
+            Placer placer(macroMap, components);
+
+            // 印出前 10 個 instance-macro 對應與 size
+            placer.printSomeMappings(10);
+            // ====== END Placer 測試 ======
 
             // TODO: 實作 banking/debanking 演算法
             cout << "\n[TODO] Implement multi-bit flip-flop optimization" << endl;

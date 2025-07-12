@@ -122,6 +122,8 @@ bool DefParser::parseRowInfo(const string& line) {
     return false;
 }
 
+
+
 bool DefParser::parseTrackInfo(const string& line) {
     smatch m;
     if (regex_search(line, m, trackRegex_)) {
@@ -293,6 +295,7 @@ void DefParser::analyzeFlipFlops() {
             int pinConnectionsFound = 0;
             for (const auto& ipn : defData_.instPinNets) {
                 if (ipn.inst == comp.name) {
+
                     pinConnectionsFound++;
                     if (ipn.pin == "CK" || ipn.pin == "CLK" || ipn.pin == "CP") {
                         ff.clockNet = ipn.net;
@@ -314,6 +317,7 @@ void DefParser::analyzeFlipFlops() {
                         ff.scanOut = ipn.net;
                         cout << "    Scan Output: " << ipn.pin << " -> " << ipn.net << endl;
                     }
+
                 }
             }
 
@@ -609,8 +613,79 @@ void DefParser::addError(const string& error) {
 void DefParser::addWarning(const string& warning) {
     warnings_.push_back(warning);
     cout << "DEF Warning: " << warning << endl;
-}
 
+}
+void DefParser::computeRowDimensions() {
+    if (defData_.rows.size() < 2) return;
+
+    // 按 y 座標排序 rows
+    std::sort(defData_.rows.begin(), defData_.rows.end(),
+        [](const RowInfo& a, const RowInfo& b) {
+            return a.y < b.y;
+        });
+
+    // 計算 row_y_width：取第一對 row 的 Y 差當作通用高度
+    int rowYStep = defData_.rows[1].y - defData_.rows[0].y;
+
+    // 計算 row_x_width：使用任一 row 的 stepX * count
+    int rowXStep = defData_.rows[0].stepX * defData_.rows[0].count;
+
+    std::cout << "[Info] Computed row_x_width = " << rowXStep
+        << ", row_y_width = " << rowYStep << std::endl;
+
+    // 將這些資訊寫入每個 row 裡
+    for (auto& row : defData_.rows) {
+        row.rowXWidth = row.stepX * row.count;
+        row.rowYWidth = rowYStep;
+    }
+}
+void DefParser::assignComponentsToRows() {
+    std::ofstream fout("component_rowinfo.txt"); // 每個 component 對應的 row
+    std::map<std::string, int> rowCountMap; // 統計 row 中的元件數
+    rowToComponentsMap_.clear();            // 清空先前資料
+    rowComponentCount_.clear();
+
+    for (auto& comp : defData_.components) {
+        int cx = comp.x;
+        int cy = comp.y;
+        bool matched = false;
+
+        for (const auto& row : defData_.rows) {
+            int rowBottom = row.y;
+            int rowTop = row.y + row.rowYWidth;
+
+            if (cy >= rowBottom && cy < rowTop) {
+                comp.rowName = row.name;
+                matched = true;
+
+                // 統計數量
+                rowCountMap[row.name]++;
+                rowToComponentsMap_[row.name].push_back(&comp);
+                break;
+            }
+        }
+
+        if (!matched) {
+            comp.rowName = "UNPLACED";
+            rowCountMap["UNPLACED"]++;
+            rowToComponentsMap_["UNPLACED"].push_back(&comp);
+        }
+
+        fout << comp.name << " : " << comp.rowName << std::endl;
+    }
+
+    fout.close();
+
+    // 寫入 row:component 數量檔案
+    std::ofstream countOut("row_component_count.txt");
+    for (const auto& entry : rowCountMap) {
+        const std::string& rowName = entry.first;
+        int count = entry.second;
+        countOut << rowName << " : " << count << std::endl;
+        rowComponentCount_[rowName] = count;
+    }
+    countOut.close();
+}
 // Utility functions
 // Debug version of DefUtils functions
 namespace DefUtils {
@@ -730,4 +805,6 @@ namespace DefUtils {
             upperPin == "SCAN_IN" || upperPin == "SCAN_OUT" ||
             upperPin == "SE" || upperPin == "SCAN_EN");
     }
+
+
 }

@@ -25,7 +25,7 @@ bool WeightParser::parseFile(const string& filename) {
 
     try {
         string line;
-        bool parsingCells = false;  // 標記是否開始解析元件列表
+        bool parsingCells = false;  // 標?是否開始解析元件列表
 
         // 清空舊的資料
         cellList_.clear();
@@ -34,7 +34,7 @@ bool WeightParser::parseFile(const string& filename) {
             // 跳過空行
             if (line.empty() || line[0] == '#') continue;
 
-            // 如果還沒開始解析元件列表，嘗試解析權重參數
+            // 如果?沒開始解析元件列表，嘗?解析權重參數
             if (!parsingCells) {
                 istringstream iss(line);
                 string key;
@@ -68,13 +68,13 @@ bool WeightParser::parseFile(const string& filename) {
                     }
                 }
                 else {
-                    // 無法解析為 key-value，應該是元件名稱
+                    // 無法解析為 key-value，應?是元件名稱
                     cellList_.push_back(line);
                     parsingCells = true;
                 }
             }
             else {
-                // 已經在解析元件列表，所有行都是元件名稱
+                // 已?在解析元件列表，所有行都是元件名稱
                 cellList_.push_back(line);
             }
         }
@@ -166,7 +166,7 @@ void WeightParser::printWeights() const {
         cout << "\n=== Initial Cell List ===" << endl;
         cout << "Total cells: " << cellList_.size() << endl;
 
-        // 顯示前 10 個元件作為範例
+        // 顯示前 10 ?元件作為?例
         int count = 0;
         for (const string& cell : cellList_) {
             cout << "  " << cell << endl;

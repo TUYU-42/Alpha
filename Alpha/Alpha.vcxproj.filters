@@ -32,6 +32,9 @@
     <Filter Include="Parser\Lib">
       <UniqueIdentifier>{7c46f15b-8e4d-4c59-a679-83f64e2b1d20}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Parser\place">
+      <UniqueIdentifier>{3ed2abc3-3800-4164-b27b-446d7fcbac47}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -61,6 +64,9 @@
     <ClCompile Include="LibParser.cpp">
       <Filter>Parser\Lib</Filter>
     </ClCompile>
+    <ClCompile Include="place.cpp">
+      <Filter>Parser\place</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ParserWeights.h">
@@ -89,6 +95,9 @@
     </ClInclude>
     <ClInclude Include="LibParser.h">
       <Filter>Parser\Lib</Filter>
+    </ClInclude>
+    <ClInclude Include="place.h">
+      <Filter>Parser\place</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -7,7 +7,7 @@
 #include <set>
 #include <memory>
 
-// .lib 檔案中的 pin 資訊
+// .lib 檔案中的 pin 資?
 struct LibPin {
     std::string name;
     std::string direction;  // input, output, inout
@@ -16,12 +16,12 @@ struct LibPin {
     std::map<std::string, std::string> attributes;
 };
 
-// .lib 檔案中的完整 cell 資訊
+// .lib 檔案中的完整 cell 資?
 struct LibCell {
     std::string name;
     double area = 0.0;
     double cellLeakagePower = 0.0;
-    std::string singleBitDegenerate;  // 競賽關鍵屬性！
+    std::string singleBitDegenerate;  // ??關鍵屬性！
     std::map<std::string, LibPin> pins;
     std::map<std::string, std::string> attributes;
 
@@ -48,12 +48,12 @@ public:
     LibParser() = default;
     ~LibParser() = default;
 
-    // 競賽專用：使用元件列表解析
+    // ??專用：使用元件列表解析
     bool parseWithCellList(const std::vector<std::string>& libFiles,
         const std::vector<std::string>& initialCellList,
         std::set<std::string>& finalCellList);
 
-    // 一般解析（測試用）
+    // 一般解析（測?用）
     bool parseFile(const std::string& filename);
     bool parseFiles(const std::vector<std::string>& filenames);
 
@@ -62,7 +62,7 @@ public:
     const std::map<std::string, LibCell>& getAllCells() const { return cellLibrary_; }
     bool hasCell(const std::string& cellName) const;
 
-    // 查詢方法
+    // 查?方法
     std::vector<std::string> getFlipFlopCells() const;
     std::vector<std::string> getMultiBitCells() const;
     std::string getSingleBitDegenerate(const std::string& cellName) const;

@@ -7,9 +7,9 @@
 #include <unordered_map>
 #include <memory>
 
-// === 基礎資料結構 ===
+// === 基礎資料結? ===
 
-// 權重參數結構
+// 權重參數結?
 struct Weights {
     double Alpha = 0.0;
     double Beta = 0.0;
@@ -19,22 +19,28 @@ struct Weights {
     double Area = 0.0;
 };
 
-// Instance-Pin-Net 映射結構
+// Instance-Pin-Net 映射結?
 struct InstPinNet {
     std::string inst;   // instance name
     std::string pin;    // pin name (D / Q / CK / …)
     std::string net;    // net name
 };
 
-// ROW 資料結構
+// ROW 資料結?
 struct RowInfo {
     std::string name;
     int x, y;
     std::string orientation;
     int count, by, stepX, stepY;
+    // ┑ノㄓゑ癸ノ range
+    int xEnd= x + count * stepX; 
+    int yEnd= y + by * stepY;  // 璝 by > 1
+    int rowXWidth = 0;
+    int rowYWidth = 0;
+    
 };
 
-// TRACK 資料結構
+// TRACK 資料結?
 struct TrackInfo {
     char direction;
     int start;
@@ -43,15 +49,16 @@ struct TrackInfo {
     std::string layer;
 };
 
-// COMPONENT 資料結構
+// COMPONENT 資料結?
 struct ComponentInfo {
     std::string name;
     std::string cellType;
     int x, y;
     std::string orient;
+    std::string rowName;
 };
 
-// PIN 資料結構
+// PIN 資料結?
 struct PinInfo {
     std::string name;
     std::string netName;
@@ -64,7 +71,7 @@ struct PinInfo {
     std::string accessDirection;
 };
 
-// NET 資料結構
+// NET 資料結?
 struct NetPin {
     std::string instance;
     std::string pin;
@@ -76,7 +83,7 @@ struct NetInfo {
     std::vector<NetPin> connections;
 };
 
-// Flip-Flop 相關結構
+// Flip-Flop 相關結?
 struct FlipFlopInfo {
     std::string instName;
     std::string cellType;
@@ -88,7 +95,7 @@ struct FlipFlopInfo {
     std::string scanIn = "";     // SI pin net (如果有)
     std::string scanOut = "";    // SO pin net (如果有)
     bool isMultiBit = false; // 是否為 multibit FF
-    int bitWidth = 1;       // bit 寬度
+    int bitWidth = 1;       // bit ?度
 };
 
 // Banking/Debanking 候選群組
@@ -102,7 +109,7 @@ struct FFCluster {
     bool canBank = true;    // 是否可以進行 banking
 };
 
-// 成本計算結構
+// 成本?算結?
 struct CostMetrics {
     double tns = 0.0;       // Total Negative Slack
     double totalPower = 0.0;
@@ -122,14 +129,14 @@ struct DefData {
     std::map<std::string, std::vector<std::string>> clockDomains; // clock -> FF instances
 };
 
-// SDC 指令結構
+// SDC 指令結?
 struct SdcCommand {
     std::string command_type;
     std::map<std::string, std::string> parameters;
     std::string raw_line;
 };
 
-// Technology File 結構
+// Technology File 結?
 struct Technology {
     std::map<std::string, std::string> parameters;
 };
@@ -177,7 +184,7 @@ struct TechData {
     std::vector<LayerDataType> layerDataTypes;
 };
 
-// LEF 相關資料結構
+// LEF 相關資料結?
 struct LefSiteInfo {
     std::string name;
     std::string siteClass;

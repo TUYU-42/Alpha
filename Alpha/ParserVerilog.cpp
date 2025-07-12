@@ -34,7 +34,7 @@ void VerilogParser::analyzeScanChains(const vector<VerilogInstance>& flipFlops) 
     map<string, string> instanceToSoMap; // instance name -> SO net
     map<string, vector<string>> scanNets; // 收集所有 scan 相關的 net
 
-    // 分析每個 flip-flop 的 scan 連接
+    // 分析每? flip-flop 的 scan 連接
     cout << "\n--- Scan Pin Connections ---" << endl;
     for (const auto& ff : flipFlops) {
         bool hasScanConnection = false;
@@ -141,7 +141,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
         }
     }
 
-    // 找到 scan chain 的起始點（SI 沒有驅動的 FF）
+    // 找到 scan chain 的起始點（SI 沒有?動的 FF）
     vector<string> chainStarts;
     set<string> visited;
 
@@ -174,13 +174,13 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
             chainVisited.insert(current);
             visited.insert(current);
 
-            // 找到下一個 FF（通過 SO -> SI 連接）
+            // 找到下一? FF（通過 SO -> SI 連接）
             string soNet = ffToSoNet[current];
             string next = "";
 
             if (!soNet.empty() && soNet != "UNCONNECTED" &&
                 soNet.find("UNCONNECTED") == string::npos) {
-                // 找到由這個 SO net 驅動的 FF 的 SI
+                // 找到由這? SO net ?動的 FF 的 SI
                 auto it = siNetToFF.find(soNet);
                 if (it != siNetToFF.end()) {
                     next = it->second;
@@ -208,7 +208,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
             }
             cout << endl;
 
-            // 如果不是最後一個，顯示連接
+            // 如果不是最後一?，顯示連接
             if (i < chain.size() - 1) {
                 cout << "     |" << endl;
                 cout << "     v" << endl;
@@ -216,7 +216,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
         }
     }
 
-    // 檢查是否有未訪問的 FF（可能形成環路或孤立）
+    // 檢查是否有未訪?的 FF（可能形成環路或孤立）
     vector<string> unvisited;
     for (const auto& ff : flipFlops) {
         if (visited.find(ff.instName) == visited.end()) {
@@ -232,7 +232,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
     }
 }
 
-// 添加一個簡化的 scan chain 打印方法
+// 添加一??化的 scan chain 打印方法
 void VerilogParser::printScanChainSummary() {
     cout << "\n=== Scan Chain Summary ===" << endl;
 
@@ -454,7 +454,7 @@ bool VerilogParser::parseInstances(const string& content, size_t& pos, VerilogMo
 
     int instanceCount = 0;
 
-    // 使用正則表達式匹配實例，處理被壓縮的內容
+    // 使用正則表達式匹配?例，?理被壓縮的內容
     regex instancePattern(
         R"((SNPS\w+)\s+(\w+)\s*\(\s*((?:[^()]*\([^)]*\)[^()]*)*[^()]*)\s*\)\s*;)",
         regex::ECMAScript
@@ -524,7 +524,7 @@ bool VerilogParser::parseInstanceFromString(const string& instStr) {
     cleanStr = regex_replace(cleanStr, regex(R"(\s+)"), " ");
     cleanStr = regex_replace(cleanStr, regex(R"(^\s+|\s+$)"), "");
     
-    // 簡單解析：CELLTYPE INSTNAME ( ... );
+    // ?單解析：CELLTYPE INSTNAME ( ... );
     istringstream iss(cleanStr);
     string cellType, instName;
     
@@ -532,7 +532,7 @@ bool VerilogParser::parseInstanceFromString(const string& instStr) {
         return false;
     }
     
-    // 查找括號內容
+    // 查找括?內容
     size_t parenStart = cleanStr.find('(');
     size_t parenEnd = cleanStr.rfind(')');
     
@@ -542,7 +542,7 @@ bool VerilogParser::parseInstanceFromString(const string& instStr) {
     
     string connectionStr = cleanStr.substr(parenStart + 1, parenEnd - parenStart - 1);
     
-    // 創建實例
+    // ?建?例
     VerilogInstance instance;
     instance.cellType = cellType;
     instance.instName = instName;
@@ -551,7 +551,7 @@ bool VerilogParser::parseInstanceFromString(const string& instStr) {
     if (parseInstanceConnections(connectionStr, instance)) {
         instances_.push_back(instance);
         
-        // 調試：顯示前幾個實例
+        // 調?：顯示前幾??例
         static int debugCount = 0;
         debugCount++;
         if (debugCount <= 5) {
@@ -565,9 +565,9 @@ bool VerilogParser::parseInstanceFromString(const string& instStr) {
     return false;
 }
 
-// 簡化的連接解析函數
+// ?化的連接解析函數
 bool VerilogParser::parseInstanceConnections(const string& connectionStr, VerilogInstance& instance) {
-    // 使用簡單的字符串分割方法
+    // 使用?單的字符串分割方法
     size_t pos = 0;
     
     while (pos < connectionStr.length()) {

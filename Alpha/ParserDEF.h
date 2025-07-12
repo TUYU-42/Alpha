@@ -7,6 +7,7 @@
 #include <regex>
 #include <memory>
 #include <fstream>
+#include <map>
 
 class DefParser {
 private:
@@ -14,7 +15,8 @@ private:
     bool isLoaded_;
     std::vector<std::string> errors_;
     std::vector<std::string> warnings_;
-
+    std::map<std::string, std::vector<ComponentInfo*>> rowToComponentsMap_;
+    std::map<std::string, int> rowComponentCount_;
     // Regex patterns
     std::regex rowRegex_;
     std::regex trackRegex_;
@@ -94,6 +96,10 @@ public:
     // Export methods
     bool writeDefFile(const std::string& filename) const;
     std::string toString() const;
+
+    void assignComponentsToRows();
+    void computeRowDimensions();
+    void printComponentsByRow() const; // optional
 };
 
 // Utility functions for DEF parsing
@@ -103,7 +109,7 @@ namespace DefUtils {
     std::string extractOrientation(const std::string& orientStr);
     bool validateCoordinate(int x, int y);
 
-    // 新增的函數聲明
+    // 新增的函數?明
     std::string getCellCategory(const std::string& cellType);
     bool isClockSignal(const std::string& netName);
     bool isScanSignal(const std::string& pinName);

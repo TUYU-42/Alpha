@@ -207,6 +207,8 @@ bool Parser::parseLEF(const string& filename) {
 
     if (lefParser_->parseFile(lefFile)) {
         lefLoaded_ = true;
+        buildMacroMap();
+        std::cout << "[Debug] macroMap_ size = " << macroMap_.size() << std::endl;
         cout << "✓ LEF file (" << lefFile << ") parsed successfully" << endl;
         cout << "  - MACRO count: " << lefParser_->getMacroCount() << endl;
         cout << "  - LAYER count: " << lefParser_->getLayerCount() << endl;
@@ -332,6 +334,9 @@ bool Parser::parseDEF(const string& filename) {
             defParser_->analyzeFlipFlops();
             cout << "  Flip-flops after re-analysis: " << defParser_->getFlipFlopCount() << endl;
         }
+        defParser_->computeRowDimensions();
+        defParser_->assignComponentsToRows();
+        cout << "✓ Component-to-row assignment completed. Output written to component_rowinfo.txt\n";
 
         return true;
     }
@@ -635,6 +640,18 @@ void Parser::addWarning(const string& warning) const {
     warnings_.push_back(warning);
     cout << "Warning: " << warning << endl;
 }
+
+
+void Parser::buildMacroMap() {
+    macroMap_.clear();
+    if (lefParser_ && lefParser_->isLoaded()) {
+        LefData lefData = lefParser_->getData();
+        for (const auto& m : lefData.macros) {
+            macroMap_[m.name] = m;
+        }
+    }
+}
+
 
 // Utility functions namespace
 namespace ParserUtils {

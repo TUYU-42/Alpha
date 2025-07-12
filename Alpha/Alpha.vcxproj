@@ -136,6 +136,7 @@
     <ClCompile Include="ParserTech.cpp" />
     <ClCompile Include="ParserVerilog.cpp" />
     <ClCompile Include="ParserWeights.cpp" />
+    <ClCompile Include="place.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
@@ -147,6 +148,7 @@
     <ClInclude Include="ParserTech.h" />
     <ClInclude Include="ParserVerilog.h" />
     <ClInclude Include="ParserWeights.h" />
+    <ClInclude Include="place.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
