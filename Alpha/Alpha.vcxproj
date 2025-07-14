@@ -104,6 +104,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,6 +129,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Alpha.cpp" />
+    <ClCompile Include="HierarchicalClustering.cpp" />
     <ClCompile Include="LibParser.cpp" />
     <ClCompile Include="Parser.cpp" />
     <ClCompile Include="ParserDEF.cpp" />
@@ -140,6 +142,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
+    <ClInclude Include="HierarchicalClustering.h" />
     <ClInclude Include="LibParser.h" />
     <ClInclude Include="Parser.h" />
     <ClInclude Include="ParserDEF.h" />

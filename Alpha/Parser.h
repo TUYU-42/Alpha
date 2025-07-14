@@ -4,6 +4,7 @@
 #include "DataStructures.h"
 #include "ParserLEF.h"
 #include "ParserWeights.h"
+#include "HierarchicalClustering.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -44,6 +45,8 @@ private:
     // ??專用資料
     std::vector<std::string> initialCellList_;  // 從 weight 檔案取得
     std::set<std::string> finalCellList_;       // ?過 lib ?理後的最終列表
+    std::unique_ptr<HierarchicalClustering> hierarchicalClustering_;
+    bool clusteringPerformed_;
 
     // Helper methods
     std::string constructFilePath(const std::string& base, const std::string& extension) const;
@@ -151,6 +154,13 @@ public:
     // Error handling
     std::vector<std::string> getErrors() const;
     std::vector<std::string> getWarnings() const;
+    void performHierarchicalClustering();
+    const HierarchicalClustering* getHierarchicalClustering() const {
+        return hierarchicalClustering_.get();
+    }
+    bool isClusteringPerformed() const { return clusteringPerformed_; }
+    void printClusteringResults() const;
+    void exportClusteringResults(const std::string& filename) const;
 
 private:
     // Error tracking

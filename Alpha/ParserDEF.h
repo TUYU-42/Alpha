@@ -27,6 +27,9 @@ private:
     std::regex netStartRegex_;
     std::regex netPinRegex_;
     std::regex netUseRegex_;
+    std::regex dieAreaRegex_;
+    std::regex unitsRegex_;
+
 
     // Helper methods
     bool parseRowInfo(const std::string& line);

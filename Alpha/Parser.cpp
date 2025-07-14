@@ -14,7 +14,8 @@ using namespace std;
 Parser::Parser(const string& baseName, const string& outputName)
     : baseName_(baseName), outputName_(outputName),
     lefLoaded_(false), weightLoaded_(false), defLoaded_(false),
-    verilogLoaded_(false), sdcLoaded_(false), techLoaded_(false) {
+    verilogLoaded_(false), sdcLoaded_(false), techLoaded_(false),
+    clusteringPerformed_(false) {  // Add this
     initializeParsers();
 }
 
@@ -30,6 +31,108 @@ void Parser::initializeParsers() {
     sdcParser_ = make_unique<SdcParser>();
     techParser_ = make_unique<TechParser>();
     libParser_ = make_unique<LibParser>();  // 新增
+    hierarchicalClustering_ = make_unique<HierarchicalClustering>();
+}
+void Parser::performHierarchicalClustering() {
+    cout << "\n=== Performing Hierarchical Clustering Analysis ===" << endl;
+
+    if (!defLoaded_) {
+        addError("Cannot perform clustering: DEF file not loaded");
+        return;
+    }
+
+    // Get flip-flops from DEF parser
+    const auto& flipFlops = defParser_->getFlipFlops();
+
+    if (flipFlops.empty()) {
+        addWarning("No flip-flops found for clustering");
+        clusteringPerformed_ = false;
+        return;
+    }
+
+    cout << "Starting clustering analysis for " << flipFlops.size() << " flip-flops..." << endl;
+
+    // Perform the clustering
+    hierarchicalClustering_->performClustering(flipFlops);
+
+    // Validate results
+    if (hierarchicalClustering_->validateClustering()) {
+        clusteringPerformed_ = true;
+
+        // Print summary
+        hierarchicalClustering_->printClusteringSummary();
+
+        // Export results
+        string clusteringFile = outputName_ + "_clustering.txt";
+        hierarchicalClustering_->exportToFile(clusteringFile);
+    }
+    else {
+        clusteringPerformed_ = false;
+        addError("Clustering validation failed");
+    }
+}
+
+void Parser::printClusteringResults() const {
+    if (!clusteringPerformed_) {
+        cout << "No clustering results available. Run performHierarchicalClustering() first." << endl;
+        return;
+    }
+
+    hierarchicalClustering_->printDetailedReport();
+}
+
+void Parser::exportClusteringResults(const string& filename) const {
+    if (!clusteringPerformed_) {
+        addError("No clustering results to export");
+        return;
+    }
+
+    hierarchicalClustering_->exportToFile(filename);
+}
+
+// Update the performBankingOptimization() method to use clustering results:
+void Parser::performBankingOptimization() {
+    cout << "\n=== Banking/Debanking Optimization ===" << endl;
+
+    if (!defLoaded_ || !libLoaded_) {
+        cout << "Error: Need both DEF and LIB data for optimization" << endl;
+        return;
+    }
+
+    // First ensure clustering is performed
+    if (!clusteringPerformed_) {
+        cout << "Performing hierarchical clustering first..." << endl;
+        performHierarchicalClustering();
+
+        if (!clusteringPerformed_) {
+            addError("Failed to perform clustering, cannot proceed with optimization");
+            return;
+        }
+    }
+
+    // Get clustering results
+    const auto& clusteredDesign = hierarchicalClustering_->getClusteredDesign();
+    const auto& statistics = hierarchicalClustering_->getStatistics();
+
+    cout << "Analyzing " << statistics.totalClockDomains << " clock domains "
+        << "with " << statistics.totalScanChains << " scan chains..." << endl;
+
+    // Process each clock domain separately
+    for (const auto& [clockNet, scanChains] : clusteredDesign) {
+        cout << "\nProcessing clock domain: " << clockNet << endl;
+        cout << "  Chains in domain: " << scanChains.size() << endl;
+
+        // Find banking candidates within this clock domain
+        auto candidates = hierarchicalClustering_->findBankingCandidates(clockNet);
+        cout << "  Banking candidates found: " << candidates.size() << endl;
+
+        // TODO: Implement actual banking algorithm
+        // 1. Analyze each scan chain for banking opportunities
+        // 2. Consider proximity, timing, and power constraints
+        // 3. Generate optimal banking solutions
+    }
+
+    cout << "\n[TODO] Implement actual banking algorithm based on clustering" << endl;
 }
 
 // Helper method to construct file paths
@@ -273,36 +376,6 @@ bool Parser::parseWeights(const string& filename) {
         addError("Failed to parse weight file: " + weightFile);
         return false;
     }
-}
-void Parser::performBankingOptimization() {
-    cout << "\n=== Banking/Debanking Optimization ===" << endl;
-
-    if (!defLoaded_ || !libLoaded_) {
-        cout << "Error: Need both DEF and LIB data for optimization" << endl;
-        return;
-    }
-
-    // 取得所有 flip-flops
-    const auto& flipFlops = defParser_->getFlipFlops();
-    cout << "Total flip-flops in design: " << flipFlops.size() << endl;
-
-    // 根據時脈域分組
-    map<string, vector<FlipFlopInfo>> clockDomains;
-    for (const auto& ff : flipFlops) {
-        clockDomains[ff.clockNet].push_back(ff);
-    }
-
-    cout << "Clock domains: " << clockDomains.size() << endl;
-    for (const auto& domain : clockDomains) {
-        cout << "  " << domain.first << ": " << domain.second.size() << " FFs" << endl;
-    }
-
-    // TODO: 實作實際的 banking 演算法
-    // 1. 找出可以合併的單位元 FF
-    // 2. 計算合併後的成本（面積、功耗、時序）
-    // 3. 選擇最佳的合併方案
-
-    cout << "[TODO] Implement actual banking algorithm" << endl;
 }
 
 

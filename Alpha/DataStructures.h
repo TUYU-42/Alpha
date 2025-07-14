@@ -37,7 +37,10 @@ struct RowInfo {
     int yEnd= y + by * stepY;  // 璝 by > 1
     int rowXWidth = 0;
     int rowYWidth = 0;
-    
+};
+
+struct DieArea {
+    int xMin = 0, yMin = 0, xMax = 0, yMax = 0;
 };
 
 // TRACK 資料結?
@@ -89,14 +92,43 @@ struct FlipFlopInfo {
     std::string cellType;
     int x, y;
     std::string orient;
+    std::string orientation;
     std::string clockNet;        // 時脈網路
     std::vector<std::string> dataPins; // D pins
     std::vector<std::string> outputPins; // Q pins  
     std::string scanIn = "";     // SI pin net (如果有)
     std::string scanOut = "";    // SO pin net (如果有)
+    std::string dataIn;         // D pin connection
+    std::string dataOut;
+    std::string scanEnable;
     bool isMultiBit = false; // 是否為 multibit FF
     int bitWidth = 1;       // bit ?度
+
+    FlipFlopInfo() : x(0), y(0) {}
 };
+struct ScanChainNode {
+    std::string instanceName;   // FF instance name
+    std::string cellType;       // FF cell type
+
+    // Constructor
+    ScanChainNode(const std::string& inst, const std::string& type)
+        : instanceName(inst), cellType(type) {
+    }
+};
+struct ScanChain {
+    std::vector<ScanChainNode> nodes;  // ㄌ渺い┮Τ FF
+    std::string chainId;                // 渺醚才匡
+
+    // Helper methods
+    size_t length() const { return nodes.size(); }
+    bool isEmpty() const { return nodes.empty(); }
+
+    // Add a node to the chain
+    void addNode(const std::string& instName, const std::string& cellType) {
+        nodes.emplace_back(instName, cellType);
+    }
+};
+
 
 // Banking/Debanking 候選群組
 struct FFCluster {
@@ -127,6 +159,8 @@ struct DefData {
     std::vector<InstPinNet> instPinNets;
     std::vector<FlipFlopInfo> flipFlops;    // FF 專用資料
     std::map<std::string, std::vector<std::string>> clockDomains; // clock -> FF instances
+    int units = 1000;      // 箇砞1000microns
+    DieArea dieArea;       // 垂跋办
 };
 
 // SDC 指令結?
@@ -144,6 +178,26 @@ struct Technology {
 struct Color {
     int id;
     std::map<std::string, std::string> parameters;
+};
+struct ClusteringStatistics {
+    int totalFlipFlops;
+    int totalClockDomains;
+    int totalScanChains;
+    std::map<std::string, int> ffPerClockDomain;
+    std::map<std::string, int> chainsPerClockDomain;
+    std::map<std::string, std::vector<int>> chainLengthsPerDomain;
+
+    // Constructor
+    ClusteringStatistics() : totalFlipFlops(0), totalClockDomains(0), totalScanChains(0) {}
+};
+
+// Banking candidate structure (for future use)
+struct BankingCandidate {
+    std::vector<std::string> flipFlops;  // List of FFs to be banked together
+    std::string targetMBFF;               // Target multi-bit FF type
+    double costReduction;                 // Estimated cost reduction
+
+    BankingCandidate() : costReduction(0.0) {}
 };
 
 struct Layer {

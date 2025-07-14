@@ -25,24 +25,9 @@ struct VerilogInstance {
     std::string instName;
     std::vector<std::pair<std::string, std::string>> connections; // pin -> net
 };
-struct ScanChainNode {
-    std::string instName;
-    std::string cellType;
-    std::string scanIn;     // SI 連接的 net
-    std::string scanOut;    // SO 連接的 net
-    std::string scanEnable; // SE 連接的 net
-    int position;           // 在?中的位置
-};
 
-// 完整的掃描?結?
-struct ScanChain {
-    std::string chainId;
-    std::string startNet;   // ?的起始 net (通常是 SCAN_IN)
-    std::string endNet;     // ?的結束 net (通常是 SCAN_OUT)
-    std::string enableNet;  // 掃描使能信?
-    std::vector<ScanChainNode> nodes;
-    int length;
-};
+
+
 
 class VerilogParser {
 private:

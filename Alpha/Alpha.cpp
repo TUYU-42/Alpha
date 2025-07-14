@@ -203,17 +203,17 @@ int main(int argc, char* argv[]) {
 
     printBanner();
 
-    // 解析命令列參數
+    // Parse command line arguments
     ContestArgs args = parseContestArgs(argc, argv);
 
-    // 驗證必要參數
+    // Validate required arguments
     if (args.weightFiles.empty() || args.outputName.empty()) {
         cerr << "Error: Missing required arguments" << endl;
         printUsage(argv[0]);
         return 1;
     }
 
-    // 顯示解析到的檔案
+    // Display parsed files
     cout << "\nParsed command line:" << endl;
     cout << "  Weight files: " << args.weightFiles.size() << endl;
     cout << "  Library files: " << args.libFiles.size() << endl;
@@ -225,52 +225,108 @@ int main(int argc, char* argv[]) {
     cout << "  Output name: " << args.outputName << endl;
 
     try {
-        // 建立 Parser 物件
+        // Create Parser object
         Parser parser("", args.outputName);
 
-        // 執行競賽工作流程
+        // Execute contest workflow
         if (!executeContestWorkflow(parser, args)) {
             cerr << "Error: Contest workflow failed" << endl;
             return 1;
         }
 
-        // 分析與優化
+        // Analysis and optimization phase
         if (parser.isDefLoaded()) {
             cout << "\n=== Analysis Phase ===" << endl;
 
-            // 分析 Flip-Flops
+            // Step 1: Analyze Flip-Flops (basic analysis)
             parser.analyzeFlipFlops();
 
-            // ====== 新增 Placer 實例化與測試 ======
-            // 取出 macroMap_（你可能有 getter，例如 getMacroMap()）
-            const auto& macroMap = parser.getMacroMap();
+            // ====== NEW: Hierarchical Clustering ======
+            // Step 2: Perform hierarchical clustering
+            cout << "\n=== Hierarchical Clustering Phase ===" << endl;
+            parser.performHierarchicalClustering();
 
-            // 取得 components
+            // Check if clustering was successful
+            if (parser.isClusteringPerformed()) {
+                // Option to print detailed report
+                bool printDetailed = false; // Set to true for verbose output
+                if (printDetailed) {
+                    parser.printClusteringResults();
+                }
+
+                // The clustering results are now available for use
+                const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
+                if (clustering) {
+                    const auto& stats = clustering->getStatistics();
+                    cout << "\nClustering completed successfully:" << endl;
+                    cout << "  - Clock domains: " << stats.totalClockDomains << endl;
+                    cout << "  - Total scan chains: " << stats.totalScanChains << endl;
+                    cout << "  - Results exported to: " << args.outputName << "_clustering.txt" << endl;
+                }
+            }
+            else {
+                cerr << "Warning: Hierarchical clustering failed or no flip-flops found" << endl;
+            }
+
+            // ====== UPDATED: Banking Optimization ======
+            // Step 3: Perform banking optimization (now uses clustering results)
+            cout << "\n=== Banking Optimization Phase ===" << endl;
+            parser.performBankingOptimization();
+
+            // ====== Existing Placer Test (Optional) ======
+            // Get macroMap and components for placer
+            const auto& macroMap = parser.getMacroMap();
             const auto& components = parser.getDefParser()->getComponents();
 
             Placer placer(macroMap, components);
 
-            // 印出前 10 個 instance-macro 對應與 size
+            // Print some instance-macro mappings
+            cout << "\n=== Placer Instance-Macro Mappings ===" << endl;
             placer.printSomeMappings(10);
-            // ====== END Placer 測試 ======
 
-            // TODO: 實作 banking/debanking 演算法
-            cout << "\n[TODO] Implement multi-bit flip-flop optimization" << endl;
+            // ====== Additional Analysis (Optional) ======
+            // You can add more analysis based on clustering results
+            if (parser.isClusteringPerformed()) {
+                const auto* clustering = parser.getHierarchicalClustering();
+                const auto& clockDomains = clustering->getClockDomains();
+
+                // Example: Find largest clock domain
+                string largestDomain;
+                size_t maxSize = 0;
+                for (const auto& [clock, ffs] : clockDomains) {
+                    if (ffs.size() > maxSize) {
+                        maxSize = ffs.size();
+                        largestDomain = clock;
+                    }
+                }
+
+                cout << "\nLargest clock domain: " << largestDomain
+                    << " with " << maxSize << " flip-flops" << endl;
+            }
         }
 
-        // 產生輸出檔案
+        // Generate output files
         cout << "\n=== Output Generation ===" << endl;
         if (!parser.writeOutputFiles()) {
             cerr << "Error: Failed to write output files" << endl;
             return 1;
         }
 
-        // 顯示執行統計
+        // Display execution statistics
         auto endTime = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(endTime - startTime);
 
         cout << "\n=== Execution Summary ===" << endl;
         parser.printSummary();
+
+        // Add clustering summary to final output
+        if (parser.isClusteringPerformed()) {
+            cout << "\nHierarchical Clustering: ✓ Completed" << endl;
+        }
+        else {
+            cout << "\nHierarchical Clustering: ✗ Not performed" << endl;
+        }
+
         cout << "Execution time: " << duration.count() << " ms" << endl;
 
         cout << "\n=== Processing completed successfully! ===" << endl;
@@ -281,5 +337,46 @@ int main(int argc, char* argv[]) {
     catch (const exception& e) {
         cerr << "Fatal error: " << e.what() << endl;
         return 1;
+    }
+}
+void demonstrateClusteringUsage(const Parser& parser) {
+    if (!parser.isClusteringPerformed()) {
+        cout << "Clustering not performed, skipping demonstration" << endl;
+        return;
+    }
+
+    const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
+    const auto& clusteredDesign = clustering->getClusteredDesign();
+
+    cout << "\n=== Demonstrating Clustering Usage ===" << endl;
+
+    // Example 1: Iterate through all clock domains
+    for (const auto& [clockNet, scanChains] : clusteredDesign) {
+        cout << "\nClock domain: " << clockNet << endl;
+
+        // Example 2: Find chains suitable for 4-bit banking
+        vector<const ScanChain*> bankableFours;
+        for (const auto& chain : scanChains) {
+            if (chain.length() >= 4) {
+                bankableFours.push_back(&chain);
+            }
+        }
+
+        if (!bankableFours.empty()) {
+            cout << "  Found " << bankableFours.size()
+                << " chains with 4+ FFs (suitable for 4-bit MBFF)" << endl;
+        }
+
+        // Example 3: Find isolated FFs
+        int isolatedCount = 0;
+        for (const auto& chain : scanChains) {
+            if (chain.length() == 1) {
+                isolatedCount++;
+            }
+        }
+
+        if (isolatedCount > 0) {
+            cout << "  Found " << isolatedCount << " isolated FFs" << endl;
+        }
     }
 }

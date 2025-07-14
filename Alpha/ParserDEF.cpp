@@ -11,6 +11,10 @@ using namespace std;
 
 DefParser::DefParser() : isLoaded_(false) {
     // Initialize regex patterns
+    dieAreaRegex_ = std::regex(R"(^\s*DIEAREA\s*((\(\s*\d+\s+\d+\s*\)\s*)+);)");
+
+    unitsRegex_ = std::regex(R"(^\s*UNITS\s+DISTANCE\s+MICRONS\s+(\d+)\s*;)");
+
     rowRegex_ = regex(R"(^\s*ROW\s+(\w+)\s+\w+\s+(\d+)\s+(\d+)\s+([A-Z]{1,2})\s+DO\s+(\d+)\s+BY\s+(\d+)\s+STEP\s+(\d+)\s+(\d+)\s*;)");
     trackRegex_ = regex(R"(^\s*TRACKS\s+([XY])\s+(\d+)\s+DO\s+(\d+)\s+STEP\s+(\d+)\s+LAYER\s+(\w+)\s*;)");
     componentRegex_ = regex(R"(^\s*-\s+(\S+)\s+(\S+)\s+\+\s+PLACED\s+\(\s*(\d+)\s+(\d+)\s*\)\s+(\S+)\s*;)");
@@ -39,6 +43,31 @@ bool DefParser::parseFile(const string& filename) {
         while (getline(in, line)) {
             lineCount++;
             if (line.empty() || line[0] == '#') continue;
+            smatch m;
+            if (regex_search(line, m, unitsRegex_)) {
+                defData_.units = stoi(m[1]);
+                continue;
+            }
+            // Parse DIEAREA (支援2點或4點)
+            if (std::regex_search(line, m, dieAreaRegex_)) {
+                std::vector<int> coords;
+                static const std::regex coordPattern(R"(\(\s*(\d+)\s+(\d+)\s*\))");
+                std::sregex_iterator it(line.begin(), line.end(), coordPattern), end;
+                for (; it != end; ++it) {
+                    coords.push_back(stoi((*it)[1]));
+                    coords.push_back(stoi((*it)[2]));
+                }
+                int xMin = INT_MAX, xMax = INT_MIN, yMin = INT_MAX, yMax = INT_MIN;
+                for (size_t i = 0; i < coords.size(); i += 2) {
+                    int x = coords[i], y = coords[i + 1];
+                    xMin = std::min(xMin, x); xMax = std::max(xMax, x);
+                    yMin = std::min(yMin, y); yMax = std::max(yMax, y);
+                }
+                defData_.dieArea = { xMin, yMin, xMax, yMax };
+                continue;
+            }
+
+
 
             // Parse different sections
             if (parseRowInfo(line)) continue;
@@ -554,8 +583,10 @@ bool DefParser::writeDefFile(const string& filename) const {
     try {
         defFile << "VERSION 5.8 ;" << endl;
         defFile << "DESIGN " << filename << " ;" << endl;
-        defFile << "UNITS DISTANCE MICRONS 1000 ;" << endl;
-        defFile << "DIEAREA ( 0 0 ) ( 1000 1000 ) ;" << endl;
+        defFile << "UNITS DISTANCE MICRONS " << defData_.units << " ;" << endl;
+        defFile << "DIEAREA ( " << defData_.dieArea.xMin << " " << defData_.dieArea.yMin << " )"
+            << " ( " << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ;" << endl;
+
 
         // Write ROWS
         if (!defData_.rows.empty()) {
