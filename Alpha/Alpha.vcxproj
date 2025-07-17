@@ -129,6 +129,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Alpha.cpp" />
+    <ClCompile Include="DPC.cpp" />
     <ClCompile Include="HierarchicalClustering.cpp" />
     <ClCompile Include="LibParser.cpp" />
     <ClCompile Include="Parser.cpp" />
@@ -142,6 +143,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructures.h" />
+    <ClInclude Include="DPC.h" />
     <ClInclude Include="HierarchicalClustering.h" />
     <ClInclude Include="LibParser.h" />
     <ClInclude Include="Parser.h" />

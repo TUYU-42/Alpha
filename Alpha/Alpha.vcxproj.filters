@@ -67,6 +67,12 @@
     <ClCompile Include="place.cpp">
       <Filter>Parser\place</Filter>
     </ClCompile>
+    <ClCompile Include="HierarchicalClustering.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
+    <ClCompile Include="DPC.cpp">
+      <Filter>來源檔案</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ParserWeights.h">
@@ -98,6 +104,12 @@
     </ClInclude>
     <ClInclude Include="place.h">
       <Filter>Parser\place</Filter>
+    </ClInclude>
+    <ClInclude Include="HierarchicalClustering.h">
+      <Filter>來源檔案</Filter>
+    </ClInclude>
+    <ClInclude Include="DPC.h">
+      <Filter>來源檔案</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -268,6 +268,9 @@ int main(int argc, char* argv[]) {
                 cerr << "Warning: Hierarchical clustering failed or no flip-flops found" << endl;
             }
 
+            //DPC test
+
+
             // ====== UPDATED: Banking Optimization ======
             // Step 3: Perform banking optimization (now uses clustering results)
             cout << "\n=== Banking Optimization Phase ===" << endl;
