@@ -2,6 +2,8 @@
 #define PARSER_DEF_H
 
 #include "DataStructures.h"
+#include "LibParser.h"
+
 #include <string>
 #include <vector>
 #include <regex>
@@ -103,6 +105,15 @@ public:
     void assignComponentsToRows();
     void computeRowDimensions();
     void printComponentsByRow() const; // optional
+    void clearFlipFlops() { defData_.flipFlops.clear(); }
+    void addFlipFlop(const FlipFlopInfo& ff) { defData_.flipFlops.push_back(ff); }
+
+
+
+
+
+    // Get flip-flops
+
 };
 
 // Utility functions for DEF parsing

@@ -7,6 +7,194 @@
 
 using namespace std;
 
+// 新增：解析所有 library 檔案，找出所有 FF cells
+bool LibParser::parseAllLibraries(const vector<string>& libFiles) {
+    cout << "\n=== LibParser: Parsing all libraries for FF cells ===" << endl;
+
+    clear(); // 清空之前的資料
+
+    for (const string& libFile : libFiles) {
+        cout << "\nProcessing library file: " << libFile << endl;
+
+        ifstream file(libFile);
+        if (!file.is_open()) {
+            cerr << "Warning: Cannot open lib file: " << libFile << endl;
+            continue;
+        }
+
+        string line;
+        string currentLibrary;
+        bool inLibrary = false;
+
+        while (getline(file, line)) {
+            // 移除註解
+            size_t commentPos = line.find("//");
+            if (commentPos != string::npos) {
+                line = line.substr(0, commentPos);
+            }
+
+            // 檢查 library 開始
+            if (line.find("library") != string::npos && line.find("(") != string::npos) {
+                currentLibrary = extractLibraryName(line);
+                if (!currentLibrary.empty()) {
+                    libraries_[currentLibrary].name = currentLibrary;
+                    libraries_[currentLibrary].filename = libFile;
+                    inLibrary = true;
+                    cout << "  Found library: " << currentLibrary << endl;
+                }
+            }
+
+            // 檢查 cell 定義
+            smatch match;
+            regex cellRegex(R"(cell\s*\(\s*([^\s\)]+)\s*\))");
+
+            if (regex_search(line, match, cellRegex)) {
+                string cellName = match[1];
+
+                // 解析這個 cell
+                LibCell cell;
+                cell.name = cellName;
+                cell.libraryName = currentLibrary;
+
+                // 快速掃描判斷是否為 FF cell
+                if (parseCellForFF(file, cellName, cell, currentLibrary)) {
+                    // 只有當 cell 有 single_bit_degenerate 或 ff() 時才加入
+                    if (!cell.singleBitDegenerate.empty() || cell.hasFF) {
+                        cellLibrary_[cellName] = cell;
+                        parsedCells_.insert(cellName);
+
+                        if (inLibrary && !currentLibrary.empty()) {
+                            libraries_[currentLibrary].cells.insert(cellName);
+                        }
+
+                        cout << "    Found FF cell: " << cellName;
+                        if (!cell.singleBitDegenerate.empty()) {
+                            cout << " (degenerate: " << cell.singleBitDegenerate << ")";
+                        }
+                        if (cell.hasFF) {
+                            cout << " (has ff block)";
+                        }
+                        cout << endl;
+                    }
+                }
+            }
+        }
+
+        file.close();
+    }
+
+    cout << "\n✓ Parsed " << cellLibrary_.size() << " FF cells from "
+        << libraries_.size() << " libraries" << endl;
+
+    isLoaded_ = !cellLibrary_.empty();
+    return isLoaded_;
+}
+
+
+
+
+
+// 快速解析 cell，專注於找 FF 相關特徵
+bool LibParser::parseCellForFF(ifstream& file, const string& cellName, LibCell& cell, const string& libraryName) {
+    string line;
+    int braceDepth = 1;
+    bool foundFF = false;
+    bool foundDegenerate = false;
+
+    streampos startPos = file.tellg();
+
+    while (getline(file, line) && braceDepth > 0) {
+        // 追蹤大括號深度
+        for (char c : line) {
+            if (c == '{') braceDepth++;
+            else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0) break;
+            }
+        }
+
+        // 快速檢查關鍵屬性
+        if (line.find("area :") != string::npos) {
+            cell.area = extractNumericValue(line);
+        }
+        else if (line.find("cell_leakage_power :") != string::npos) {
+            cell.cellLeakagePower = extractNumericValue(line);
+        }
+        else if (line.find("single_bit_degenerate :") != string::npos) {
+            cell.singleBitDegenerate = extractQuotedString(line);
+            foundDegenerate = true;
+        }
+        else if (line.find("ff(") != string::npos || line.find("ff (") != string::npos) {
+            cell.hasFF = true;
+            foundFF = true;
+
+            // 簡單解析 ff block 以取得基本資訊
+            size_t ffStart = line.find("ff");
+            size_t parenStart = line.find("(", ffStart);
+            size_t parenEnd = line.find(")", parenStart);
+
+            if (parenStart != string::npos && parenEnd != string::npos) {
+                string ffPins = line.substr(parenStart + 1, parenEnd - parenStart - 1);
+                // 可以進一步解析 ff pins，但現在先標記有 ff 即可
+            }
+        }
+
+        // 如果已經找到兩個條件之一，可以提早結束
+        if (foundFF || foundDegenerate) {
+            // 繼續讀到 cell 結束
+            while (braceDepth > 0 && getline(file, line)) {
+                for (char c : line) {
+                    if (c == '{') braceDepth++;
+                    else if (c == '}') {
+                        braceDepth--;
+                        if (braceDepth == 0) break;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+
+    return foundFF || foundDegenerate;
+}
+
+// 取得所有 FF cell 列表
+set<string> LibParser::getFFCellList() const {
+    set<string> ffCells;
+
+    for (const auto& pair : cellLibrary_) {
+        const LibCell& cell = pair.second;
+        // 包含有 single_bit_degenerate 或 ff() 的 cells
+        if (!cell.singleBitDegenerate.empty() || cell.hasFF) {
+            ffCells.insert(cell.name);
+        }
+    }
+
+    return ffCells;
+}
+
+// 從 library(...) 行提取 library 名稱
+string LibParser::extractLibraryName(const string& line) {
+    // 尋找 library( 或 library (
+    size_t start = line.find("library");
+    if (start == string::npos) return "";
+
+    start = line.find("(", start);
+    if (start == string::npos) return "";
+
+    size_t end = line.find(")", start);
+    if (end == string::npos) return "";
+
+    string name = line.substr(start + 1, end - start - 1);
+
+    // 移除空白
+    name.erase(0, name.find_first_not_of(" \t"));
+    name.erase(name.find_last_not_of(" \t") + 1);
+
+    return name;
+}
+
+// 保留原有的 parseWithCellList 方法（競賽用）
 bool LibParser::parseWithCellList(const vector<string>& libFiles,
     const vector<string>& initialCellList,
     set<string>& finalCellList) {
@@ -103,7 +291,14 @@ bool LibParser::parseWithCellList(const vector<string>& libFiles,
         cout << "  Processing: " << libFile << endl;
 
         string line;
+        string currentLibrary;
+
         while (getline(file, line)) {
+            // 檢查 library
+            if (line.find("library") != string::npos && line.find("(") != string::npos) {
+                currentLibrary = extractLibraryName(line);
+            }
+
             // 尋找 cell 定義
             smatch match;
             regex cellRegex(R"(cell\s*\(\s*([^\s\)]+)\s*\))");
@@ -117,8 +312,9 @@ bool LibParser::parseWithCellList(const vector<string>& libFiles,
 
                     LibCell cell;
                     cell.name = cellName;
+                    cell.libraryName = currentLibrary;
 
-                    if (parseCell(file, cellName, cell)) {
+                    if (parseCell(file, cellName, cell, currentLibrary)) {
                         cellLibrary_[cellName] = cell;
                         parsedCells_.insert(cellName);
                         parsedCount++;
@@ -167,7 +363,7 @@ bool LibParser::parseWithCellList(const vector<string>& libFiles,
     return true;
 }
 
-bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell) {
+bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell, const string& libraryName) {
     string line;
     int braceDepth = 1;  // 已經在 cell 區塊內
 
@@ -196,6 +392,8 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell)
         else if (line.find("ff (") != string::npos ||
             line.find("ff(") != string::npos) {
             cell.ffType = "ff";
+            cell.hasFF = true;
+            parseFF(file, cell);
         }
         else if (line.find("pin(") != string::npos ||
             line.find("pin (") != string::npos) {
@@ -215,6 +413,29 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell)
     }
 
     return false;  // 未預期的檔案結束
+}
+
+bool LibParser::parseFF(ifstream& file, LibCell& cell) {
+    string line;
+    int braceDepth = 1;
+
+    while (getline(file, line)) {
+        // 追蹤大括號深度
+        for (char c : line) {
+            if (c == '{') braceDepth++;
+            else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0) {
+                    return true;  // ff block 解析完成
+                }
+            }
+        }
+
+        // 可以在這裡解析 ff block 的詳細內容
+        // 例如 clocked_on, next_state 等
+    }
+
+    return false;
 }
 
 bool LibParser::parsePin(ifstream& file, const string& pinName, LibPin& pin) {
@@ -334,6 +555,7 @@ vector<string> LibParser::getFlipFlopCells() const {
             cell.name.find("DFF") != string::npos ||
             cell.name.find("SDFF") != string::npos ||
             cell.name.find("FSD") != string::npos ||
+            cell.hasFF ||
             !cell.ffType.empty()) {
             ffCells.push_back(cell.name);
         }
@@ -363,17 +585,20 @@ vector<string> LibParser::getMultiBitCells() const {
 void LibParser::clear() {
     cellLibrary_.clear();
     parsedCells_.clear();
+    libraries_.clear();
     isLoaded_ = false;
 }
 
 void LibParser::printSummary() const {
     cout << "\n=== LibParser Summary ===" << endl;
     cout << "Total cells parsed: " << cellLibrary_.size() << endl;
+    cout << "Total libraries: " << libraries_.size() << endl;
 
     // 統計
     int ffCount = 0;
     int mbCount = 0;
     int withDegenerate = 0;
+    int withFFBlock = 0;
 
     for (const auto& pair : cellLibrary_) {
         const LibCell& cell = pair.second;
@@ -391,11 +616,22 @@ void LibParser::printSummary() const {
         if (!cell.singleBitDegenerate.empty()) {
             withDegenerate++;
         }
+
+        if (cell.hasFF) {
+            withFFBlock++;
+        }
     }
 
     cout << "Flip-flop cells: " << ffCount << endl;
     cout << "Multi-bit cells: " << mbCount << endl;
     cout << "Cells with single_bit_degenerate: " << withDegenerate << endl;
+    cout << "Cells with ff() block: " << withFFBlock << endl;
+
+    // 顯示每個 library 的統計
+    cout << "\nLibrary breakdown:" << endl;
+    for (const auto& libPair : libraries_) {
+        cout << "  " << libPair.first << ": " << libPair.second.cells.size() << " cells" << endl;
+    }
 }
 
 void LibParser::printCellDetails(const string& cellName) const {
@@ -408,11 +644,16 @@ void LibParser::printCellDetails(const string& cellName) const {
     const LibCell& cell = it->second;
 
     cout << "\n=== Cell: " << cell.name << " ===" << endl;
+    cout << "Library: " << cell.libraryName << endl;
     cout << "Area: " << cell.area << endl;
     cout << "Leakage Power: " << cell.cellLeakagePower << endl;
 
     if (!cell.singleBitDegenerate.empty()) {
         cout << "Single-bit Degenerate: " << cell.singleBitDegenerate << endl;
+    }
+
+    if (cell.hasFF) {
+        cout << "Has FF block: Yes" << endl;
     }
 
     cout << "Pins (" << cell.pins.size() << "):" << endl;
@@ -423,5 +664,43 @@ void LibParser::printCellDetails(const string& cellName) const {
             cout << " function: " << pin.function;
         }
         cout << endl;
+    }
+}
+
+void LibParser::printFFCellList() const {
+    cout << "\n=== FF Cell List ===" << endl;
+    cout << "Total FF cells: " << cellLibrary_.size() << endl;
+
+    // 按 library 分組顯示
+    map<string, vector<string>> cellsByLibrary;
+
+    for (const auto& pair : cellLibrary_) {
+        const LibCell& cell = pair.second;
+        cellsByLibrary[cell.libraryName].push_back(cell.name);
+    }
+
+    for (const auto& libPair : cellsByLibrary) {
+        cout << "\nLibrary: " << libPair.first << endl;
+        cout << "  Cells (" << libPair.second.size() << "):" << endl;
+
+        int count = 0;
+        for (const string& cellName : libPair.second) {
+            const LibCell* cell = getCell(cellName);
+            if (cell) {
+                cout << "    " << cellName;
+                if (!cell->singleBitDegenerate.empty()) {
+                    cout << " [degenerate: " << cell->singleBitDegenerate << "]";
+                }
+                if (cell->hasFF) {
+                    cout << " [has ff]";
+                }
+                cout << endl;
+
+                if (++count >= 10 && libPair.second.size() > 10) {
+                    cout << "    ... and " << (libPair.second.size() - 10) << " more" << endl;
+                    break;
+                }
+            }
+        }
     }
 }

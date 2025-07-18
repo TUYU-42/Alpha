@@ -33,8 +33,8 @@ struct RowInfo {
     std::string orientation;
     int count, by, stepX, stepY;
     // 延伸加：用來比對用的 range
-    int xEnd= x + count * stepX; 
-    int yEnd= y + by * stepY;  // 若 by > 1
+    int xEnd = x + count * stepX;
+    int yEnd = y + by * stepY;  // 若 by > 1
     int rowXWidth = 0;
     int rowYWidth = 0;
 };

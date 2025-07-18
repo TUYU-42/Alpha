@@ -19,6 +19,7 @@ Parser::Parser(const string& baseName, const string& outputName)
     initializeParsers();
 }
 
+
 // Destructor
 Parser::~Parser() = default;
 
@@ -32,6 +33,144 @@ void Parser::initializeParsers() {
     techParser_ = make_unique<TechParser>();
     libParser_ = make_unique<LibParser>();  // 新增
     hierarchicalClustering_ = make_unique<HierarchicalClustering>();
+}
+bool Parser::parseAllLibraries(const std::vector<std::string>& libFiles) {
+    if (!libParser_) {
+        addError("LibParser not initialized");
+        return false;
+    }
+
+    // Parse all libraries to find FF cells
+    if (libParser_->parseAllLibraries(libFiles)) {
+        libLoaded_ = true;
+
+        // Store the FF cell types for quick lookup
+        ffCellTypes_ = libParser_->getFFCellList();
+
+        cout << "✓ Parsed " << libFiles.size() << " library files" << endl;
+        cout << "  - Found " << ffCellTypes_.size() << " FF cell types" << endl;
+
+        // Print some statistics
+        int mbffCount = 0;
+        int sbffCount = 0;
+
+        for (const auto& cellType : ffCellTypes_) {
+            if (cellType.find("2_") != string::npos ||
+                cellType.find("4_") != string::npos ||
+                cellType.find("8_") != string::npos) {
+                mbffCount++;
+            }
+            else {
+                sbffCount++;
+            }
+        }
+
+        cout << "  - Single-bit FFs: " << sbffCount << endl;
+        cout << "  - Multi-bit FFs: " << mbffCount << endl;
+
+        return true;
+    }
+
+    libLoaded_ = false;
+    addError("Failed to parse library files");
+    return false;
+}
+
+void Parser::identifyFFInstances() {
+    if (!defParser_ || !libLoaded_) {
+        addError("Cannot identify FF instances: DEF or LIB not loaded");
+        return;
+    }
+
+    cout << "\nIdentifying FF instances in design..." << endl;
+
+    const auto& components = defParser_->getComponents();
+    int ffCount = 0;
+
+    // Clear previous FF data
+    defParser_->clearFlipFlops();
+
+    for (const auto& comp : components) {
+        // Check if this component's cell type is in our FF list
+        if (ffCellTypes_.find(comp.cellType) != ffCellTypes_.end()) {
+            // This is a flip-flop instance
+            FlipFlopInfo ffInfo;
+            ffInfo.instName = comp.name;
+            ffInfo.cellType = comp.cellType;
+            ffInfo.x = comp.x;
+            ffInfo.y = comp.y;
+            ffInfo.orient = comp.orient;
+
+            // Get additional info from LibParser if available
+            const LibCell* libCell = libParser_->getCell(comp.cellType);
+            if (libCell) {
+                // Check if it's multi-bit
+                if (comp.cellType.find("2_") != string::npos) {
+                    ffInfo.isMultiBit = true;
+                    ffInfo.bitWidth = 2;
+                }
+                else if (comp.cellType.find("4_") != string::npos) {
+                    ffInfo.isMultiBit = true;
+                    ffInfo.bitWidth = 4;
+                }
+                else if (comp.cellType.find("8_") != string::npos) {
+                    ffInfo.isMultiBit = true;
+                    ffInfo.bitWidth = 8;
+                }
+            }
+
+            // Add to DEF parser's FF list
+            defParser_->addFlipFlop(ffInfo);
+            ffCount++;
+        }
+    }
+
+    cout << "  Identified " << ffCount << " flip-flop instances" << endl;
+}
+
+void Parser::groupFFInstancesByType() {
+    if (!defParser_ || !libLoaded_) {
+        addError("Cannot group FFs: DEF or LIB not loaded");
+        return;
+    }
+
+    ffGroupsByType_.clear();
+
+    const auto& flipFlops = defParser_->getFlipFlops();
+
+    for (const auto& ff : flipFlops) {
+        ffGroupsByType_[ff.cellType].push_back(ff);
+    }
+
+    cout << "\nFF instances grouped by type:" << endl;
+    for (const auto& [cellType, instances] : ffGroupsByType_) {
+        cout << "  " << cellType << ": " << instances.size() << " instances";
+
+        // Check if this is suitable for banking
+        const LibCell* libCell = libParser_->getCell(cellType);
+        if (libCell && !libCell->singleBitDegenerate.empty()) {
+            cout << " [can bank to: " << libCell->singleBitDegenerate << "]";
+        }
+        cout << endl;
+    }
+
+    // Analyze banking opportunities
+    cout << "\nPre-banking analysis:" << endl;
+
+    // Count single-bit FFs that can be banked
+    int bankableSBFF = 0;
+    for (const auto& [cellType, instances] : ffGroupsByType_) {
+        if (cellType.find("2_") == string::npos &&
+            cellType.find("4_") == string::npos &&
+            cellType.find("8_") == string::npos) {
+            // This is a single-bit FF
+            bankableSBFF += instances.size();
+        }
+    }
+
+    cout << "  Total single-bit FFs: " << bankableSBFF << endl;
+    cout << "  Potential 2-bit MBFFs: " << bankableSBFF / 2 << endl;
+    cout << "  Potential 4-bit MBFFs: " << bankableSBFF / 4 << endl;
 }
 void Parser::performHierarchicalClustering() {
     cout << "\n=== Performing Hierarchical Clustering Analysis ===" << endl;
@@ -434,8 +573,8 @@ bool Parser::parseVerilog(const string& filename) {
         verilogLoaded_ = true;
         cout << "✓ Verilog file (" << verilogFile << ") parsed successfully" << endl;
         verilogParser_->analyzeHierarchy();
-       verilogParser_->findClockNets();
-       verilogParser_->printScanChainSummary();
+        verilogParser_->findClockNets();
+        verilogParser_->printScanChainSummary();
         return true;
     }
     else {

@@ -103,8 +103,33 @@ ContestArgs parseContestArgs(int argc, char* argv[]) {
 bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     cout << "\n=== Executing Contest Workflow ===" << endl;
 
-    // STEP 1: 解析 Weight 檔案，取得初始元件列表
-    cout << "\n=== STEP 1: Parse Weight File ===" << endl;
+    // NEW STEP 1: Parse all .lib files first to get FF cell list
+    cout << "\n=== STEP 1: Parse .lib Files to Identify FF Cells ===" << endl;
+    if (!args.libFiles.empty()) {
+        // Parse all lib files to find FF cells
+        if (!parser.parseAllLibraries(args.libFiles)) {
+            cerr << "Error: Failed to parse .lib files" << endl;
+            return false;
+        }
+
+        // Get the FF cell list
+        set<string> ffCellList = parser.getLibParser()->getFFCellList();
+        cout << "  Found " << ffCellList.size() << " FF cells in libraries" << endl;
+
+        // Optional: Print first few FF cells
+        int count = 0;
+        for (const auto& cell : ffCellList) {
+            if (count++ < 10) {
+                cout << "    - " << cell << endl;
+            }
+        }
+        if (ffCellList.size() > 10) {
+            cout << "    ... and " << (ffCellList.size() - 10) << " more" << endl;
+        }
+    }
+
+    // STEP 2: Parse Weight file
+    cout << "\n=== STEP 2: Parse Weight File ===" << endl;
     if (args.weightFiles.empty()) {
         cerr << "Error: No weight file specified" << endl;
         return false;
@@ -115,52 +140,9 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
         return false;
     }
 
-    // 取得初始元件列表
-    vector<string> initialCellList;
-    if (parser.getWeightParser()) {
-        // TODO: 需要在 WeightParser 中加入 getCellList() 方法
-        // initialCellList = parser.getWeightParser()->getCellList();
-
-        // 暫時的解決方案：從 weight 檔案重新讀取
-        ifstream weightFile(args.weightFiles[0]);
-        string line;
-        bool foundArea = false;
-
-        while (getline(weightFile, line)) {
-            if (line.empty()) continue;
-
-            if (!foundArea) {
-                if (line.find("Area") == 0) {
-                    foundArea = true;
-                }
-            }
-            else {
-                // Area 之後的都是元件名稱
-                initialCellList.push_back(line);
-            }
-        }
-        weightFile.close();
-    }
-
-    cout << "  Initial cell list: " << initialCellList.size() << " cells" << endl;
-
-    // STEP 2: 解析 .lib 檔案，建立最終元件列表
-    if (!args.libFiles.empty()) {
-        cout << "\n=== STEP 2: Parse .lib Files with Cell List ===" << endl;
-
-        // TODO: 實作 parseLibWithCellList
-        // 這裡需要新增一個 LibParser 類別
-        cout << "  [TODO] Need to implement LibParser for contest workflow" << endl;
-
-        // 暫時使用初始列表作為最終列表
-        set<string> finalCellList(initialCellList.begin(), initialCellList.end());
-        parser.setFinalCellList(finalCellList);
-    }
-
-    // STEP 3: 解析 .lef 檔案，只處理最終列表中的元件
+    // STEP 3: Parse LEF files (now we know which cells are FFs)
     if (!args.lefFiles.empty()) {
-        cout << "\n=== STEP 3: Parse .lef Files with Final Cell List ===" << endl;
-
+        cout << "\n=== STEP 3: Parse .lef Files ===" << endl;
         for (const string& lefFile : args.lefFiles) {
             if (!parser.parseLEF(lefFile)) {
                 cerr << "Warning: Failed to parse LEF file: " << lefFile << endl;
@@ -168,25 +150,30 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
         }
     }
 
-    // STEP 4: 解析設計檔案
+    // STEP 4: Parse design files (DEF, Verilog)
     cout << "\n=== STEP 4: Parse Design Files ===" << endl;
 
-    // 解析 DEF
+    // Parse DEF - now we can identify FF instances
     if (!args.defFiles.empty()) {
+        cout << "  Parsing DEF file..." << endl;
         if (!parser.parseDEF(args.defFiles[0])) {
             cerr << "Error: Failed to parse DEF file" << endl;
             return false;
         }
+
+        // After parsing DEF, identify FF instances
+        parser.identifyFFInstances();
     }
 
-    // 解析 Verilog
+    // Parse Verilog
     if (!args.verilogFiles.empty()) {
+        cout << "  Parsing Verilog file..." << endl;
         if (!parser.parseVerilog(args.verilogFiles[0])) {
             cerr << "Warning: Failed to parse Verilog file" << endl;
         }
     }
 
-    // 解析其他檔案
+    // Parse other files
     if (!args.sdcFiles.empty()) {
         parser.parseSDC(args.sdcFiles[0]);
     }
@@ -194,6 +181,10 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     if (!args.tfFiles.empty()) {
         parser.parseTech(args.tfFiles[0]);
     }
+
+    // STEP 5: Group FF instances by cell type for pre-banking analysis
+    cout << "\n=== STEP 5: Group FF Instances by Cell Type ===" << endl;
+    parser.groupFFInstancesByType();
 
     return true;
 }
@@ -228,7 +219,7 @@ int main(int argc, char* argv[]) {
         // Create Parser object
         Parser parser("", args.outputName);
 
-        // Execute contest workflow
+        // Execute contest workflow with new .lib-first approach
         if (!executeContestWorkflow(parser, args)) {
             cerr << "Error: Contest workflow failed" << endl;
             return 1;
@@ -238,74 +229,54 @@ int main(int argc, char* argv[]) {
         if (parser.isDefLoaded()) {
             cout << "\n=== Analysis Phase ===" << endl;
 
-            // Step 1: Analyze Flip-Flops (basic analysis)
-            parser.analyzeFlipFlops();
+            // The FF instances are already identified and grouped by type
+            const auto& ffGroups = parser.getFFGroupsByType();
 
-            // ====== NEW: Hierarchical Clustering ======
-            // Step 2: Perform hierarchical clustering
+            cout << "\nFF Banking Opportunities:" << endl;
+
+            // Analyze each FF type group
+            for (const auto& [cellType, instances] : ffGroups) {
+                const LibCell* libCell = parser.getLibParser()->getCell(cellType);
+
+                if (libCell && instances.size() >= 2) {
+                    // Check banking opportunities
+                    if (cellType.find("2_") == string::npos &&
+                        cellType.find("4_") == string::npos) {
+                        // This is a single-bit FF
+                        cout << "\n  Cell type: " << cellType << endl;
+                        cout << "    Instances: " << instances.size() << endl;
+
+                        // Look for 2-bit and 4-bit targets
+                        string degenerate = libCell->singleBitDegenerate;
+                        if (!degenerate.empty()) {
+                            cout << "    Can degenerate from: " << degenerate << endl;
+                        }
+
+                        // Find potential MBFF targets
+                        set<string> mbffTargets;
+                        for (const auto& [mbffType, mbffCell] : parser.getLibParser()->getAllCells()) {
+                            if (mbffCell.singleBitDegenerate == cellType) {
+                                mbffTargets.insert(mbffType);
+                            }
+                        }
+
+                        if (!mbffTargets.empty()) {
+                            cout << "    Potential MBFF targets:" << endl;
+                            for (const auto& target : mbffTargets) {
+                                cout << "      - " << target << endl;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Perform clustering
             cout << "\n=== Hierarchical Clustering Phase ===" << endl;
             parser.performHierarchicalClustering();
 
-            // Check if clustering was successful
-            if (parser.isClusteringPerformed()) {
-                // Option to print detailed report
-                bool printDetailed = false; // Set to true for verbose output
-                if (printDetailed) {
-                    parser.printClusteringResults();
-                }
-
-                // The clustering results are now available for use
-                const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
-                if (clustering) {
-                    const auto& stats = clustering->getStatistics();
-                    cout << "\nClustering completed successfully:" << endl;
-                    cout << "  - Clock domains: " << stats.totalClockDomains << endl;
-                    cout << "  - Total scan chains: " << stats.totalScanChains << endl;
-                    cout << "  - Results exported to: " << args.outputName << "_clustering.txt" << endl;
-                }
-            }
-            else {
-                cerr << "Warning: Hierarchical clustering failed or no flip-flops found" << endl;
-            }
-
-            //DPC test
-
-
-            // ====== UPDATED: Banking Optimization ======
-            // Step 3: Perform banking optimization (now uses clustering results)
+            // Perform banking optimization
             cout << "\n=== Banking Optimization Phase ===" << endl;
             parser.performBankingOptimization();
-
-            // ====== Existing Placer Test (Optional) ======
-            // Get macroMap and components for placer
-            const auto& macroMap = parser.getMacroMap();
-            const auto& components = parser.getDefParser()->getComponents();
-
-            Placer placer(macroMap, components);
-
-            // Print some instance-macro mappings
-            cout << "\n=== Placer Instance-Macro Mappings ===" << endl;
-            placer.printSomeMappings(10);
-
-            // ====== Additional Analysis (Optional) ======
-            // You can add more analysis based on clustering results
-            if (parser.isClusteringPerformed()) {
-                const auto* clustering = parser.getHierarchicalClustering();
-                const auto& clockDomains = clustering->getClockDomains();
-
-                // Example: Find largest clock domain
-                string largestDomain;
-                size_t maxSize = 0;
-                for (const auto& [clock, ffs] : clockDomains) {
-                    if (ffs.size() > maxSize) {
-                        maxSize = ffs.size();
-                        largestDomain = clock;
-                    }
-                }
-
-                cout << "\nLargest clock domain: " << largestDomain
-                    << " with " << maxSize << " flip-flops" << endl;
-            }
         }
 
         // Generate output files
@@ -321,15 +292,6 @@ int main(int argc, char* argv[]) {
 
         cout << "\n=== Execution Summary ===" << endl;
         parser.printSummary();
-
-        // Add clustering summary to final output
-        if (parser.isClusteringPerformed()) {
-            cout << "\nHierarchical Clustering: ✓ Completed" << endl;
-        }
-        else {
-            cout << "\nHierarchical Clustering: ✗ Not performed" << endl;
-        }
-
         cout << "Execution time: " << duration.count() << " ms" << endl;
 
         cout << "\n=== Processing completed successfully! ===" << endl;

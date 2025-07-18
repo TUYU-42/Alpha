@@ -7,7 +7,7 @@
 #include <set>
 #include <memory>
 
-// .lib 檔案中的 pin 資?
+// .lib い pin 戈癟
 struct LibPin {
     std::string name;
     std::string direction;  // input, output, inout
@@ -16,62 +16,94 @@ struct LibPin {
     std::map<std::string, std::string> attributes;
 };
 
-// .lib 檔案中的完整 cell 資?
+// .lib いЧ俱 cell 戈癟
 struct LibCell {
     std::string name;
+    std::string libraryName;  // 穝糤┮妮 library 嘿
     double area = 0.0;
     double cellLeakagePower = 0.0;
-    std::string singleBitDegenerate;  // ??關鍵屬性！
+    std::string singleBitDegenerate;  // 虫じ癶て戈癟
     std::map<std::string, LibPin> pins;
     std::map<std::string, std::string> attributes;
 
-    // FF 相關屬性
+    // FF 闽戈癟
     std::string ffType;
     int bitWidth = 1;
     bool isScannable = false;
+    bool hasFF = false;  // 穝糤夹癘琌 ff() block
+};
+
+// Library 戈癟
+struct LibraryInfo {
+    std::string name;
+    std::string filename;
+    std::set<std::string> cells;
 };
 
 class LibParser {
 private:
     std::map<std::string, LibCell> cellLibrary_;
     std::set<std::string> parsedCells_;
+    std::map<std::string, LibraryInfo> libraries_;  // 穝糤library 戈癟
     bool isLoaded_ = false;
 
     // Helper methods
-    bool parseCell(std::ifstream& file, const std::string& cellName, LibCell& cell);
+    bool parseCell(std::ifstream& file, const std::string& cellName, LibCell& cell, const std::string& libraryName);
+    bool parseCellForFF(std::ifstream& file, const std::string& cellName, LibCell& cell, const std::string& libraryName);
     bool parsePin(std::ifstream& file, const std::string& pinName, LibPin& pin);
+    bool parseFF(std::ifstream& file, LibCell& cell);
     std::string extractQuotedString(const std::string& line);
     double extractNumericValue(const std::string& line);
     void skipToEndOfBlock(std::ifstream& file, int depth = 1);
+    std::string extractLibraryName(const std::string& line);
+    // Parse a cell specifically looking for FF characteristics
+
+
+
+
 
 public:
     LibParser() = default;
     ~LibParser() = default;
 
-    // ??專用：使用元件列表解析
+    // 穝璶秆猂ざ秆猂┮Τ FF cells
+    bool parseAllLibraries(const std::vector<std::string>& libFiles);
+
+    // 眔┮Τ FF cell names (Τ single_bit_degenerate ┪ ff() )
+    std::set<std::string> getFFCellList() const;
+
+    // 膙辽ノㄏノ﹍秆猂
     bool parseWithCellList(const std::vector<std::string>& libFiles,
         const std::vector<std::string>& initialCellList,
         std::set<std::string>& finalCellList);
 
-    // 一般解析（測?用）
+    // 秆猂
     bool parseFile(const std::string& filename);
     bool parseFiles(const std::vector<std::string>& filenames);
 
-    // 資料存取
+    // 戈
     const LibCell* getCell(const std::string& cellName) const;
     const std::map<std::string, LibCell>& getAllCells() const { return cellLibrary_; }
     bool hasCell(const std::string& cellName) const;
 
-    // 查?方法
+    // 琩高よ猭
     std::vector<std::string> getFlipFlopCells() const;
     std::vector<std::string> getMultiBitCells() const;
     std::string getSingleBitDegenerate(const std::string& cellName) const;
+    const std::map<std::string, LibraryInfo>& getLibraries() const { return libraries_; }
 
-    // 工具方法
+    // ㄣよ猭
     void clear();
     void printSummary() const;
     void printCellDetails(const std::string& cellName) const;
+    void printFFCellList() const;
     bool isLoaded() const { return isLoaded_; }
+    // New method for parsing all libraries to find FF cells
+
+
+
+
+
 };
 
-#endif // LIB_PARSER_H#pragma once
+#endif // LIB_PARSER_H

@@ -52,6 +52,8 @@ private:
     std::string constructFilePath(const std::string& base, const std::string& extension) const;
     void initializeParsers();
 
+    std::map<std::string, std::vector<FlipFlopInfo>> ffGroupsByType_;
+    std::set<std::string> ffCellTypes_;  // All known FF cell types from .lib
 public:
     // Constructor & Destructor
     explicit Parser(const std::string& baseName = "testcase1",
@@ -161,6 +163,15 @@ public:
     bool isClusteringPerformed() const { return clusteringPerformed_; }
     void printClusteringResults() const;
     void exportClusteringResults(const std::string& filename) const;
+    bool parseAllLibraries(const std::vector<std::string>& libFiles);
+    void identifyFFInstances();
+    void groupFFInstancesByType();
+    const std::map<std::string, std::vector<FlipFlopInfo>>& getFFGroupsByType() const {
+        return ffGroupsByType_;
+    }
+    bool isFFCellType(const std::string& cellType) const {
+        return ffCellTypes_.find(cellType) != ffCellTypes_.end();
+    }
 
 private:
     // Error tracking
@@ -173,6 +184,8 @@ private:
 
     void addError(const std::string& error) const;
     void addWarning(const std::string& warning) const;
+
+
 };
 
 // Utility functions
