@@ -1,10 +1,13 @@
 #pragma once
-#include<iostream>
+#include "DataStructures.h"
+#include <algorithm>
+#include <iostream>
 #include <vector>
 #include <string>
 #include <map>
 #include <utility>
 #include <limits>
+#include <unordered_map>
 
 // Forward declarations to avoid heavy includes
 struct FlipFlopInfo;
@@ -89,6 +92,7 @@ public:
     void setDensityThreshold(double thr) { densityThreshold_ = thr; }
     void setDistanceThreshold(double thr) { distanceThreshold_ = thr; }
     void setUseGaussianKernel(bool b) { useGaussianKernel_ = b; }
+    int estimateBestClusterCount() const;
 
     // 自動參數估計（可在外部手動呼叫）
     void autoTuneParameters();
@@ -121,6 +125,10 @@ public:
     // Banking 候選（由分群結果推）
     std::vector<BankingCandidate> findBankingCandidatesInClusters() const;
 
+    //read information
+    void setMacroMap(const std::unordered_map<std::string, LefMacroInfo>* macroMap) {
+        macroMap_ = macroMap;
+    }
     void clear();
 
 private:
@@ -129,6 +137,7 @@ private:
     std::vector<std::vector<double>> distMat_;
     std::vector<DPCCluster> clusters_;
     DPCStatistics statistics_;
+    const std::unordered_map<std::string, LefMacroInfo>* macroMap_ = nullptr;
 
     // 參數
     double cutoffDistance_ = -1;
@@ -139,6 +148,9 @@ private:
     // --- 私有流程 ---
     void loadPointsFromFF(const std::vector<FlipFlopInfo>&); // 座標轉換
     void buildDistanceMatrix();
+
+    static double boxManhattanDistance(const DPCPoint& a, const DPCPoint& b);
+
     void computeRho();
     void computeDelta();
     std::vector<int> selectCenters(); // uses density/delta thresholds

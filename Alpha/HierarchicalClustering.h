@@ -53,6 +53,7 @@ public:
         return statistics_;
     }
 
+
     // Analysis functions
     void printClusteringSummary() const;
     void printDetailedReport() const;

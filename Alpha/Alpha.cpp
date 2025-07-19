@@ -1,6 +1,7 @@
 ﻿#include "Parser.h"
 #include "DataStructures.h"
 #include "place.h"
+#include "dpc.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -273,6 +274,20 @@ int main(int argc, char* argv[]) {
             // Perform clustering
             cout << "\n=== Hierarchical Clustering Phase ===" << endl;
             parser.performHierarchicalClustering();
+
+            //*dpc test*
+            const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
+            std::map<std::string, FlipFlopInfo> ffLookup;
+            const auto& clockDomains = clustering->getClockDomains();
+            for (const auto& [clk, ffs] : clockDomains) {
+                for (const auto& ff : ffs) {
+                    ffLookup[ff.instName] = ff;
+                }
+            }
+            DensityPeakClustering dpc;
+            dpc.setMacroMap(&parser.getMacroMap());
+            const auto& clusteredDesign = clustering->getClusteredDesign();
+            auto result = dpc.clusterByScanChain(clusteredDesign, ffLookup);
 
             // Perform banking optimization
             cout << "\n=== Banking Optimization Phase ===" << endl;
