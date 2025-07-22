@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Alpha/snps25hopt_base_ff0p88v25c.lib
+/Alpha/snps25lopt_base_ff0p88v25c.lib
+/Alpha/snps25ropt_base_ff0p88v25c.lib
+/Alpha/snps25slopt_base_ff0p88v25c.lib
