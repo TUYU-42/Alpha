@@ -1,4 +1,5 @@
 ﻿#include "HierarchicalClustering.h"
+#include "ParserDEF.h"
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -7,7 +8,7 @@
 #include <iomanip>
 
 // Constructor
-HierarchicalClustering::HierarchicalClustering() {
+HierarchicalClustering::HierarchicalClustering() : defParser_(nullptr), useDefScanChains_(false) {
     // Initialize statistics
     statistics_ = ClusteringStatistics();
 }
@@ -28,6 +29,17 @@ void HierarchicalClustering::performClustering(const std::vector<FlipFlopInfo>& 
     // Clear previous results
     clockDomains_.clear();
     clusteredDesign_.clear();
+    useDefScanChains_ = false;
+
+    // 檢查是否有 DEF scan chain 資訊
+    if (defParser_ && defParser_->isLoaded() && defParser_->getScanChainCount() > 0) {
+        useDefScanChains_ = true;
+        std::cout << "✓ Found " << defParser_->getScanChainCount()
+            << " scan chains in DEF, will use them for clustering" << std::endl;
+    }
+    else {
+        std::cout << "✓ No scan chains found in DEF, will use connectivity-based clustering" << std::endl;
+    }
 
     // Step 1: Build clock domains
     buildClockDomains();
@@ -75,7 +87,19 @@ void HierarchicalClustering::buildScanChainsForDomain(const std::string& clockNe
     const std::vector<FlipFlopInfo>& domainFFs) {
     std::cout << "\n--- Building scan chains for clock domain: " << clockNet << " ---" << std::endl;
 
-    std::vector<ScanChain> chains = reconstructScanChains(domainFFs);
+    std::vector<ScanChainClustered> chains;
+
+    if (useDefScanChains_) {
+        // 使用 DEF 中的 scan chain 資訊
+        chains = reconstructScanChainsFromDef(domainFFs);
+        std::cout << "  Using scan chains from DEF file" << std::endl;
+    }
+    else {
+        // 使用連接性分析重建 scan chain
+        chains = reconstructScanChainsFromConnectivity(domainFFs);
+        std::cout << "  Reconstructing scan chains from connectivity" << std::endl;
+    }
+
     clusteredDesign_[clockNet] = chains;
 
     // Update statistics
@@ -111,11 +135,62 @@ void HierarchicalClustering::buildScanChainsForDomain(const std::string& clockNe
     statistics_.chainLengthsPerDomain[clockNet] = chainLengths;
 }
 
-// Reconstruct scan chains from a set of flip-flops
-std::vector<ScanChain> HierarchicalClustering::reconstructScanChains(
+// 使用 DEF 的 scan chain 資訊重建 scan chains
+std::vector<ScanChainClustered> HierarchicalClustering::reconstructScanChainsFromDef(
+    const std::vector<FlipFlopInfo>& domainFFs) {
+
+    std::vector<ScanChainClustered> chains;
+
+    if (!defParser_) return chains;
+
+    // 建立 instance name 到 FF 的映射
+    std::map<std::string, const FlipFlopInfo*> instanceToFF;
+    for (const auto& ff : domainFFs) {
+        instanceToFF[ff.instName] = &ff;
+    }
+
+    // 標記已處理的 FF
+    std::set<std::string> processed;
+
+    // 處理 DEF 中的每條 scan chain
+    const auto& defScanChains = defParser_->getScanChains();
+
+    for (const auto& defChain : defScanChains) {
+        ScanChainClustered chain;
+        chain.chainId = defChain.name;
+
+        // 只處理屬於這個 clock domain 的 FF
+        for (const auto& ffName : defChain.ffNames) {
+            auto it = instanceToFF.find(ffName);
+            if (it != instanceToFF.end()) {
+                chain.addNode(ffName, it->second->cellType);
+                processed.insert(ffName);
+            }
+        }
+
+        // 如果這條鏈有屬於此 domain 的 FF，則加入結果
+        if (!chain.isEmpty()) {
+            chains.push_back(chain);
+        }
+    }
+
+    // 處理不在任何 DEF scan chain 中的 FF（isolated）
+    for (const auto& ff : domainFFs) {
+        if (processed.find(ff.instName) == processed.end()) {
+            ScanChainClustered isolatedChain;
+            isolatedChain.addNode(ff.instName, ff.cellType);
+            chains.push_back(isolatedChain);
+        }
+    }
+
+    return chains;
+}
+
+// 從連接性重建 scan chains（原始方法）
+std::vector<ScanChainClustered> HierarchicalClustering::reconstructScanChainsFromConnectivity(
     const std::vector<FlipFlopInfo>& ffs) {
 
-    std::vector<ScanChain> chains;
+    std::vector<ScanChainClustered> chains;
 
     // Build connection maps
     std::map<std::string, std::string> soToInstance;  // SO net -> instance name
@@ -181,7 +256,7 @@ std::vector<ScanChain> HierarchicalClustering::reconstructScanChains(
     for (const std::string& start : chainStarts) {
         if (visited.find(start) != visited.end()) continue;
 
-        ScanChain chain;
+        ScanChainClustered chain;
         std::string current = start;
 
         // Follow the chain
@@ -211,7 +286,7 @@ std::vector<ScanChain> HierarchicalClustering::reconstructScanChains(
     // Handle isolated FFs (not in any chain)
     for (const auto& ff : ffs) {
         if (visited.find(ff.instName) == visited.end()) {
-            ScanChain isolatedChain;
+            ScanChainClustered isolatedChain;
             isolatedChain.addNode(ff.instName, ff.cellType);
             chains.push_back(isolatedChain);
             visited.insert(ff.instName);
@@ -219,6 +294,30 @@ std::vector<ScanChain> HierarchicalClustering::reconstructScanChains(
     }
 
     return chains;
+}
+
+// 將 DEF scan chain 轉換為內部格式
+bool HierarchicalClustering::convertDefScanChainToInternal(const ScanChain& defChain,
+    const std::vector<FlipFlopInfo>& domainFFs,
+    ScanChainClustered& result) {
+
+    // 建立 instance name 到 FF 的映射
+    std::map<std::string, const FlipFlopInfo*> instanceToFF;
+    for (const auto& ff : domainFFs) {
+        instanceToFF[ff.instName] = &ff;
+    }
+
+    result.chainId = defChain.name;
+
+    // 轉換每個 FF
+    for (const auto& ffName : defChain.ffNames) {
+        auto it = instanceToFF.find(ffName);
+        if (it != instanceToFF.end()) {
+            result.addNode(ffName, it->second->cellType);
+        }
+    }
+
+    return !result.isEmpty();
 }
 
 // Calculate clustering statistics
@@ -233,6 +332,13 @@ void HierarchicalClustering::printClusteringSummary() const {
     std::cout << "Total flip-flops: " << statistics_.totalFlipFlops << std::endl;
     std::cout << "Total clock domains: " << statistics_.totalClockDomains << std::endl;
     std::cout << "Total scan chains: " << statistics_.totalScanChains << std::endl;
+
+    if (useDefScanChains_) {
+        std::cout << "Scan chain source: DEF file" << std::endl;
+    }
+    else {
+        std::cout << "Scan chain source: Connectivity analysis" << std::endl;
+    }
 
     std::cout << "\nPer clock domain statistics:" << std::endl;
     for (const auto& [clockNet, ffCount] : statistics_.ffPerClockDomain) {
@@ -263,20 +369,23 @@ void HierarchicalClustering::printDetailedReport() const {
         }
 
         // Show details of longest chains
-        std::vector<const ScanChain*> sortedChains;
+        std::vector<const ScanChainClustered*> sortedChains;
         for (const auto& chain : chains) {
             sortedChains.push_back(&chain);
         }
 
         std::sort(sortedChains.begin(), sortedChains.end(),
-            [](const ScanChain* a, const ScanChain* b) {
+            [](const ScanChainClustered* a, const ScanChainClustered* b) {
                 return a->length() > b->length();
             });
 
         std::cout << "\nLongest chains in this domain:" << std::endl;
         for (size_t i = 0; i < std::min(size_t(3), sortedChains.size()); ++i) {
-            const ScanChain* chain = sortedChains[i];
+            const ScanChainClustered* chain = sortedChains[i];
             std::cout << "  Chain " << i + 1 << " (length " << chain->length() << "):" << std::endl;
+            if (!chain->chainId.empty()) {
+                std::cout << "    ID: " << chain->chainId << std::endl;
+            }
             std::cout << "    Start: " << chain->nodes.front().instanceName
                 << " (" << chain->nodes.front().cellType << ")" << std::endl;
             std::cout << "    End:   " << chain->nodes.back().instanceName
@@ -297,6 +406,7 @@ void HierarchicalClustering::exportToFile(const std::string& filename) const {
     outFile << "# Total FFs: " << statistics_.totalFlipFlops << std::endl;
     outFile << "# Clock Domains: " << statistics_.totalClockDomains << std::endl;
     outFile << "# Total Chains: " << statistics_.totalScanChains << std::endl;
+    outFile << "# Scan Chain Source: " << (useDefScanChains_ ? "DEF" : "Connectivity") << std::endl;
     outFile << std::endl;
 
     for (const auto& [clockNet, chains] : clusteredDesign_) {
@@ -304,7 +414,11 @@ void HierarchicalClustering::exportToFile(const std::string& filename) const {
         outFile << "CHAIN_COUNT " << chains.size() << std::endl;
 
         for (size_t i = 0; i < chains.size(); ++i) {
-            outFile << "CHAIN " << i << " LENGTH " << chains[i].length() << std::endl;
+            outFile << "CHAIN " << i << " LENGTH " << chains[i].length();
+            if (!chains[i].chainId.empty()) {
+                outFile << " ID " << chains[i].chainId;
+            }
+            outFile << std::endl;
             for (const auto& node : chains[i].nodes) {
                 outFile << "  " << node.instanceName << " " << node.cellType << std::endl;
             }
@@ -316,14 +430,55 @@ void HierarchicalClustering::exportToFile(const std::string& filename) const {
     std::cout << "✓ Clustering results exported to " << filename << std::endl;
 }
 
-// Find banking candidates (placeholder for future implementation)
+// Find banking candidates
 std::vector<BankingCandidate> HierarchicalClustering::findBankingCandidates(
     const std::string& clockDomain) const {
 
     std::vector<BankingCandidate> candidates;
 
-    // TODO: Implement banking candidate identification
-    // This would analyze chains and find groups of FFs that can be banked together
+    // 如果指定了 clock domain，只處理該 domain
+    std::vector<std::string> domainsToProcess;
+    if (!clockDomain.empty()) {
+        if (clusteredDesign_.find(clockDomain) != clusteredDesign_.end()) {
+            domainsToProcess.push_back(clockDomain);
+        }
+    }
+    else {
+        // 處理所有 domains
+        for (const auto& [domain, chains] : clusteredDesign_) {
+            domainsToProcess.push_back(domain);
+        }
+    }
+
+    // 對每個 domain 找 banking candidates
+    for (const auto& domain : domainsToProcess) {
+        const auto& chains = clusteredDesign_.at(domain);
+
+        for (const auto& chain : chains) {
+            // 如果 chain 長度 >= 2，可以考慮 banking
+            if (chain.length() >= 2) {
+                // 簡單策略：每 2 個或 4 個連續 FF 作為一個 candidate
+                for (size_t i = 0; i + 1 < chain.nodes.size(); i += 2) {
+                    BankingCandidate candidate;
+                    candidate.flipFlops.push_back(chain.nodes[i].instanceName);
+                    candidate.flipFlops.push_back(chain.nodes[i + 1].instanceName);
+
+                    // 檢查是否可以組成 4-bit
+                    if (i + 3 < chain.nodes.size()) {
+                        candidate.flipFlops.push_back(chain.nodes[i + 2].instanceName);
+                        candidate.flipFlops.push_back(chain.nodes[i + 3].instanceName);
+                        candidate.targetMBFF = "4BIT_FF"; // 假設的目標類型
+                        i += 2; // 跳過已處理的
+                    }
+                    else {
+                        candidate.targetMBFF = "2BIT_FF"; // 假設的目標類型
+                    }
+
+                    candidates.push_back(candidate);
+                }
+            }
+        }
+    }
 
     return candidates;
 }

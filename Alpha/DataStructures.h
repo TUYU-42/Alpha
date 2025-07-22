@@ -1,4 +1,4 @@
-#ifndef DATASTRUCTURES_H
+Ôªø#ifndef DATASTRUCTURES_H
 #define DATASTRUCTURES_H
 
 #include <vector>
@@ -7,9 +7,9 @@
 #include <unordered_map>
 #include <memory>
 
-// === ª˘µAŸY¡œΩY? ===
+// === ¬ª—â¬µA–©Y–ë–ü–ÖY? ===
 
-// ô‡÷ÿÖ¢îµΩY?
+// ‚Ñ¢–∞–¶–®‚Ä¶—û"¬µ–ÖY?
 struct Weights {
     double Alpha = 0.0;
     double Beta = 0.0;
@@ -19,22 +19,22 @@ struct Weights {
     double Area = 0.0;
 };
 
-// Instance-Pin-Net ”≥…‰ΩY?
+// Instance-Pin-Net –£—ñ–ô–¥–ÖY?
 struct InstPinNet {
     std::string inst;   // instance name
-    std::string pin;    // pin name (D / Q / CK / °≠)
+    std::string pin;    // pin name (D / Q / CK / –é¬≠)
     std::string net;    // net name
 };
 
-// ROW ŸY¡œΩY?
+// ROW –©Y–ë–ü–ÖY?
 struct RowInfo {
     std::string name;
     int x, y;
     std::string orientation;
     int count, by, stepX, stepY;
-    // ©µ¶˘•[°G•Œ®”§ÒπÔ•Œ™∫ range
+    // ¬©¬µ¬¶—â“ê[–éG“ê–û–Å–£¬§—Å‚Ññ–ø“ê–û–Ñ—î range
     int xEnd = x + count * stepX;
-    int yEnd = y + by * stepY;  // ≠Y by > 1
+    int yEnd = y + by * stepY;  // ¬≠Y by > 1
     int rowXWidth = 0;
     int rowYWidth = 0;
 };
@@ -43,7 +43,7 @@ struct DieArea {
     int xMin = 0, yMin = 0, xMax = 0, yMax = 0;
 };
 
-// TRACK ŸY¡œΩY?
+// TRACK –©Y–ë–ü–ÖY?
 struct TrackInfo {
     char direction;
     int start;
@@ -52,7 +52,7 @@ struct TrackInfo {
     std::string layer;
 };
 
-// COMPONENT ŸY¡œΩY?
+// COMPONENT –©Y–ë–ü–ÖY?
 struct ComponentInfo {
     std::string name;
     std::string cellType;
@@ -61,7 +61,7 @@ struct ComponentInfo {
     std::string rowName;
 };
 
-// PIN ŸY¡œΩY?
+// PIN –©Y–ë–ü–ÖY?
 struct PinInfo {
     std::string name;
     std::string netName;
@@ -74,7 +74,7 @@ struct PinInfo {
     std::string accessDirection;
 };
 
-// NET ŸY¡œΩY?
+// NET –©Y–ë–ü–ÖY?
 struct NetPin {
     std::string instance;
     std::string pin;
@@ -86,26 +86,33 @@ struct NetInfo {
     std::vector<NetPin> connections;
 };
 
-// Flip-Flop œ‡ÍPΩY?
+// Flip-Flop –ü–∞–∫P–ÖY?
 struct FlipFlopInfo {
     std::string instName;
     std::string cellType;
     int x, y;
     std::string orient;
     std::string orientation;
-    std::string clockNet;        // ïr√}æW¬∑
+    std::string clockNet;        
     std::vector<std::string> dataPins; // D pins
     std::vector<std::string> outputPins; // Q pins  
-    std::string scanIn = "";     // SI pin net (»Áπ˚”–)
-    std::string scanOut = "";    // SO pin net (»Áπ˚”–)
+    std::string scanIn = "";     // SI pin net (–ò–∑‚Ññ—ã–£–†)
+    std::string scanOut = "";    // SO pin net (–ò–∑‚Ññ—ã–£–†)
     std::string dataIn;         // D pin connection
     std::string dataOut;
     std::string scanEnable;
-    bool isMultiBit = false; //  «∑ÒûÈ multibit FF
-    int bitWidth = 1;       // bit ?∂»
+    bool isMultiBit = false; // –ö–ó¬∑—Å—õ–π multibit FF
+    int bitWidth = 1;       // bit ?¬∂–ò
 
     FlipFlopInfo() : x(0), y(0) {}
 };
+
+// Scan chain structure for DEF parsing
+struct ScanChain {
+    std::string name;
+    std::vector<std::string> ffNames; // FF instance names in scan chain order
+};
+
 struct ScanChainNode {
     std::string instanceName;   // FF instance name
     std::string cellType;       // FF cell type
@@ -115,9 +122,11 @@ struct ScanChainNode {
         : instanceName(inst), cellType(type) {
     }
 };
-struct ScanChain {
-    std::vector<ScanChainNode> nodes;  // ®Ãß«¶s©Ò√Ï§§™∫©“¶≥ FF
-    std::string chainId;                // √Ï™∫√—ßO≤≈°]•iøÔ°^
+
+// This is the ScanChain used in HierarchicalClustering
+struct ScanChainClustered {
+    std::vector<ScanChainNode> nodes;  
+    std::string chainId;                
 
     // Helper methods
     size_t length() const { return nodes.size(); }
@@ -129,8 +138,7 @@ struct ScanChain {
     }
 };
 
-
-// Banking/Debanking ∫Úﬂx»∫ΩM
+// Banking/Debanking —î—Ç–Øx–ò—î–ÖM
 struct FFCluster {
     std::vector<std::string> ffInstances; // FF instance names
     std::string clockNet;
@@ -138,10 +146,10 @@ struct FFCluster {
     double estimatedPower;
     double estimatedArea;
     double timingImpact;
-    bool canBank = true;    //  «∑Òø…“‘ﬂM–– banking
+    bool canBank = true;    // –ö–ó¬∑—Å—ó–ô–¢–§–ØM–†–† banking
 };
 
-// ≥…±æ?À„ΩY?
+// —ñ–ô¬±—ï?–õ–≥–ÖY?
 struct CostMetrics {
     double tns = 0.0;       // Total Negative Slack
     double totalPower = 0.0;
@@ -149,7 +157,7 @@ struct CostMetrics {
     double totalCost = 0.0;
 };
 
-// DEF ôn∞∏ŸY¡œΩy’˚
+// DEF ‚Ñ¢n¬∞—ë–©Y–ë–ü–Öy–•—ã
 struct DefData {
     std::vector<RowInfo> rows;
     std::vector<TrackInfo> tracks;
@@ -157,20 +165,21 @@ struct DefData {
     std::vector<PinInfo> pins;
     std::vector<NetInfo> nets;
     std::vector<InstPinNet> instPinNets;
-    std::vector<FlipFlopInfo> flipFlops;    // FF å£”√ŸY¡œ
+    std::vector<FlipFlopInfo> flipFlops;    // FF –ä–à–£–ì–©Y–ë–ü
+    std::vector<ScanChain> scanChains;      // Scan chains from DEF
     std::map<std::string, std::vector<std::string>> clockDomains; // clock -> FF instances
-    int units = 1000;      // πw≥]1000°]microns°^
-    DieArea dieArea;       // ¥π§˘∞œ∞Ï
+    int units = 1000;      // ‚Ññw—ñ]1000–é]microns–é^
+    DieArea dieArea;       // “ë‚Ññ¬§—â¬∞–ü¬∞–º
 };
 
-// SDC ÷∏¡ÓΩY?
+// SDC –¶—ë–ë–æ–ÖY?
 struct SdcCommand {
     std::string command_type;
     std::map<std::string, std::string> parameters;
     std::string raw_line;
 };
 
-// Technology File ΩY?
+// Technology File –ÖY?
 struct Technology {
     std::map<std::string, std::string> parameters;
 };
@@ -179,6 +188,7 @@ struct Color {
     int id;
     std::map<std::string, std::string> parameters;
 };
+
 struct ClusteringStatistics {
     int totalFlipFlops;
     int totalClockDomains;
@@ -238,7 +248,7 @@ struct TechData {
     std::vector<LayerDataType> layerDataTypes;
 };
 
-// LEF œ‡ÍPŸY¡œΩY?
+// LEF –ü–∞–∫P–©Y–ë–ü–ÖY?
 struct LefSiteInfo {
     std::string name;
     std::string siteClass;

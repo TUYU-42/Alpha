@@ -544,6 +544,7 @@ string LibParser::getSingleBitDegenerate(const string& cellName) const {
     return "";
 }
 
+
 vector<string> LibParser::getFlipFlopCells() const {
     vector<string> ffCells;
 
@@ -563,7 +564,258 @@ vector<string> LibParser::getFlipFlopCells() const {
 
     return ffCells;
 }
+// 在 LibParser.cpp 中添加以下兩個方法的實現
 
+std::string LibParser::getmultibitff2(const std::string& cellName) const {
+    // 首先檢查該 cell 是否存在
+    auto it = cellLibrary_.find(cellName);
+    if (it == cellLibrary_.end()) {
+        return "";
+    }
+
+    const LibCell& cell = it->second;
+
+    // 方法1: 如果當前 cell 是單位元 FF，查找對應的 2-bit 多位元版本
+    if (cell.singleBitDegenerate.empty()) {
+        // 嘗試根據命名規則找到 2-bit 版本
+        std::string multibitName = findMultibitVariant(cellName, 2);
+        if (!multibitName.empty() && hasCell(multibitName)) {
+            return multibitName;
+        }
+    }
+
+    // 方法2: 如果當前 cell 是多位元 FF，查找其對應的 2-bit 版本
+    else {
+        // 檢查當前 cell 是否本身就是 2-bit FF
+        if (isMultibitFF(cellName, 2)) {
+            return cellName;
+        }
+
+        // 如果是其他位數的多位元 FF，查找對應的 2-bit 版本
+        std::string baseType = extractBaseFFType(cellName);
+        if (!baseType.empty()) {
+            std::string multibit2Name = generateMultibitName(baseType, 2);
+            if (!multibit2Name.empty() && hasCell(multibit2Name)) {
+                return multibit2Name;
+            }
+        }
+    }
+
+    // 方法3: 遍歷所有 cell 查找合適的 2-bit 多位元 FF
+    for (const auto& pair : cellLibrary_) {
+        const LibCell& candidateCell = pair.second;
+
+        // 檢查是否為 2-bit FF 且與輸入 cell 兼容
+        if (isMultibitFF(candidateCell.name, 2) &&
+            isCompatibleFF(cellName, candidateCell.name)) {
+            return candidateCell.name;
+        }
+
+        // 檢查 single_bit_degenerate 關係
+        if (!candidateCell.singleBitDegenerate.empty() &&
+            candidateCell.singleBitDegenerate == cellName &&
+            isMultibitFF(candidateCell.name, 2)) {
+            return candidateCell.name;
+        }
+    }
+
+    return "";
+}
+
+std::string LibParser::getmultibitff4(const std::string& cellName) const {
+    // 首先檢查該 cell 是否存在
+    auto it = cellLibrary_.find(cellName);
+    if (it == cellLibrary_.end()) {
+        return "";
+    }
+
+    const LibCell& cell = it->second;
+
+    // 方法1: 如果當前 cell 是單位元 FF，查找對應的 4-bit 多位元版本
+    if (cell.singleBitDegenerate.empty()) {
+        // 嘗試根據命名規則找到 4-bit 版本
+        std::string multibitName = findMultibitVariant(cellName, 4);
+        if (!multibitName.empty() && hasCell(multibitName)) {
+            return multibitName;
+        }
+    }
+
+    // 方法2: 如果當前 cell 是多位元 FF，查找其對應的 4-bit 版本
+    else {
+        // 檢查當前 cell 是否本身就是 4-bit FF
+        if (isMultibitFF(cellName, 4)) {
+            return cellName;
+        }
+
+        // 如果是其他位數的多位元 FF，查找對應的 4-bit 版本
+        std::string baseType = extractBaseFFType(cellName);
+        if (!baseType.empty()) {
+            std::string multibit4Name = generateMultibitName(baseType, 4);
+            if (!multibit4Name.empty() && hasCell(multibit4Name)) {
+                return multibit4Name;
+            }
+        }
+    }
+
+    // 方法3: 遍歷所有 cell 查找合適的 4-bit 多位元 FF
+    for (const auto& pair : cellLibrary_) {
+        const LibCell& candidateCell = pair.second;
+
+        // 檢查是否為 4-bit FF 且與輸入 cell 兼容
+        if (isMultibitFF(candidateCell.name, 4) &&
+            isCompatibleFF(cellName, candidateCell.name)) {
+            return candidateCell.name;
+        }
+
+        // 檢查 single_bit_degenerate 關係
+        if (!candidateCell.singleBitDegenerate.empty() &&
+            candidateCell.singleBitDegenerate == cellName &&
+            isMultibitFF(candidateCell.name, 4)) {
+            return candidateCell.name;
+        }
+    }
+
+    return "";
+}
+
+// 輔助方法實現
+std::string LibParser::findMultibitVariant(const std::string& cellName, int bitWidth) const {
+    // 根據命名規則生成多位元版本名稱
+    // 例如：SNPSHOPT25_FSDN_V2_1 -> SNPSHOPT25_FSDN2_V2_1 (2-bit)
+    //      SNPSHOPT25_FSDN_V2_1 -> SNPSHOPT25_FSDN4_V2_1 (4-bit)
+
+    std::string result = cellName;
+
+    // 查找可能的位置插入位數標識
+    size_t pos = result.find("_V2");
+    if (pos != std::string::npos) {
+        // 在 _V2 前插入位數
+        result.insert(pos, std::to_string(bitWidth));
+        return result;
+    }
+
+    // 另一種命名模式：在最後添加位數
+    pos = result.find_last_of("_");
+    if (pos != std::string::npos) {
+        std::string base = result.substr(0, pos);
+        std::string suffix = result.substr(pos);
+        result = base + std::to_string(bitWidth) + suffix;
+        return result;
+    }
+
+    // 直接在名稱後添加位數標識
+    result += std::to_string(bitWidth);
+    return result;
+}
+
+bool LibParser::isMultibitFF(const std::string& cellName, int bitWidth) const {
+    // 檢查 cell 名稱是否表示指定位數的多位元 FF
+    std::string bitStr = std::to_string(bitWidth);
+
+    // 檢查各種可能的命名模式
+    if (cellName.find(bitStr + "_") != std::string::npos ||
+        cellName.find("_" + bitStr) != std::string::npos ||
+        cellName.find(bitStr + "BIT") != std::string::npos ||
+        cellName.find("MBFF" + bitStr) != std::string::npos) {
+        return true;
+    }
+
+    // 檢查是否為多位元 FF（通過 pin 數量判斷）
+    auto it = cellLibrary_.find(cellName);
+    if (it != cellLibrary_.end()) {
+        const LibCell& cell = it->second;
+
+        // 計算 D 和 Q pin 的數量
+        int dPinCount = 0, qPinCount = 0;
+        for (const auto& pinPair : cell.pins) {
+            const std::string& pinName = pinPair.first;
+            if (pinName.find("D") == 0 && pinName.length() > 1) dPinCount++;
+            if (pinName.find("Q") == 0 && pinName.length() > 1) qPinCount++;
+        }
+
+        return (dPinCount == bitWidth && qPinCount == bitWidth);
+    }
+
+    return false;
+}
+
+bool LibParser::isCompatibleFF(const std::string& cell1, const std::string& cell2) const {
+    // 檢查兩個 FF 是否兼容（同一個 library family）
+
+    // 提取 library family 前綴
+    auto extractLibFamily = [](const std::string& name) -> std::string {
+        size_t pos = name.find("_");
+        if (pos != std::string::npos) {
+            return name.substr(0, pos);
+        }
+        return name;
+        };
+
+    std::string family1 = extractLibFamily(cell1);
+    std::string family2 = extractLibFamily(cell2);
+
+    // 同一個 family 視為兼容
+    if (family1 == family2) {
+        return true;
+    }
+
+    // 檢查 single_bit_degenerate 關係
+    auto it1 = cellLibrary_.find(cell1);
+    auto it2 = cellLibrary_.find(cell2);
+
+    if (it1 != cellLibrary_.end() && it2 != cellLibrary_.end()) {
+        const LibCell& libCell1 = it1->second;
+        const LibCell& libCell2 = it2->second;
+
+        // 檢查雙向兼容性
+        if ((!libCell1.singleBitDegenerate.empty() && libCell1.singleBitDegenerate == cell2) ||
+            (!libCell2.singleBitDegenerate.empty() && libCell2.singleBitDegenerate == cell1)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+std::string LibParser::extractBaseFFType(const std::string& cellName) const {
+    // 從多位元 FF 名稱中提取基礎類型
+    // 例如：SNPSHOPT25_FSDN4_V2_1 -> SNPSHOPT25_FSDN_V2_1
+
+    std::string result = cellName;
+
+    // 移除數字標識
+    std::regex numberRegex(R"(\d+)");
+    result = std::regex_replace(result, numberRegex, "");
+
+    // 清理多餘的下劃線
+    std::regex underscoreRegex(R"(__+)");
+    result = std::regex_replace(result, underscoreRegex, "_");
+
+    return result;
+}
+
+std::string LibParser::generateMultibitName(const std::string& baseType, int bitWidth) const {
+    // 從基礎類型生成指定位數的多位元 FF 名稱
+    std::string result = baseType;
+    std::string bitStr = std::to_string(bitWidth);
+
+    // 在適當位置插入位數標識
+    size_t pos = result.find("_V2");
+    if (pos != std::string::npos) {
+        result.insert(pos, bitStr);
+        return result;
+    }
+
+    // 在最後添加位數標識
+    pos = result.find_last_of("_");
+    if (pos != std::string::npos) {
+        result.insert(pos, bitStr);
+        return result;
+    }
+
+    result += bitStr;
+    return result;
+}
 vector<string> LibParser::getMultiBitCells() const {
     vector<string> mbCells;
 

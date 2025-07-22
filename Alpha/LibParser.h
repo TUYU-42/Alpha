@@ -7,7 +7,7 @@
 #include <set>
 #include <memory>
 
-// .lib い pin 戈癟
+// .lib 中的 pin 資訊
 struct LibPin {
     std::string name;
     std::string direction;  // input, output, inout
@@ -16,24 +16,25 @@ struct LibPin {
     std::map<std::string, std::string> attributes;
 };
 
-// .lib いЧ俱 cell 戈癟
 struct LibCell {
     std::string name;
-    std::string libraryName;  // 穝糤┮妮 library 嘿
+    std::string libraryName;
     double area = 0.0;
     double cellLeakagePower = 0.0;
-    std::string singleBitDegenerate;  // 虫じ癶て戈癟
+    std::string singleBitDegenerate;
+
+
     std::map<std::string, LibPin> pins;
     std::map<std::string, std::string> attributes;
 
-    // FF 闽戈癟
+    // FF 相關資訊
     std::string ffType;
     int bitWidth = 1;
     bool isScannable = false;
-    bool hasFF = false;  // 穝糤夹癘琌 ff() block
+    bool hasFF = false;
 };
 
-// Library 戈癟
+// Library 資訊
 struct LibraryInfo {
     std::string name;
     std::string filename;
@@ -44,7 +45,7 @@ class LibParser {
 private:
     std::map<std::string, LibCell> cellLibrary_;
     std::set<std::string> parsedCells_;
-    std::map<std::string, LibraryInfo> libraries_;  // 穝糤library 戈癟
+    std::map<std::string, LibraryInfo> libraries_;  // 新增：library 資訊
     bool isLoaded_ = false;
 
     // Helper methods
@@ -56,54 +57,58 @@ private:
     double extractNumericValue(const std::string& line);
     void skipToEndOfBlock(std::ifstream& file, int depth = 1);
     std::string extractLibraryName(const std::string& line);
+
+    // Multi-bit FF helper methods
+    std::string findMultibitVariant(const std::string& cellName, int bitWidth) const;
+    bool isMultibitFF(const std::string& cellName, int bitWidth) const;
+    bool isCompatibleFF(const std::string& cell1, const std::string& cell2) const;
+    std::string extractBaseFFType(const std::string& cellName) const;
+    std::string generateMultibitName(const std::string& baseType, int bitWidth) const;
+
     // Parse a cell specifically looking for FF characteristics
-
-
-
-
 
 public:
     LibParser() = default;
     ~LibParser() = default;
 
-    // 穝璶秆猂ざ秆猂┮Τ FF cells
+    // 新的主要函數介面：專門解析所有 FF cells
     bool parseAllLibraries(const std::vector<std::string>& libFiles);
 
-    // 眔┮Τ FF cell names (Τ single_bit_degenerate ┪ ff() )
+    // 取得所有 FF cell names (包含有 single_bit_degenerate 或 ff() 的)
     std::set<std::string> getFFCellList() const;
 
-    // 膙辽ノㄏノ﹍秆猂
+    // 競賽用：根據初始列表解析
     bool parseWithCellList(const std::vector<std::string>& libFiles,
         const std::vector<std::string>& initialCellList,
         std::set<std::string>& finalCellList);
 
-    // 秆猂
+    // 一般解析
     bool parseFile(const std::string& filename);
     bool parseFiles(const std::vector<std::string>& filenames);
 
-    // 戈
+    // 資料存取
     const LibCell* getCell(const std::string& cellName) const;
     const std::map<std::string, LibCell>& getAllCells() const { return cellLibrary_; }
     bool hasCell(const std::string& cellName) const;
 
-    // 琩高よ猭
+    // 查詢方法
     std::vector<std::string> getFlipFlopCells() const;
     std::vector<std::string> getMultiBitCells() const;
     std::string getSingleBitDegenerate(const std::string& cellName) const;
+
+    // 新增：多位元 FF 查詢方法
+    std::string getmultibitff2(const std::string& cellName) const;
+    std::string getmultibitff4(const std::string& cellName) const;
+
+    // LibParser.h
     const std::map<std::string, LibraryInfo>& getLibraries() const { return libraries_; }
 
-    // ㄣよ猭
     void clear();
     void printSummary() const;
     void printCellDetails(const std::string& cellName) const;
     void printFFCellList() const;
     bool isLoaded() const { return isLoaded_; }
     // New method for parsing all libraries to find FF cells
-
-
-
-
-
 };
 
 #endif // LIB_PARSER_H

@@ -12,9 +12,7 @@ using namespace std;
 DefParser::DefParser() : isLoaded_(false) {
     // Initialize regex patterns
     dieAreaRegex_ = std::regex(R"(^\s*DIEAREA\s*((\(\s*\d+\s+\d+\s*\)\s*)+);)");
-
     unitsRegex_ = std::regex(R"(^\s*UNITS\s+DISTANCE\s+MICRONS\s+(\d+)\s*;)");
-
     rowRegex_ = regex(R"(^\s*ROW\s+(\w+)\s+\w+\s+(\d+)\s+(\d+)\s+([A-Z]{1,2})\s+DO\s+(\d+)\s+BY\s+(\d+)\s+STEP\s+(\d+)\s+(\d+)\s*;)");
     trackRegex_ = regex(R"(^\s*TRACKS\s+([XY])\s+(\d+)\s+DO\s+(\d+)\s+STEP\s+(\d+)\s+LAYER\s+(\w+)\s*;)");
     componentRegex_ = regex(R"(^\s*-\s+(\S+)\s+(\S+)\s+\+\s+PLACED\s+\(\s*(\d+)\s+(\d+)\s*\)\s+(\S+)\s*;)");
@@ -24,7 +22,11 @@ DefParser::DefParser() : isLoaded_(false) {
     netStartRegex_ = regex(R"(^\s*-\s+(\S+))");
     netPinRegex_ = regex(R"(^\s*\(\s*(\S+)\s+(\S+)\s*\))");
     netUseRegex_ = regex(R"(^\s*\+\s+USE\s+(\S+)\s*;)");
+
+    // Add new regex patterns for scan chains
+    scanChainLineRegex_ = regex(R"(^\s*-\s*(\S+)\s+(.*);)");
 }
+
 bool DefParser::parseFile(const string& filename) {
     ifstream in(filename);
     if (!in) {
@@ -37,18 +39,59 @@ bool DefParser::parseFile(const string& filename) {
         string line;
         int lineCount = 0;
         int componentCount = 0;
+        bool inScanChains = false;
+        bool inExtension = false;
+        bool inScanDef = false;
 
         cout << "Reading DEF file line by line..." << endl;
 
         while (getline(in, line)) {
             lineCount++;
             if (line.empty() || line[0] == '#') continue;
+
+            // Check for SCANCHAINS section
+            if (line.find("SCANCHAINS") != string::npos && line.find("END SCANCHAINS") == string::npos) {
+                inScanChains = true;
+                cout << "  Found SCANCHAINS section at line " << lineCount << endl;
+                continue;
+            }
+            if (inScanChains && line.find("END SCANCHAINS") != string::npos) {
+                inScanChains = false;
+                cout << "  End of SCANCHAINS section at line " << lineCount << endl;
+                continue;
+            }
+
+            // Check for EXTENSION SCANDEF section
+            if (line.find("EXTENSION") != string::npos && line.find("SCANDEF") != string::npos) {
+                inExtension = true;
+                inScanDef = true;
+                cout << "  Found EXTENSION SCANDEF section at line " << lineCount << endl;
+                continue;
+            }
+            if (inScanDef && line.find("END SCANDEF") != string::npos) {
+                inScanDef = false;
+                cout << "  End of SCANDEF section at line " << lineCount << endl;
+                continue;
+            }
+            if (inExtension && line.find("END EXTENSION") != string::npos) {
+                inExtension = false;
+                cout << "  End of EXTENSION section at line " << lineCount << endl;
+                continue;
+            }
+
+            // Parse scan chain data
+            if (inScanChains || inScanDef) {
+                parseScanChainLine(line);
+                continue;
+            }
+
             smatch m;
             if (regex_search(line, m, unitsRegex_)) {
                 defData_.units = stoi(m[1]);
                 continue;
             }
-            // Parse DIEAREA (支援2點或4點)
+
+            // Parse DIEAREA
             if (std::regex_search(line, m, dieAreaRegex_)) {
                 std::vector<int> coords;
                 static const std::regex coordPattern(R"(\(\s*(\d+)\s+(\d+)\s*\))");
@@ -66,8 +109,6 @@ bool DefParser::parseFile(const string& filename) {
                 defData_.dieArea = { xMin, yMin, xMax, yMax };
                 continue;
             }
-
-
 
             // Parse different sections
             if (parseRowInfo(line)) continue;
@@ -91,8 +132,9 @@ bool DefParser::parseFile(const string& filename) {
         cout << "  Components found: " << defData_.components.size() << endl;
         cout << "  Nets found: " << defData_.nets.size() << endl;
         cout << "  Pins found: " << defData_.pins.size() << endl;
+        cout << "  Scan chains found: " << defData_.scanChains.size() << endl;
 
-        // Post-processing - 茦追ん煦昴
+        // Post-processing
         cout << "Starting flip-flop analysis..." << endl;
         analyzeFlipFlops();
 
@@ -106,6 +148,61 @@ bool DefParser::parseFile(const string& filename) {
         return false;
     }
 }
+
+bool DefParser::parseScanChainLine(const string& line) {
+    smatch m;
+    if (regex_search(line, m, scanChainLineRegex_)) {
+        ScanChain sc;
+        sc.name = m[1];
+
+        // Parse the FF names from the rest of the line
+        string ffList = m[2];
+        istringstream iss(ffList);
+        string ff;
+
+        while (iss >> ff) {
+            if (ff != ";" && !ff.empty()) {
+                sc.ffNames.push_back(ff);
+            }
+        }
+
+        if (!sc.ffNames.empty()) {
+            defData_.scanChains.push_back(sc);
+            cout << "    Parsed scan chain '" << sc.name << "' with "
+                << sc.ffNames.size() << " FFs" << endl;
+        }
+
+        return true;
+    }
+    return false;
+}
+
+void DefParser::printScanChains() const {
+    cout << "\n=== Scan Chains Summary ===" << endl;
+    cout << "Found " << defData_.scanChains.size() << " scan chains." << endl;
+
+    for (const auto& sc : defData_.scanChains) {
+        cout << "  Chain: " << sc.name << " -> ";
+        for (size_t i = 0; i < sc.ffNames.size(); ++i) {
+            cout << sc.ffNames[i];
+            if (i < sc.ffNames.size() - 1) cout << " -> ";
+        }
+        cout << " (" << sc.ffNames.size() << " FFs)" << endl;
+    }
+}
+
+pair<int, int> DefParser::findFFinScanChains(const string& ffName) const {
+    for (size_t i = 0; i < defData_.scanChains.size(); ++i) {
+        const auto& chain = defData_.scanChains[i].ffNames;
+        auto it = find(chain.begin(), chain.end(), ffName);
+        if (it != chain.end()) {
+            return { i, int(it - chain.begin()) };
+        }
+    }
+    return { -1, -1 }; // Not found
+}
+
+// Keep all existing methods from original file...
 bool DefParser::parseFromString(const string& content) {
     try {
         clear();
@@ -150,8 +247,6 @@ bool DefParser::parseRowInfo(const string& line) {
     }
     return false;
 }
-
-
 
 bool DefParser::parseTrackInfo(const string& line) {
     smatch m;
@@ -507,6 +602,7 @@ void DefParser::clear() {
     defData_.instPinNets.clear();
     defData_.flipFlops.clear();
     defData_.clockDomains.clear();
+    defData_.scanChains.clear();  // Clear scan chains
     errors_.clear();
     warnings_.clear();
     isLoaded_ = false;
@@ -520,6 +616,7 @@ void DefParser::printSummary() const {
     cout << "Pins: " << defData_.pins.size() << endl;
     cout << "Nets: " << defData_.nets.size() << endl;
     cout << "Flip-Flops: " << defData_.flipFlops.size() << endl;
+    cout << "Scan Chains: " << defData_.scanChains.size() << endl;  // Add scan chains
 
     if (!defData_.flipFlops.empty()) {
         int totalBits = 0;
@@ -530,195 +627,9 @@ void DefParser::printSummary() const {
     }
 }
 
-void DefParser::printDefData() const {
-    cout << "\n=== DEF File Data ===" << endl;
+// Include all other methods from original file...
 
-    cout << "\nFound " << defData_.rows.size() << " ROW records:" << endl;
-    for (const auto& r : defData_.rows) {
-        cout << "  " << r.name << " @(" << r.x << "," << r.y << ") "
-            << r.orientation << " DO " << r.count
-            << " BY " << r.by << " STEP " << r.stepX << "," << r.stepY << endl;
-    }
-
-    cout << "\nFound " << defData_.tracks.size() << " TRACKS records:" << endl;
-    for (const auto& t : defData_.tracks) {
-        cout << "  Direction: " << t.direction << " Start: " << t.start
-            << " Count: " << t.count << " Step: " << t.step
-            << " Layer: " << t.layer << endl;
-    }
-
-    cout << "\nFound " << defData_.components.size() << " COMPONENT records:" << endl;
-    for (const auto& c : defData_.components) {
-        cout << "  " << c.name << " (" << c.cellType << ") "
-            << "@(" << c.x << "," << c.y << ") "
-            << "Orient: " << c.orient << endl;
-    }
-}
-
-bool DefParser::validateData() const {
-    // Basic validation
-    bool isValid = true;
-
-    if (defData_.components.empty()) {
-        const_cast<DefParser*>(this)->addWarning("No components found in DEF file");
-    }
-
-    // Validate coordinates
-    for (const auto& comp : defData_.components) {
-        if (!DefUtils::validateCoordinate(comp.x, comp.y)) {
-            const_cast<DefParser*>(this)->addWarning("Invalid coordinate for component: " + comp.name);
-            isValid = false;
-        }
-    }
-
-    return isValid;
-}
-
-bool DefParser::writeDefFile(const string& filename) const {
-    ofstream defFile(filename);
-    if (!defFile.is_open()) {
-        return false;
-    }
-
-    try {
-        defFile << "VERSION 5.8 ;" << endl;
-        defFile << "DESIGN " << filename << " ;" << endl;
-        defFile << "UNITS DISTANCE MICRONS " << defData_.units << " ;" << endl;
-        defFile << "DIEAREA ( " << defData_.dieArea.xMin << " " << defData_.dieArea.yMin << " )"
-            << " ( " << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ;" << endl;
-
-
-        // Write ROWS
-        if (!defData_.rows.empty()) {
-            for (const auto& row : defData_.rows) {
-                defFile << "ROW " << row.name << " core " << row.x << " " << row.y
-                    << " " << row.orientation << " DO " << row.count
-                    << " BY " << row.by << " STEP " << row.stepX << " " << row.stepY << " ;" << endl;
-            }
-        }
-
-        // Write TRACKS
-        if (!defData_.tracks.empty()) {
-            for (const auto& track : defData_.tracks) {
-                defFile << "TRACKS " << track.direction << " " << track.start
-                    << " DO " << track.count << " STEP " << track.step
-                    << " LAYER " << track.layer << " ;" << endl;
-            }
-        }
-
-        // Write COMPONENTS
-        defFile << "COMPONENTS " << defData_.components.size() << " ;" << endl;
-        for (const auto& comp : defData_.components) {
-            defFile << "- " << comp.name << " " << comp.cellType
-                << " + PLACED ( " << comp.x << " " << comp.y << " ) " << comp.orient << " ;" << endl;
-        }
-        defFile << "END COMPONENTS" << endl;
-
-        defFile << "END DESIGN" << endl;
-        defFile.close();
-        return true;
-    }
-    catch (const exception& e) {
-        defFile.close();
-        return false;
-    }
-}
-
-string DefParser::toString() const {
-    ostringstream oss;
-    oss << "DefParser Summary:" << endl;
-    oss << "  Rows: " << defData_.rows.size() << endl;
-    oss << "  Tracks: " << defData_.tracks.size() << endl;
-    oss << "  Components: " << defData_.components.size() << endl;
-    oss << "  Pins: " << defData_.pins.size() << endl;
-    oss << "  Nets: " << defData_.nets.size() << endl;
-    oss << "  Flip-Flops: " << defData_.flipFlops.size() << endl;
-    return oss.str();
-}
-
-void DefParser::addError(const string& error) {
-    errors_.push_back(error);
-    cerr << "DEF Error: " << error << endl;
-}
-
-void DefParser::addWarning(const string& warning) {
-    warnings_.push_back(warning);
-    cout << "DEF Warning: " << warning << endl;
-
-}
-void DefParser::computeRowDimensions() {
-    if (defData_.rows.size() < 2) return;
-
-    // 按 y 座標排序 rows
-    std::sort(defData_.rows.begin(), defData_.rows.end(),
-        [](const RowInfo& a, const RowInfo& b) {
-            return a.y < b.y;
-        });
-
-    // 計算 row_y_width：取第一對 row 的 Y 差當作通用高度
-    int rowYStep = defData_.rows[1].y - defData_.rows[0].y;
-
-    // 計算 row_x_width：使用任一 row 的 stepX * count
-    int rowXStep = defData_.rows[0].stepX * defData_.rows[0].count;
-
-    std::cout << "[Info] Computed row_x_width = " << rowXStep
-        << ", row_y_width = " << rowYStep << std::endl;
-
-    // 將這些資訊寫入每個 row 裡
-    for (auto& row : defData_.rows) {
-        row.rowXWidth = row.stepX * row.count;
-        row.rowYWidth = rowYStep;
-    }
-}
-void DefParser::assignComponentsToRows() {
-    std::ofstream fout("component_rowinfo.txt"); // 每個 component 對應的 row
-    std::map<std::string, int> rowCountMap; // 統計 row 中的元件數
-    rowToComponentsMap_.clear();            // 清空先前資料
-    rowComponentCount_.clear();
-
-    for (auto& comp : defData_.components) {
-        int cx = comp.x;
-        int cy = comp.y;
-        bool matched = false;
-
-        for (const auto& row : defData_.rows) {
-            int rowBottom = row.y;
-            int rowTop = row.y + row.rowYWidth;
-
-            if (cy >= rowBottom && cy < rowTop) {
-                comp.rowName = row.name;
-                matched = true;
-
-                // 統計數量
-                rowCountMap[row.name]++;
-                rowToComponentsMap_[row.name].push_back(&comp);
-                break;
-            }
-        }
-
-        if (!matched) {
-            comp.rowName = "UNPLACED";
-            rowCountMap["UNPLACED"]++;
-            rowToComponentsMap_["UNPLACED"].push_back(&comp);
-        }
-
-        fout << comp.name << " : " << comp.rowName << std::endl;
-    }
-
-    fout.close();
-
-    // 寫入 row:component 數量檔案
-    std::ofstream countOut("row_component_count.txt");
-    for (const auto& entry : rowCountMap) {
-        const std::string& rowName = entry.first;
-        int count = entry.second;
-        countOut << rowName << " : " << count << std::endl;
-        rowComponentCount_[rowName] = count;
-    }
-    countOut.close();
-}
 // Utility functions
-// Debug version of DefUtils functions
 namespace DefUtils {
     bool isFlipFlopCell(const string& cellType) {
         // Add debug output to see what's being checked
@@ -836,6 +747,194 @@ namespace DefUtils {
             upperPin == "SCAN_IN" || upperPin == "SCAN_OUT" ||
             upperPin == "SE" || upperPin == "SCAN_EN");
     }
+}
+
+void DefParser::printDefData() const {
+    cout << "\n=== DEF File Data ===" << endl;
+
+    cout << "\nFound " << defData_.rows.size() << " ROW records:" << endl;
+    for (const auto& r : defData_.rows) {
+        cout << "  " << r.name << " @(" << r.x << "," << r.y << ") "
+            << r.orientation << " DO " << r.count
+            << " BY " << r.by << " STEP " << r.stepX << "," << r.stepY << endl;
+    }
+
+    cout << "\nFound " << defData_.tracks.size() << " TRACKS records:" << endl;
+    for (const auto& t : defData_.tracks) {
+        cout << "  Direction: " << t.direction << " Start: " << t.start
+            << " Count: " << t.count << " Step: " << t.step
+            << " Layer: " << t.layer << endl;
+    }
+
+    cout << "\nFound " << defData_.components.size() << " COMPONENT records:" << endl;
+    for (const auto& c : defData_.components) {
+        cout << "  " << c.name << " (" << c.cellType << ") "
+            << "@(" << c.x << "," << c.y << ") "
+            << "Orient: " << c.orient << endl;
+    }
+}
+
+bool DefParser::validateData() const {
+    // Basic validation
+    bool isValid = true;
+
+    if (defData_.components.empty()) {
+        const_cast<DefParser*>(this)->addWarning("No components found in DEF file");
+    }
+
+    // Validate coordinates
+    for (const auto& comp : defData_.components) {
+        if (!DefUtils::validateCoordinate(comp.x, comp.y)) {
+            const_cast<DefParser*>(this)->addWarning("Invalid coordinate for component: " + comp.name);
+            isValid = false;
+        }
+    }
+
+    return isValid;
+}
+
+bool DefParser::writeDefFile(const string& filename) const {
+    ofstream defFile(filename);
+    if (!defFile.is_open()) {
+        return false;
+    }
+
+    try {
+        defFile << "VERSION 5.8 ;" << endl;
+        defFile << "DESIGN " << filename << " ;" << endl;
+        defFile << "UNITS DISTANCE MICRONS " << defData_.units << " ;" << endl;
+        defFile << "DIEAREA ( " << defData_.dieArea.xMin << " " << defData_.dieArea.yMin << " )"
+            << " ( " << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ;" << endl;
 
 
+        // Write ROWS
+        if (!defData_.rows.empty()) {
+            for (const auto& row : defData_.rows) {
+                defFile << "ROW " << row.name << " core " << row.x << " " << row.y
+                    << " " << row.orientation << " DO " << row.count
+                    << " BY " << row.by << " STEP " << row.stepX << " " << row.stepY << " ;" << endl;
+            }
+        }
+
+        // Write TRACKS
+        if (!defData_.tracks.empty()) {
+            for (const auto& track : defData_.tracks) {
+                defFile << "TRACKS " << track.direction << " " << track.start
+                    << " DO " << track.count << " STEP " << track.step
+                    << " LAYER " << track.layer << " ;" << endl;
+            }
+        }
+
+        // Write COMPONENTS
+        defFile << "COMPONENTS " << defData_.components.size() << " ;" << endl;
+        for (const auto& comp : defData_.components) {
+            defFile << "- " << comp.name << " " << comp.cellType
+                << " + PLACED ( " << comp.x << " " << comp.y << " ) " << comp.orient << " ;" << endl;
+        }
+        defFile << "END COMPONENTS" << endl;
+
+        defFile << "END DESIGN" << endl;
+        defFile.close();
+        return true;
+    }
+    catch (const exception& e) {
+        defFile.close();
+        return false;
+    }
+}
+
+string DefParser::toString() const {
+    ostringstream oss;
+    oss << "DefParser Summary:" << endl;
+    oss << "  Rows: " << defData_.rows.size() << endl;
+    oss << "  Tracks: " << defData_.tracks.size() << endl;
+    oss << "  Components: " << defData_.components.size() << endl;
+    oss << "  Pins: " << defData_.pins.size() << endl;
+    oss << "  Nets: " << defData_.nets.size() << endl;
+    oss << "  Flip-Flops: " << defData_.flipFlops.size() << endl;
+    oss << "  Scan Chains: " << defData_.scanChains.size() << endl;
+    return oss.str();
+}
+
+void DefParser::addError(const string& error) {
+    errors_.push_back(error);
+    cerr << "DEF Error: " << error << endl;
+}
+
+void DefParser::addWarning(const string& warning) {
+    warnings_.push_back(warning);
+    cout << "DEF Warning: " << warning << endl;
+}
+
+void DefParser::computeRowDimensions() {
+    if (defData_.rows.size() < 2) return;
+
+    // Sort rows by y coordinate
+    std::sort(defData_.rows.begin(), defData_.rows.end(),
+        [](const RowInfo& a, const RowInfo& b) {
+            return a.y < b.y;
+        });
+
+    // Compute row_y_width
+    int rowYStep = defData_.rows[1].y - defData_.rows[0].y;
+
+    // Compute row_x_width
+    int rowXStep = defData_.rows[0].stepX * defData_.rows[0].count;
+
+    std::cout << "[Info] Computed row_x_width = " << rowXStep
+        << ", row_y_width = " << rowYStep << std::endl;
+
+    // Write these values to each row
+    for (auto& row : defData_.rows) {
+        row.rowXWidth = row.stepX * row.count;
+        row.rowYWidth = rowYStep;
+    }
+}
+
+void DefParser::assignComponentsToRows() {
+    std::ofstream fout("component_rowinfo.txt");
+    std::map<std::string, int> rowCountMap;
+    rowToComponentsMap_.clear();
+    rowComponentCount_.clear();
+
+    for (auto& comp : defData_.components) {
+        int cx = comp.x;
+        int cy = comp.y;
+        bool matched = false;
+
+        for (const auto& row : defData_.rows) {
+            int rowBottom = row.y;
+            int rowTop = row.y + row.rowYWidth;
+
+            if (cy >= rowBottom && cy < rowTop) {
+                comp.rowName = row.name;
+                matched = true;
+
+                // Update counts
+                rowCountMap[row.name]++;
+                rowToComponentsMap_[row.name].push_back(&comp);
+                break;
+            }
+        }
+
+        if (!matched) {
+            comp.rowName = "UNPLACED";
+            rowCountMap["UNPLACED"]++;
+            rowToComponentsMap_["UNPLACED"].push_back(&comp);
+        }
+
+        fout << comp.name << " : " << comp.rowName << std::endl;
+    }
+
+    fout.close();
+
+    // Write row:component count file
+    std::ofstream countOut("row_component_count.txt");
+    for (const auto& entry : rowCountMap) {
+        const std::string& rowName = entry.first;
+        int count = entry.second;
+        countOut << rowName << " : " << count << std::endl;
+        rowComponentCount_[rowName] = count;
+    }
+    countOut.close();
 }

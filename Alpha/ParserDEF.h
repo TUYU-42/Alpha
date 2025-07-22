@@ -19,6 +19,7 @@ private:
     std::vector<std::string> warnings_;
     std::map<std::string, std::vector<ComponentInfo*>> rowToComponentsMap_;
     std::map<std::string, int> rowComponentCount_;
+
     // Regex patterns
     std::regex rowRegex_;
     std::regex trackRegex_;
@@ -31,7 +32,7 @@ private:
     std::regex netUseRegex_;
     std::regex dieAreaRegex_;
     std::regex unitsRegex_;
-
+    std::regex scanChainLineRegex_;  // New regex for scan chains
 
     // Helper methods
     bool parseRowInfo(const std::string& line);
@@ -39,6 +40,7 @@ private:
     bool parseComponentInfo(const std::string& line);
     bool parsePinInfo(std::ifstream& file, const std::string& line);
     bool parseNetInfo(std::ifstream& file, const std::string& line);
+    bool parseScanChainLine(const std::string& line);  // New method for parsing scan chains
     void addError(const std::string& error);
     void addWarning(const std::string& warning);
 
@@ -70,6 +72,7 @@ public:
     const std::vector<NetInfo>& getNets() const { return defData_.nets; }
     const std::vector<InstPinNet>& getInstPinNets() const { return defData_.instPinNets; }
     const std::vector<FlipFlopInfo>& getFlipFlops() const { return defData_.flipFlops; }
+    const std::vector<ScanChain>& getScanChains() const { return defData_.scanChains; }  // New getter
 
     // Statistics methods
     size_t getRowCount() const { return defData_.rows.size(); }
@@ -79,12 +82,17 @@ public:
     size_t getNetCount() const { return defData_.nets.size(); }
     size_t getInstPinNetCount() const { return defData_.instPinNets.size(); }
     size_t getFlipFlopCount() const { return defData_.flipFlops.size(); }
+    size_t getScanChainCount() const { return defData_.scanChains.size(); }  // New getter
 
     // Analysis methods
     void analyzeFlipFlops();
     void updateComponentFromVerilog(const std::vector<InstPinNet>& verilogData);
     ComponentInfo* findComponent(const std::string& name);
     NetInfo* findNet(const std::string& name);
+
+    // Scan chain related methods
+    void printScanChains() const;  // Print all scan chains
+    std::pair<int, int> findFFinScanChains(const std::string& ffName) const;  // Find FF in scan chains
 
     // Utility methods
     void clear();
@@ -107,13 +115,6 @@ public:
     void printComponentsByRow() const; // optional
     void clearFlipFlops() { defData_.flipFlops.clear(); }
     void addFlipFlop(const FlipFlopInfo& ff) { defData_.flipFlops.push_back(ff); }
-
-
-
-
-
-    // Get flip-flops
-
 };
 
 // Utility functions for DEF parsing
@@ -123,7 +124,7 @@ namespace DefUtils {
     std::string extractOrientation(const std::string& orientStr);
     bool validateCoordinate(int x, int y);
 
-    // 新增的函數?明
+    // Additional functions
     std::string getCellCategory(const std::string& cellType);
     bool isClockSignal(const std::string& netName);
     bool isScanSignal(const std::string& pinName);
