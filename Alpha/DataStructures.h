@@ -101,8 +101,8 @@ struct FlipFlopInfo {
     std::string dataIn;         // D pin connection
     std::string dataOut;
     std::string scanEnable;
-    bool isMultiBit = false; // КЗ·сћй multibit FF
-    int bitWidth = 1;       // bit ?¶И
+    bool isMultiBit = false;
+    int bitWidth = 1;       
 
     FlipFlopInfo() : x(0), y(0) {}
 };

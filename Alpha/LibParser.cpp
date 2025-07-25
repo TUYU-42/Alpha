@@ -374,6 +374,7 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell,
             else if (c == '}') {
                 braceDepth--;
                 if (braceDepth == 0) {
+                    updateCellBitWidth(cell);
                     return true;  // cell 解析完成
                 }
             }
@@ -505,10 +506,34 @@ double LibParser::extractNumericValue(const string& line) {
     valueStr.erase(0, valueStr.find_first_not_of(" \t"));
     valueStr.erase(valueStr.find_last_not_of(" \t") + 1);
 
+    // 處理科學記號格式
+    // 將 e+04 或 e-04 格式轉換為標準的科學記號格式
+    size_t ePos = valueStr.find('e');
+    if (ePos == string::npos) {
+        ePos = valueStr.find('E');
+    }
+
+    if (ePos != string::npos) {
+        // 檢查 e 後面是否直接接 + 或 -
+        if (ePos + 1 < valueStr.length() &&
+            (valueStr[ePos + 1] == '+' || valueStr[ePos + 1] == '-')) {
+            // 格式正確，stod 應該能處理
+        }
+    }
+
     try {
         return stod(valueStr);
     }
+    catch (const std::invalid_argument& e) {
+        cerr << "Warning: Cannot parse numeric value from: '" << valueStr << "'" << endl;
+        return 0.0;
+    }
+    catch (const std::out_of_range& e) {
+        cerr << "Warning: Numeric value out of range: '" << valueStr << "'" << endl;
+        return 0.0;
+    }
     catch (...) {
+        cerr << "Warning: Unknown error parsing: '" << valueStr << "'" << endl;
         return 0.0;
     }
 }
@@ -956,3 +981,130 @@ void LibParser::printFFCellList() const {
         }
     }
 }
+
+
+
+int LibParser::extractBitWidth(const std::string& cellName) const {
+    
+    std::regex pattern1(R"(_[A-Z]+(\d+)_)");
+    std::smatch match1;
+
+    if (std::regex_search(cellName, match1, pattern1)) {
+        try {
+            int width = std::stoi(match1[1].str());
+            if (width > 1) {  
+                return width;
+            }
+        }
+        catch (const std::exception&) {
+           
+        }
+    }
+
+    std::regex pattern2(R"(_(\d+)$)");
+    std::smatch match2;
+
+    if (std::regex_search(cellName, match2, pattern2)) {
+        try {
+            int width = std::stoi(match2[1].str());
+            if (width > 1) {
+                return width;
+            }
+        }
+        catch (const std::exception&) {
+        }
+    }
+
+    std::regex pattern3(R"([A-Z]+(\d+)(?:_|$))");
+    std::sregex_iterator iter(cellName.begin(), cellName.end(), pattern3);
+    std::sregex_iterator end;
+
+    while (iter != end) {
+        std::smatch match = *iter;
+        try {
+            int width = std::stoi(match[1].str());
+            if (width > 1 && width <= 32) {  
+                return width;
+            }
+        }
+        catch (const std::exception&) {
+            
+        }
+        ++iter;
+    }
+
+    if (cellName.find("2BIT") != std::string::npos ||
+        cellName.find("2_BIT") != std::string::npos) {
+        return 2;
+    }
+    if (cellName.find("4BIT") != std::string::npos ||
+        cellName.find("4_BIT") != std::string::npos) {
+        return 4;
+    }
+    if (cellName.find("8BIT") != std::string::npos ||
+        cellName.find("8_BIT") != std::string::npos) {
+        return 8;
+    }
+
+    auto it = cellLibrary_.find(cellName);
+    if (it != cellLibrary_.end()) {
+        const LibCell& cell = it->second;
+
+        int dPinCount = 0;
+        int qPinCount = 0;
+
+        for (const auto& pinPair : cell.pins) {
+            const std::string& pinName = pinPair.first;
+
+            if (std::regex_match(pinName, std::regex(R"(D\d+|D\[\d+\])"))) {
+                dPinCount++;
+            }
+            else if (std::regex_match(pinName, std::regex(R"(Q\d+|Q\[\d+\])"))) {
+                qPinCount++;
+            }
+            else if (pinName == "D") {
+                dPinCount++;
+            }
+            else if (pinName == "Q") {
+                qPinCount++;
+            }
+        }
+
+        if (dPinCount == qPinCount && dPinCount > 1) {
+            return dPinCount;
+        }
+
+        if (dPinCount == 1 && qPinCount == 1) {
+            bool hasNumberedPins = false;
+            for (const auto& pinPair : cell.pins) {
+                const std::string& pinName = pinPair.first;
+                if (std::regex_match(pinName, std::regex(R"([DQ]\d+)"))) {
+                    hasNumberedPins = true;
+                    break;
+                }
+            }
+            if (!hasNumberedPins) {
+                return 1;  
+            }
+        }
+    }
+
+    return 1;
+}
+
+
+void LibParser::updateCellBitWidth(LibCell& cell) const {
+    cell.bitWidth = extractBitWidth(cell.name);
+}
+
+int LibParser::getCellBitWidth(const std::string& cellName) const {
+    auto it = cellLibrary_.find(cellName);
+    if (it != cellLibrary_.end()) {       
+        if (it->second.bitWidth > 0) {
+            return it->second.bitWidth;
+        }
+    }
+
+    return extractBitWidth(cellName);
+}
+

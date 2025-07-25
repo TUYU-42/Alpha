@@ -109,6 +109,12 @@ public:
     void printFFCellList() const;
     bool isLoaded() const { return isLoaded_; }
     // New method for parsing all libraries to find FF cells
+    int extractBitWidth(const std::string& cellName) const;
+
+    void updateCellBitWidth(LibCell& cell) const;
+
+   
+    int getCellBitWidth(const std::string& cellName) const;
 };
 
 #endif // LIB_PARSER_H
