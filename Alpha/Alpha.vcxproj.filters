@@ -35,6 +35,18 @@
     <Filter Include="Parser\place">
       <UniqueIdentifier>{3ed2abc3-3800-4164-b27b-446d7fcbac47}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Placement">
+      <UniqueIdentifier>{f1b336e7-99a1-4952-99e8-b80a08ceb72c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Legalizer">
+      <UniqueIdentifier>{ae597a25-edb1-44da-9477-2adfa99d0922}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="BankingEngine">
+      <UniqueIdentifier>{28d8dbf1-38a6-4881-af0e-322c81319e1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Cluster">
+      <UniqueIdentifier>{b525bef6-5e9d-4174-b1a0-1d089f12f1d8}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -67,11 +79,14 @@
     <ClCompile Include="place.cpp">
       <Filter>Parser\place</Filter>
     </ClCompile>
-    <ClCompile Include="HierarchicalClustering.cpp">
-      <Filter>來源檔案</Filter>
-    </ClCompile>
     <ClCompile Include="DPC.cpp">
-      <Filter>來源檔案</Filter>
+      <Filter>BankingEngine</Filter>
+    </ClCompile>
+    <ClCompile Include="HierarchicalClustering.cpp">
+      <Filter>Cluster</Filter>
+    </ClCompile>
+    <ClCompile Include="Legalizer.cpp">
+      <Filter>Legalizer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -105,11 +120,14 @@
     <ClInclude Include="place.h">
       <Filter>Parser\place</Filter>
     </ClInclude>
-    <ClInclude Include="HierarchicalClustering.h">
-      <Filter>來源檔案</Filter>
-    </ClInclude>
     <ClInclude Include="DPC.h">
-      <Filter>來源檔案</Filter>
+      <Filter>BankingEngine</Filter>
+    </ClInclude>
+    <ClInclude Include="HierarchicalClustering.h">
+      <Filter>Cluster</Filter>
+    </ClInclude>
+    <ClInclude Include="Legalizer.h">
+      <Filter>Legalizer</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

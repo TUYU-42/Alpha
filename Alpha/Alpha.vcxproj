@@ -104,7 +104,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <LanguageStandard_C>stdc11</LanguageStandard_C>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -131,6 +132,7 @@
     <ClCompile Include="Alpha.cpp" />
     <ClCompile Include="DPC.cpp" />
     <ClCompile Include="HierarchicalClustering.cpp" />
+    <ClCompile Include="Legalizer.cpp" />
     <ClCompile Include="LibParser.cpp" />
     <ClCompile Include="Parser.cpp" />
     <ClCompile Include="ParserDEF.cpp" />
@@ -145,6 +147,7 @@
     <ClInclude Include="DataStructures.h" />
     <ClInclude Include="DPC.h" />
     <ClInclude Include="HierarchicalClustering.h" />
+    <ClInclude Include="Legalizer.h" />
     <ClInclude Include="LibParser.h" />
     <ClInclude Include="Parser.h" />
     <ClInclude Include="ParserDEF.h" />

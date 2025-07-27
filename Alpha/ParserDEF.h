@@ -48,7 +48,8 @@ public:
     // Constructor & Destructor
     DefParser();
     ~DefParser() = default;
-
+    const DefData& getDefData() const { return defData_; }
+    DefData& getDefData() { return defData_; }  // Non-const for modificati
     // Copy/Move constructors
     DefParser(const DefParser&) = delete;
     DefParser& operator=(const DefParser&) = delete;
@@ -60,8 +61,7 @@ public:
     bool parseFromString(const std::string& content);
 
     // Data access methods
-    const DefData& getDefData() const { return defData_; }
-    DefData& getDefData() { return defData_; }
+  
     bool isLoaded() const { return isLoaded_; }
 
     // Component access methods

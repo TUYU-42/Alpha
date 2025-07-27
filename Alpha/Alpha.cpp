@@ -2,6 +2,7 @@
 #include "DataStructures.h"
 #include "place.h"
 #include "dpc.h"
+#include "Legalizer.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -21,6 +22,8 @@ struct ContestArgs {
     vector<string> verilogFiles;
     vector<string> sdcFiles;
     vector<string> tfFiles;
+    vector<string> dbFiles; 
+
     string outputName;
 };
 
@@ -34,6 +37,7 @@ void printUsage(const char* programName) {
     cout << "  -v <file1> <file2>     Verilog files" << endl;
     cout << "  -sdc <file1> <file2>   SDC files" << endl;
     cout << "  -tf <file1> <file2>    Technology files" << endl;
+    cout << "  -db <file1> <file2>     Database files" << endl;
     cout << "  -out <name>            Output name (required)" << endl;
 }
 
@@ -64,6 +68,11 @@ ContestArgs parseContestArgs(int argc, char* argv[]) {
         else if (arg == "-lef") {
             while (i + 1 < argc && argv[i + 1][0] != '-') {
                 args.lefFiles.push_back(argv[++i]);
+            }
+        }
+        else if (arg == "-db") {
+            while (i + 1 < argc && argv[i + 1][0] != '-') {
+                args.dbFiles.push_back(argv[++i]);
             }
         }
         else if (arg == "-def") {
@@ -167,7 +176,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     }
 
     // Parse Verilog
-    if (!args.verilogFiles.empty()) {
+  /*  if (!args.verilogFiles.empty()) {
         cout << "  Parsing Verilog file..." << endl;
         if (!parser.parseVerilog(args.verilogFiles[0])) {
             cerr << "Warning: Failed to parse Verilog file" << endl;
@@ -181,7 +190,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
 
     if (!args.tfFiles.empty()) {
         parser.parseTech(args.tfFiles[0]);
-    }
+    }*/
 
     // STEP 5: Group FF instances by cell type for pre-banking analysis
     cout << "\n=== STEP 5: Group FF Instances by Cell Type ===" << endl;
@@ -236,26 +245,28 @@ int main(int argc, char* argv[]) {
             cout << "\nFF Banking Opportunities:" << endl;
 
             // Analyze each FF type group
-            for (const auto& [cellType, instances] : ffGroups) {
+            for (auto ff_it = ffGroups.begin(); ff_it != ffGroups.end(); ++ff_it) {
+                const std::string& cellType = ff_it->first;
+                const std::vector<FlipFlopInfo>& instances = ff_it->second; 
+
                 const LibCell* libCell = parser.getLibParser()->getCell(cellType);
 
                 if (libCell && instances.size() >= 2) {
-                    // Check banking opportunities
-                    if (cellType.find("2_") == string::npos &&
-                        cellType.find("4_") == string::npos) {
-                        // This is a single-bit FF
+                    if (cellType.find("2_") == std::string::npos &&
+                        cellType.find("4_") == std::string::npos) {
                         cout << "\n  Cell type: " << cellType << endl;
                         cout << "    Instances: " << instances.size() << endl;
 
-                        // Look for 2-bit and 4-bit targets
-                        string degenerate = libCell->singleBitDegenerate;
+                        std::string degenerate = libCell->singleBitDegenerate;
                         if (!degenerate.empty()) {
                             cout << "    Can degenerate from: " << degenerate << endl;
                         }
 
-                        // Find potential MBFF targets
                         set<string> mbffTargets;
-                        for (const auto& [mbffType, mbffCell] : parser.getLibParser()->getAllCells()) {
+                        const std::map<std::string, LibCell>& allCells = parser.getLibParser()->getAllCells();
+                        for (std::map<std::string, LibCell>::const_iterator cell_it = allCells.begin(); cell_it != allCells.end(); ++cell_it) {
+                            const std::string& mbffType = cell_it->first;
+                            const LibCell& mbffCell = cell_it->second;
                             if (mbffCell.singleBitDegenerate == cellType) {
                                 mbffTargets.insert(mbffType);
                             }
@@ -263,14 +274,15 @@ int main(int argc, char* argv[]) {
 
                         if (!mbffTargets.empty()) {
                             cout << "    Potential MBFF targets:" << endl;
-                            for (const auto& target : mbffTargets) {
-                                cout << "      - " << target << endl;
+                            for (set<string>::const_iterator target_it = mbffTargets.begin(); target_it != mbffTargets.end(); ++target_it) {
+                                cout << "      - " << *target_it << endl;
                             }
                         }
                     }
                 }
             }
 
+            /*
             // Perform clustering
             cout << "\n=== Hierarchical Clustering Phase ===" << endl;
            parser.performHierarchicalClustering();
@@ -288,10 +300,12 @@ int main(int argc, char* argv[]) {
             dpc.setMacroMap(&parser.getMacroMap());
             const auto& clusteredDesign = clustering->getClusteredDesign();
            auto result = dpc.clusterByScanChain(clusteredDesign, ffLookup);
+           
 
            // Perform banking optimization
             cout << "\n=== Banking Optimization Phase ===" << endl;
            parser.performBankingOptimization();
+           */
         }
 
         // Generate output files
@@ -300,7 +314,24 @@ int main(int argc, char* argv[]) {
             cerr << "Error: Failed to write output files" << endl;
             return 1;
         }
+        if (parser.isDefLoaded() && parser.isLefLoaded()) {
+            // Perform flip-flop legalization
+            cout << "\n=== Starting Flip-Flop Legalization ===" << endl;
+            if (parser.performLegalization()) {
+                cout << "✓ All flip-flops legalized successfully" << endl;
 
+                // Write the updated DEF file
+                string outputDef = args.outputName + ".def";
+                parser.getDefParser()->writeDefFile(outputDef);
+
+                // The legalization report is automatically generated
+                // Check: outputName_legalization_report.txt
+            }
+            else {
+                cerr << "Error: Legalization failed" << endl;
+                // You might want to continue or return based on your requirements
+            }
+        }
         // Display execution statistics
         auto endTime = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(endTime - startTime);
@@ -331,14 +362,19 @@ void demonstrateClusteringUsage(const Parser& parser) {
     cout << "\n=== Demonstrating Clustering Usage ===" << endl;
 
     // Example 1: Iterate through all clock domains
-    for (const auto& [clockNet, scanChains] : clusteredDesign) {
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign.begin();
+        it != clusteredDesign.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChainClustered>& scanChains = it->second;
+
         cout << "\nClock domain: " << clockNet << endl;
 
         // Example 2: Find chains suitable for 4-bit banking
-        vector<const ScanChain*> bankableFours;
-        for (const auto& chain : scanChains) {
-            if (chain.length() >= 4) {
-              // bankableFours.push_back(&chain);
+        std::vector<const ScanChainClustered*> bankableFours;
+        for (std::vector<ScanChainClustered>::const_iterator chain_it = scanChains.begin();
+            chain_it != scanChains.end(); ++chain_it) {
+            if (chain_it->length() >= 4) {
+                // bankableFours.push_back(&(*chain_it));
             }
         }
 
@@ -349,8 +385,9 @@ void demonstrateClusteringUsage(const Parser& parser) {
 
         // Example 3: Find isolated FFs
         int isolatedCount = 0;
-        for (const auto& chain : scanChains) {
-            if (chain.length() == 1) {
+        for (std::vector<ScanChainClustered>::const_iterator chain_it = scanChains.begin();
+            chain_it != scanChains.end(); ++chain_it) {
+            if (chain_it->length() == 1) {
                 isolatedCount++;
             }
         }
@@ -359,4 +396,5 @@ void demonstrateClusteringUsage(const Parser& parser) {
             cout << "  Found " << isolatedCount << " isolated FFs" << endl;
         }
     }
+
 }

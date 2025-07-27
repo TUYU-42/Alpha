@@ -29,6 +29,7 @@ struct InstPinNet {
 // ROW ЩYБПЅY?
 struct RowInfo {
     std::string name;
+    std::string siteName;
     int x, y;
     std::string orientation;
     int count, by, stepX, stepY;
@@ -59,6 +60,7 @@ struct ComponentInfo {
     int x, y;
     std::string orient;
     std::string rowName;
+    std::string status;  
 };
 
 // PIN ЩYБПЅY?
@@ -170,6 +172,7 @@ struct DefData {
     std::map<std::string, std::vector<std::string>> clockDomains; // clock -> FF instances
     int units = 1000;      // №wі]1000Ў]micronsЎ^
     DieArea dieArea;       // ґ№¤щ°П°м
+    std::vector<std::string> originalDefLines;
 };
 
 // SDC ЦёБоЅY?

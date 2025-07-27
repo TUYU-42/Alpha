@@ -13,7 +13,8 @@ DefParser::DefParser() : isLoaded_(false) {
     // Initialize regex patterns
     dieAreaRegex_ = std::regex(R"(^\s*DIEAREA\s*((\(\s*\d+\s+\d+\s*\)\s*)+);)");
     unitsRegex_ = std::regex(R"(^\s*UNITS\s+DISTANCE\s+MICRONS\s+(\d+)\s*;)");
-    rowRegex_ = regex(R"(^\s*ROW\s+(\w+)\s+\w+\s+(\d+)\s+(\d+)\s+([A-Z]{1,2})\s+DO\s+(\d+)\s+BY\s+(\d+)\s+STEP\s+(\d+)\s+(\d+)\s*;)");
+    rowRegex_ = regex(R"(^\s*ROW\s+(\w+)\s+(\w+)\s+(\d+)\s+(\d+)\s+([A-Z]{1,2})\s+DO\s+(\d+)\s+BY\s+(\d+)\s+STEP\s+(\d+)\s+(\d+)\s*;)");
+
     trackRegex_ = regex(R"(^\s*TRACKS\s+([XY])\s+(\d+)\s+DO\s+(\d+)\s+STEP\s+(\d+)\s+LAYER\s+(\w+)\s*;)");
     componentRegex_ = regex(R"(^\s*-\s+(\S+)\s+(\S+)\s+\+\s+PLACED\s+\(\s*(\d+)\s+(\d+)\s*\)\s+(\S+)\s*;)");
     pinStartRegex_ = regex(R"(^\s*-\s+(\S+)\s+\+\s+NET\s+(\S+)\s+\+\s+DIRECTION\s+(\w+)\s+\+\s+USE\s+(\w+))");
@@ -234,19 +235,21 @@ bool DefParser::parseRowInfo(const string& line) {
     smatch m;
     if (regex_search(line, m, rowRegex_)) {
         RowInfo row;
-        row.name = m[1];
-        row.x = stoi(m[2]);
-        row.y = stoi(m[3]);
-        row.orientation = m[4];
-        row.count = stoi(m[5]);
-        row.by = stoi(m[6]);
-        row.stepX = stoi(m[7]);
-        row.stepY = stoi(m[8]);
+        row.name = m[1];        
+        row.siteName = m[2];    
+        row.x = stoi(m[3]);
+        row.y = stoi(m[4]);
+        row.orientation = m[5];
+        row.count = stoi(m[6]);
+        row.by = stoi(m[7]);
+        row.stepX = stoi(m[8]);
+        row.stepY = stoi(m[9]);
         defData_.rows.push_back(row);
         return true;
     }
     return false;
 }
+
 
 bool DefParser::parseTrackInfo(const string& line) {
     smatch m;
@@ -795,37 +798,40 @@ bool DefParser::validateData() const {
 
 bool DefParser::writeDefFile(const string& filename) const {
     ofstream defFile(filename);
-    if (!defFile.is_open()) {
-        return false;
-    }
+    if (!defFile.is_open()) return false;
 
     try {
+        // 1. 手動輸出你要覆寫的部份
         defFile << "VERSION 5.8 ;" << endl;
-        defFile << "DESIGN " << filename << " ;" << endl;
+        defFile << "DIVIDERCHAR \"/\" ;" << endl;
+        defFile << "BUSBITCHARS \"[]\" ;" << endl;
+        defFile << "DESIGN top ;" << endl;
         defFile << "UNITS DISTANCE MICRONS " << defData_.units << " ;" << endl;
-        defFile << "DIEAREA ( " << defData_.dieArea.xMin << " " << defData_.dieArea.yMin << " )"
-            << " ( " << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ;" << endl;
+        defFile << "PROPERTYDEFINITIONS" << endl;
+        defFile << "COMPONENTPIN ACCESS_DIRECTION STRING ;" << endl;
+        defFile << "END PROPERTYDEFINITIONS" << endl;
+        defFile << "DIEAREA ( "
+            << defData_.dieArea.xMin << " " << defData_.dieArea.yMin << " ) ( "
+            << defData_.dieArea.xMin << " " << defData_.dieArea.yMax << " ) ( "
+            << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ( "
+            << defData_.dieArea.xMax << " " << defData_.dieArea.yMin << " ) ;" << endl;
 
 
-        // Write ROWS
-        if (!defData_.rows.empty()) {
-            for (const auto& row : defData_.rows) {
-                defFile << "ROW " << row.name << " core " << row.x << " " << row.y
-                    << " " << row.orientation << " DO " << row.count
-                    << " BY " << row.by << " STEP " << row.stepX << " " << row.stepY << " ;" << endl;
-            }
+        // 2. 輸出新的 ROW/TRACKS/COMPONENTS
+        for (const auto& row : defData_.rows) {
+            defFile << "ROW " << row.name << " " << row.siteName << " " << row.x << " " << row.y
+                << " " << row.orientation << " DO " << row.count
+                << " BY " << row.by << " STEP " << row.stepX << " " << row.stepY << " ;" << endl;
         }
+        defFile << "END ROWS" << endl;
 
-        // Write TRACKS
-        if (!defData_.tracks.empty()) {
-            for (const auto& track : defData_.tracks) {
-                defFile << "TRACKS " << track.direction << " " << track.start
-                    << " DO " << track.count << " STEP " << track.step
-                    << " LAYER " << track.layer << " ;" << endl;
-            }
+        for (const auto& track : defData_.tracks) {
+            defFile << "TRACKS " << track.direction << " " << track.start
+                << " DO " << track.count << " STEP " << track.step
+                << " LAYER " << track.layer << " ;" << endl;
         }
+        defFile << "END TRACKS" << endl;
 
-        // Write COMPONENTS
         defFile << "COMPONENTS " << defData_.components.size() << " ;" << endl;
         for (const auto& comp : defData_.components) {
             defFile << "- " << comp.name << " " << comp.cellType
@@ -833,7 +839,37 @@ bool DefParser::writeDefFile(const string& filename) const {
         }
         defFile << "END COMPONENTS" << endl;
 
-        defFile << "END DESIGN" << endl;
+        // 3. 複製其餘原始內容，排除你已經手動寫入的三大區塊
+        enum State { NORMAL, SKIP_ROW, SKIP_TRACK, SKIP_COMPONENTS };
+        State state = NORMAL;
+
+        for (const auto& line : defData_.originalDefLines) {
+            // 1. 跳過你自己手動產生的header
+            if (line.find("VERSION") == 0)      continue;
+            if (line.find("DIVIDERCHAR") == 0)  continue;
+            if (line.find("BUSBITCHARS") == 0)  continue;
+            if (line.find("DESIGN") == 0)       continue;
+            if (line.find("UNITS") == 0)        continue;
+            if (line.find("PROPERTYDEFINITIONS") == 0) continue;
+            if (line.find("COMPONENTPIN ACCESS_DIRECTION") == 0) continue;
+            if (line.find("END PROPERTYDEFINITIONS") == 0) continue;
+            if (line.find("DIEAREA") == 0)      continue;
+
+            // 2. 跳過ROW/TRACKS/COMPONENTS區塊
+            if (line.find("ROW ") == 0) { state = SKIP_ROW;        continue; }
+            if (line.find("TRACKS ") == 0) { state = SKIP_TRACK;      continue; }
+            if (line.find("COMPONENTS ") == 0) { state = SKIP_COMPONENTS; continue; }
+
+            if (state == SKIP_ROW && line.find("END ROWS") != std::string::npos) { state = NORMAL; continue; }
+            if (state == SKIP_TRACK && line.find("END TRACKS") != std::string::npos) { state = NORMAL; continue; }
+            if (state == SKIP_COMPONENTS && line.find("END COMPONENTS") != std::string::npos) { state = NORMAL; continue; }
+
+            // 3. 其他都複製
+            if (state == NORMAL) {
+                defFile << line << endl;
+            }
+        }
+
         defFile.close();
         return true;
     }
@@ -842,6 +878,8 @@ bool DefParser::writeDefFile(const string& filename) const {
         return false;
     }
 }
+
+
 
 string DefParser::toString() const {
     ostringstream oss;

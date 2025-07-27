@@ -5,7 +5,7 @@
 DensityPeakClustering::DensityPeakClustering() {}
 DensityPeakClustering::~DensityPeakClustering() {}
 
-// 批次處理：對每個 clock domain 的 scan chains 進行分群
+// 批次?理：對每? clock domain 的 scan chains 進行分群
 std::map<std::string, std::vector<DPCCluster>>
 DensityPeakClustering::clusterByScanChain(
     const std::map<std::string, std::vector<ScanChainClustered>>& scanChains,
@@ -14,32 +14,30 @@ DensityPeakClustering::clusterByScanChain(
 {
     std::map<std::string, std::vector<DPCCluster>> result;
 
-    // 對每個 clock domain 處理
-    for (const auto& [clockNet, chains] : scanChains) {
+    // 對每? clock domain ?理
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = scanChains.begin();
+        it != scanChains.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChainClustered>& chains = it->second;
+
         std::cout << "\n[DPC] Processing clock domain: " << clockNet
             << " with " << chains.size() << " scan chains" << std::endl;
 
         std::vector<DPCCluster> allClusters;
 
-        // 對該 domain 的每條 scan chain 進行分群
         for (size_t i = 0; i < chains.size(); ++i) {
-            const auto& chain = chains[i];
+            const ScanChainClustered& chain = chains[i];
             std::cout << "  Processing scan chain " << i
                 << " (length=" << chain.length() << ")" << std::endl;
 
-            // 清空之前的結果
             clear();
 
-            // 對這條 scan chain 進行分群
             performClusteringOnScanChain(chain, ffLookup, autoTune);
 
-            // 設定 scan chain 索引
-            for (auto& cluster : clusters_) {
-                cluster.scanChainIdx = i;
-                cluster.clockNet = clockNet;
+            for (size_t j = 0; j < clusters_.size(); ++j) {
+                clusters_[j].scanChainIdx = i;
+                clusters_[j].clockNet = clockNet;
             }
-
-            // 收集這條 chain 的分群結果
             allClusters.insert(allClusters.end(), clusters_.begin(), clusters_.end());
         }
 
@@ -48,6 +46,7 @@ DensityPeakClustering::clusterByScanChain(
         std::cout << "  Total clusters for " << clockNet << ": "
             << allClusters.size() << std::endl;
     }
+
 
     return result;
 }
@@ -58,7 +57,7 @@ void DensityPeakClustering::performClusteringOnScanChain(
     const std::map<std::string, FlipFlopInfo>& ffLookup,
     bool autoTune)
 {
-    // 從 scan chain 提取 FF 資訊
+    // 從 scan chain 提取 FF 資?
     std::vector<FlipFlopInfo> ffList;
 
     for (const auto& node : chain.nodes) {
@@ -124,7 +123,7 @@ void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& fl
         pt.x = static_cast<double>(ff.x);
         pt.y = static_cast<double>(ff.y);
 
-        // 從 macro map 取得尺寸資訊
+        // 從 macro map 取得尺寸資?
         if (macroMap_ && macroMap_->count(pt.cellType)) {
             const auto& info = macroMap_->at(pt.cellType);
             pt.width = info.sizeX;
@@ -139,7 +138,7 @@ void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& fl
     std::cout << "[DPC] Loaded " << points_.size() << " points from flip-flop info" << std::endl;
 }
 
-// 建立距離矩陣
+// 建立距離矩?
 void DensityPeakClustering::buildDistanceMatrix() {
     int N = points_.size();
     distMat_.assign(N, std::vector<double>(N, 0.0));
@@ -152,7 +151,7 @@ void DensityPeakClustering::buildDistanceMatrix() {
     }
 }
 
-// 計算兩個 box 之間的曼哈頓距離
+// ?算兩? box 之間的曼哈頓距離
 double DensityPeakClustering::boxManhattanDistance(const DPCPoint& a, const DPCPoint& b) {
     double ax0 = a.x, ax1 = a.x + a.width;
     double ay0 = a.y, ay1 = a.y + a.height;
@@ -167,7 +166,7 @@ double DensityPeakClustering::boxManhattanDistance(const DPCPoint& a, const DPCP
     return dx + dy;
 }
 
-// 計算局部密度 rho
+// ?算局部密度 rho
 void DensityPeakClustering::computeRho() {
     int N = points_.size();
     if (N == 0) return;
@@ -205,7 +204,7 @@ void DensityPeakClustering::computeRho() {
     std::cout << "[DPC] Local density rho range: " << minRho << " ~ " << maxRho << std::endl;
 }
 
-// 計算到更高密度點的最小距離 delta
+// ?算到更高密度點的最小距離 delta
 void DensityPeakClustering::computeDelta() {
     int N = points_.size();
     if (N == 0) return;
@@ -216,13 +215,13 @@ void DensityPeakClustering::computeDelta() {
     std::sort(sortedIdx.begin(), sortedIdx.end(),
         [this](int a, int b) { return points_[a].rho > points_[b].rho; });
 
-    // (2) 預處理全場最大距離
+    // (2) 預?理全場最大距離
     double maxDist = 0;
     for (int i = 0; i < N; ++i)
         for (int j = 0; j < N; ++j)
             if (i != j) maxDist = std::max(maxDist, distMat_[i][j]);
 
-    // (3) 依序計算 delta, nearestHigher
+    // (3) 依序?算 delta, nearestHigher
     for (int rank = 0; rank < N; ++rank) {
         int idx = sortedIdx[rank];
         double myRho = points_[idx].rho;
@@ -250,7 +249,7 @@ void DensityPeakClustering::computeDelta() {
         }
     }
 
-    // debug: 印出delta範圍
+    // debug: 印出delta?圍
     double minD = std::numeric_limits<double>::max(), maxD = -1;
     for (const auto& pt : points_) {
         minD = std::min(minD, pt.delta);
@@ -259,13 +258,13 @@ void DensityPeakClustering::computeDelta() {
     std::cout << "[DPC] delta range: " << minD << " ~ " << maxD << std::endl;
 }
 
-// 選擇聚類中心
+// 選擇聚?中心
 std::vector<int> DensityPeakClustering::selectCenters() {
     std::vector<int> centerIndices;
     int N = points_.size();
     if (N == 0) return centerIndices;
 
-    // --- Step 1. 計算 rho*delta 乘積 ---
+    // --- Step 1. ?算 rho*delta 乘積 ---
     std::vector<std::pair<double, int>> rhoDeltaProduct;
     for (int i = 0; i < N; ++i) {
         double score = points_[i].rho * points_[i].delta;
@@ -275,14 +274,14 @@ std::vector<int> DensityPeakClustering::selectCenters() {
     // --- Step 2. 依照 score 由大到小排序 ---
     std::sort(rhoDeltaProduct.rbegin(), rhoDeltaProduct.rend());
 
-    // --- Step 3. 選 Top-K 當中心 ---
+    // --- Step 3. 選 Top-K ?中心 ---
     int K = estimateBestClusterCount();
-    if (K <= 0) K = std::min(8, N);      // 預設8群，或視點數決定
+    if (K <= 0) K = std::min(8, N);      // 預設8群，或?點數決定
 
     for (int i = 0; i < K && i < N; ++i) {
         int idx = rhoDeltaProduct[i].second;
         points_[idx].isCenter = true;
-        points_[idx].clusterId = idx;    // 用 index 當 cluster id
+        points_[idx].clusterId = idx;    // 用 index ? cluster id
         centerIndices.push_back(idx);
 
         // Debug log:
@@ -295,14 +294,14 @@ std::vector<int> DensityPeakClustering::selectCenters() {
     return centerIndices;
 }
 
-// 估計最佳聚類數量
+// 估?最佳聚?數量
 int DensityPeakClustering::estimateBestClusterCount() const {
     int N = points_.size();
-    // 簡單策略：每 4 個點一個 cluster
+    // ?單策略：每 4 ?點一? cluster
     return std::max(1, (N + 3) / 4);
 }
 
-// 估計最佳 cutoff distance
+// 估?最佳 cutoff distance
 double DensityPeakClustering::estimateOptimalCutoffDistance() const {
     if (distMat_.empty() || points_.size() < 2)
         return 10.0;
@@ -318,17 +317,21 @@ double DensityPeakClustering::estimateOptimalCutoffDistance() const {
     if (dists.empty()) return 10.0;
     std::sort(dists.begin(), dists.end());
 
-    // 想要每個點平均有 targetNeighbor 個鄰居
-    int targetNeighbor = std::clamp(N / 100, 10, 50); // 1%N，最少10，最多50
+    // も笆 clamp1%N程10程50
+    int targetNeighbor = N / 100;
+    if (targetNeighbor < 10) targetNeighbor = 10;
+    if (targetNeighbor > 50) targetNeighbor = 50;
+
     int cutoffIdx = std::min(targetNeighbor * N, (int)dists.size() - 1);
     return dists[cutoffIdx];
 }
 
-// 分配點到聚類
+
+// 分配點到聚?
 void DensityPeakClustering::assignClusters(const std::vector<int>& centers) {
     int N = points_.size();
 
-    // 初始化聚類
+    // 初始化聚?
     clusters_.clear();
     for (int centerIdx : centers) {
         DPCCluster cluster;
@@ -338,13 +341,13 @@ void DensityPeakClustering::assignClusters(const std::vector<int>& centers) {
         clusters_.push_back(cluster);
     }
 
-    // 按密度降序處理非中心點
+    // 按密度降序?理非中心點
     std::vector<int> sortedIdx(N);
     for (int i = 0; i < N; ++i) sortedIdx[i] = i;
     std::sort(sortedIdx.begin(), sortedIdx.end(),
         [this](int a, int b) { return points_[a].rho > points_[b].rho; });
 
-    // 分配每個點到其 nearestHigher 的聚類
+    // 分配每?點到其 nearestHigher 的聚?
     for (int idx : sortedIdx) {
         if (points_[idx].isCenter) continue;
 
@@ -352,7 +355,7 @@ void DensityPeakClustering::assignClusters(const std::vector<int>& centers) {
         if (higher >= 0 && points_[higher].clusterId >= 0) {
             points_[idx].clusterId = points_[higher].clusterId;
 
-            // 找到對應的聚類並加入
+            // 找到對應的聚?並加入
             for (auto& cluster : clusters_) {
                 if (cluster.clusterId == points_[idx].clusterId) {
                     cluster.members.push_back(idx);
@@ -363,7 +366,7 @@ void DensityPeakClustering::assignClusters(const std::vector<int>& centers) {
     }
 }
 
-// 計算聚類的幾何特性
+// ?算聚?的幾何特性
 void DensityPeakClustering::computeClusterGeometry() {
     for (auto& cluster : clusters_) {
         if (cluster.members.empty()) continue;
@@ -387,7 +390,7 @@ void DensityPeakClustering::computeClusterGeometry() {
         cluster.avgX = sumX / cluster.members.size();
         cluster.avgY = sumY / cluster.members.size();
 
-        // 計算半徑（到中心的最大距離）
+        // ?算半徑（到中心的最大距離）
         double maxDist = 0;
         for (int idx : cluster.members) {
             double dx = points_[idx].x - cluster.avgX;
@@ -398,7 +401,7 @@ void DensityPeakClustering::computeClusterGeometry() {
     }
 }
 
-// 計算統計資訊
+// ?算統?資?
 void DensityPeakClustering::computeStatistics() {
     statistics_.totalPoints = points_.size();
     statistics_.totalClusters = clusters_.size();
@@ -431,7 +434,7 @@ void DensityPeakClustering::clear() {
     statistics_ = DPCStatistics();
 }
 
-// 列印聚類摘要
+// 列印聚?摘要
 void DensityPeakClustering::printClusteringSummary() const {
     std::cout << "\n=== DPC Clustering Summary ===" << std::endl;
     std::cout << "Total points: " << statistics_.totalPoints << std::endl;
@@ -441,7 +444,7 @@ void DensityPeakClustering::printClusteringSummary() const {
     std::cout << "Average cluster radius: " << statistics_.avgClusterRadius << std::endl;
 }
 
-// 列印詳細報告
+// 列印??報告
 void DensityPeakClustering::printDetailedReport() const {
     std::cout << "\n=== DPC Detailed Report ===" << std::endl;
 

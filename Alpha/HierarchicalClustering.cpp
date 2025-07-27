@@ -45,9 +45,13 @@ void HierarchicalClustering::performClustering(const std::vector<FlipFlopInfo>& 
     buildClockDomains();
 
     // Step 2: Build scan chains within each clock domain
-    for (const auto& [clockNet, domainFFs] : clockDomains_) {
+    for (std::map<std::string, std::vector<FlipFlopInfo> >::const_iterator it = clockDomains_.begin();
+        it != clockDomains_.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<FlipFlopInfo>& domainFFs = it->second;
         buildScanChainsForDomain(clockNet, domainFFs);
     }
+
 
     // Step 3: Calculate statistics
     calculateStatistics();
@@ -75,11 +79,16 @@ void HierarchicalClustering::buildClockDomains() {
 
     // Print summary
     std::cout << "Found " << clockDomains_.size() << " clock domains:" << std::endl;
-    for (const auto& [clockNet, ffs] : clockDomains_) {
+    for (std::map<std::string, std::vector<FlipFlopInfo> >::const_iterator it = clockDomains_.begin();
+        it != clockDomains_.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<FlipFlopInfo>& ffs = it->second;
+
         std::cout << "  " << std::setw(20) << std::left << clockNet
             << " : " << ffs.size() << " flip-flops" << std::endl;
         statistics_.ffPerClockDomain[clockNet] = ffs.size();
     }
+
 }
 
 // Step 2: Build scan chains for a specific clock domain
@@ -341,37 +350,48 @@ void HierarchicalClustering::printClusteringSummary() const {
     }
 
     std::cout << "\nPer clock domain statistics:" << std::endl;
-    for (const auto& [clockNet, ffCount] : statistics_.ffPerClockDomain) {
+    for (std::map<std::string, int>::const_iterator it = statistics_.ffPerClockDomain.begin();
+        it != statistics_.ffPerClockDomain.end(); ++it) {
+        const std::string& clockNet = it->first;
+        int ffCount = it->second;
+
         std::cout << "  " << std::setw(20) << std::left << clockNet << ": "
             << ffCount << " FFs, "
             << statistics_.chainsPerClockDomain.at(clockNet) << " chains" << std::endl;
     }
+
 }
 
 // Print detailed report
 void HierarchicalClustering::printDetailedReport() const {
     std::cout << "\n=== Detailed Clustering Report ===" << std::endl;
 
-    for (const auto& [clockNet, chains] : clusteredDesign_) {
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign_.begin();
+        it != clusteredDesign_.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChainClustered>& chains = it->second;
+
         std::cout << "\nClock Domain: " << clockNet << std::endl;
         std::cout << "Number of chains: " << chains.size() << std::endl;
 
         // Chain length distribution
         std::map<int, int> lengthDistribution;
-        for (const auto& chain : chains) {
-            lengthDistribution[chain.length()]++;
+        for (std::vector<ScanChainClustered>::const_iterator ch_it = chains.begin(); ch_it != chains.end(); ++ch_it) {
+            lengthDistribution[ch_it->length()]++;
         }
 
         std::cout << "Chain length distribution:" << std::endl;
-        for (const auto& [length, count] : lengthDistribution) {
+        for (std::map<int, int>::const_iterator ld_it = lengthDistribution.begin(); ld_it != lengthDistribution.end(); ++ld_it) {
+            int length = ld_it->first;
+            int count = ld_it->second;
             std::cout << "  Length " << std::setw(3) << length << ": "
                 << std::setw(4) << count << " chains" << std::endl;
         }
 
         // Show details of longest chains
         std::vector<const ScanChainClustered*> sortedChains;
-        for (const auto& chain : chains) {
-            sortedChains.push_back(&chain);
+        for (std::vector<ScanChainClustered>::const_iterator ch_it = chains.begin(); ch_it != chains.end(); ++ch_it) {
+            sortedChains.push_back(&(*ch_it));
         }
 
         std::sort(sortedChains.begin(), sortedChains.end(),
@@ -392,6 +412,7 @@ void HierarchicalClustering::printDetailedReport() const {
                 << " (" << chain->nodes.back().cellType << ")" << std::endl;
         }
     }
+
 }
 
 // Export clustering results to file
@@ -409,7 +430,11 @@ void HierarchicalClustering::exportToFile(const std::string& filename) const {
     outFile << "# Scan Chain Source: " << (useDefScanChains_ ? "DEF" : "Connectivity") << std::endl;
     outFile << std::endl;
 
-    for (const auto& [clockNet, chains] : clusteredDesign_) {
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign_.begin();
+        it != clusteredDesign_.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChainClustered>& chains = it->second;
+
         outFile << "CLOCK_DOMAIN " << clockNet << std::endl;
         outFile << "CHAIN_COUNT " << chains.size() << std::endl;
 
@@ -419,12 +444,14 @@ void HierarchicalClustering::exportToFile(const std::string& filename) const {
                 outFile << " ID " << chains[i].chainId;
             }
             outFile << std::endl;
-            for (const auto& node : chains[i].nodes) {
-                outFile << "  " << node.instanceName << " " << node.cellType << std::endl;
+            for (std::vector<ScanChainNode>::const_iterator node_it = chains[i].nodes.begin();
+                node_it != chains[i].nodes.end(); ++node_it) {
+                outFile << "  " << node_it->instanceName << " " << node_it->cellType << std::endl;
             }
         }
         outFile << std::endl;
     }
+
 
     outFile.close();
     std::cout << "✓ Clustering results exported to " << filename << std::endl;
@@ -445,9 +472,12 @@ std::vector<BankingCandidate> HierarchicalClustering::findBankingCandidates(
     }
     else {
         // 處理所有 domains
-        for (const auto& [domain, chains] : clusteredDesign_) {
+        for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign_.begin();
+            it != clusteredDesign_.end(); ++it) {
+            const std::string& domain = it->first;
             domainsToProcess.push_back(domain);
         }
+
     }
 
     // 對每個 domain 找 banking candidates
@@ -488,11 +518,14 @@ bool HierarchicalClustering::validateClustering() const {
     // Check that all original FFs are accounted for
     int totalFFsInClusters = 0;
 
-    for (const auto& [clockNet, chains] : clusteredDesign_) {
-        for (const auto& chain : chains) {
-            totalFFsInClusters += chain.length();
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign_.begin();
+        it != clusteredDesign_.end(); ++it) {
+        const std::vector<ScanChainClustered>& chains = it->second;
+        for (std::vector<ScanChainClustered>::const_iterator chain_it = chains.begin(); chain_it != chains.end(); ++chain_it) {
+            totalFFsInClusters += chain_it->length();
         }
     }
+
 
     if (totalFFsInClusters != statistics_.totalFlipFlops) {
         std::cerr << "Error: FF count mismatch! Original: " << statistics_.totalFlipFlops

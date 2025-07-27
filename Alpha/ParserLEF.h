@@ -92,7 +92,7 @@ class LefParser {
 private:
     std::vector<StmtUPtr> allObjs;   // own ALL top‑level objects
     bool isLoaded_;  // 添加載入狀態追蹤
-
+    std::vector<LefSiteInfo> sites_;
     // Helper methods
     std::vector<std::string> tokenize(const std::string& line);
     LefData convertToLefData() const;
@@ -122,7 +122,7 @@ public:
     size_t getLayerCount() const { return layerDict.size(); }
     size_t getViaCount() const { return viaDict.size(); }
     size_t getSiteCount() const { return siteDict.size(); }
-
+    const std::vector<LefSiteInfo>& getSites() const { return sites_; }
     // Debug and display methods
     void printSummary() const;
     void printMacroDetails(int maxCount = 10) const;

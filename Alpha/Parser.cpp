@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <algorithm>
 #include "LibParser.h"  // 新增 include
+#include "Legalizer.h"
 using namespace std;
 
 // Constructor
@@ -143,10 +144,13 @@ void Parser::groupFFInstancesByType() {
     }
 
     cout << "\nFF instances grouped by type:" << endl;
-    for (const auto& [cellType, instances] : ffGroupsByType_) {
+    for (std::map<std::string, std::vector<FlipFlopInfo> >::const_iterator it = ffGroupsByType_.begin();
+        it != ffGroupsByType_.end(); ++it) {
+        const std::string& cellType = it->first;
+        const std::vector<FlipFlopInfo>& instances = it->second;
+
         cout << "  " << cellType << ": " << instances.size() << " instances";
 
-        // Check if this is suitable for banking
         const LibCell* libCell = libParser_->getCell(cellType);
         if (libCell && !libCell->singleBitDegenerate.empty()) {
             cout << " [can bank to: " << libCell->singleBitDegenerate << "]";
@@ -154,19 +158,25 @@ void Parser::groupFFInstancesByType() {
         cout << endl;
     }
 
+
     // Analyze banking opportunities
     cout << "\nPre-banking analysis:" << endl;
 
     // Count single-bit FFs that can be banked
     int bankableSBFF = 0;
-    for (const auto& [cellType, instances] : ffGroupsByType_) {
-        if (cellType.find("2_") == string::npos &&
-            cellType.find("4_") == string::npos &&
-            cellType.find("8_") == string::npos) {
-            // This is a single-bit FF
+    cout << "\nPre-banking analysis:" << endl;
+    for (std::map<std::string, std::vector<FlipFlopInfo> >::const_iterator it = ffGroupsByType_.begin();
+        it != ffGroupsByType_.end(); ++it) {
+        const std::string& cellType = it->first;
+        const std::vector<FlipFlopInfo>& instances = it->second;
+
+        if (cellType.find("2_") == std::string::npos &&
+            cellType.find("4_") == std::string::npos &&
+            cellType.find("8_") == std::string::npos) {
             bankableSBFF += instances.size();
         }
     }
+
 
     cout << "  Total single-bit FFs: " << bankableSBFF << endl;
     cout << "  Potential 2-bit MBFFs: " << bankableSBFF / 2 << endl;
@@ -257,12 +267,16 @@ void Parser::performBankingOptimization() {
         << "with " << statistics.totalScanChains << " scan chains..." << endl;
 
     // Process each clock domain separately
-    for (const auto& [clockNet, scanChains] : clusteredDesign) {
+    for (std::map<std::string, std::vector<ScanChainClustered> >::const_iterator it = clusteredDesign.begin();
+        it != clusteredDesign.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChainClustered>& scanChains = it->second;
+
         cout << "\nProcessing clock domain: " << clockNet << endl;
         cout << "  Chains in domain: " << scanChains.size() << endl;
 
         // Find banking candidates within this clock domain
-        auto candidates = hierarchicalClustering_->findBankingCandidates(clockNet);
+        std::vector<BankingCandidate> candidates = hierarchicalClustering_->findBankingCandidates(clockNet);
         cout << "  Banking candidates found: " << candidates.size() << endl;
 
         // TODO: Implement actual banking algorithm
@@ -270,6 +284,7 @@ void Parser::performBankingOptimization() {
         // 2. Consider proximity, timing, and power constraints
         // 3. Generate optimal banking solutions
     }
+
 
     cout << "\n[TODO] Implement actual banking algorithm based on clustering" << endl;
 }
@@ -527,7 +542,16 @@ bool Parser::parseDEF(const string& filename) {
         addError("DEF parser not initialized");
         return false;
     }
-
+    {
+        std::ifstream fin(defFile);
+        std::string line;
+        auto& origLines = defParser_->getDefData().originalDefLines;
+        origLines.clear(); // 保險
+        while (std::getline(fin, line)) {
+            origLines.push_back(line);
+        }
+        fin.close();
+    }
     if (defParser_->parseFile(defFile)) {
         defLoaded_ = true;
         cout << "✓ DEF file (" << defFile << ") parsed successfully" << endl;
@@ -863,7 +887,90 @@ void Parser::buildMacroMap() {
         }
     }
 }
+const std::vector<LefSiteInfo> Parser::emptyLefSites_;
 
+// Get DEF data (non-const for updates)
+DefData& Parser::getDefData() {
+    if (!defParser_) {
+        throw std::runtime_error("DEF parser not initialized");
+    }
+    return defParser_->getDefData();
+}
+
+// Get DEF data (const version)
+const DefData& Parser::getDefData() const {
+    if (!defParser_) {
+        throw std::runtime_error("DEF parser not initialized");
+    }
+    return defParser_->getDefData();
+}
+
+// Get LEF sites
+const std::vector<LefSiteInfo>& Parser::getLefSites() const {
+    if (lefParser_) {
+        return lefParser_->getSites();
+    }
+    return emptyLefSites_;
+}
+
+// Perform legalization
+bool Parser::performLegalization() {
+    std::cout << "\n=== Starting Flip-Flop Legalization ===" << std::endl;
+
+    if (!isDefLoaded() || !isLefLoaded()) {
+        addError("DEF and LEF must be loaded before legalization");
+        return false;
+    }
+
+    // Get reference to DEF data
+    DefData& defData = getDefData();
+
+    // Debug: Show some components before legalization
+    std::cout << "\nSample components before legalization:" << std::endl;
+    int count = 0;
+    for (const auto& comp : defData.components) {
+        if (DefUtils::isFlipFlopCell(comp.cellType) && count++ < 5) {
+            std::cout << "  " << comp.name << " at ("
+                << comp.x << ", " << comp.y << ") orient: "
+                << comp.orient << std::endl;
+        }
+    }
+
+    // Create legalizer
+    Legalizer legalizer(defData, getMacroMap(), getLefSites());
+
+    // Run legalization
+    if (legalizer.legalizeAll()) {
+        std::cout << "✓ All flip-flops legalized successfully" << std::endl;
+
+        // Update DEF data with legalized positions
+        legalizer.updateDefComponents(defData);
+
+        // Debug: Show same components after legalization
+        std::cout << "\nSample components after legalization:" << std::endl;
+        count = 0;
+        for (const auto& comp : defData.components) {
+            if (DefUtils::isFlipFlopCell(comp.cellType) && count++ < 5) {
+                std::cout << "  " << comp.name << " at ("
+                    << comp.x << ", " << comp.y << ") orient: "
+                    << comp.orient << std::endl;
+            }
+        }
+
+        // Export legalization report
+        std::string reportFile = outputName_ + "_legalization_report.txt";
+        legalizer.exportLegalizationReport(reportFile);
+
+        // Print summary
+        legalizer.printLegalizationSummary();
+
+        return true;
+    }
+    else {
+        addError("Some flip-flops could not be legalized");
+        return false;
+    }
+}
 
 // Utility functions namespace
 namespace ParserUtils {

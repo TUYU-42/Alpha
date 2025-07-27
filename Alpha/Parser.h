@@ -59,6 +59,7 @@ public:
     explicit Parser(const std::string& baseName = "testcase1",
         const std::string& outputName = "output");
     ~Parser();
+    static const std::vector<LefSiteInfo> emptyLefSites_;
 
     // Disable copy
     Parser(const Parser&) = delete;
@@ -172,6 +173,17 @@ public:
     bool isFFCellType(const std::string& cellType) const {
         return ffCellTypes_.find(cellType) != ffCellTypes_.end();
     }
+   
+    // Get macro map
+  
+    DefData& getDefData();  // Non-const version for updates
+    const DefData& getDefData() const;  // Const version
+
+    // Get LEF sites
+    const std::vector<LefSiteInfo>& getLefSites() const;
+
+    // Legalization method
+    bool performLegalization();
 
 private:
     // Error tracking
