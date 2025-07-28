@@ -814,15 +814,25 @@ bool Parser::writeOutputFiles() const {
         mapFile.close();
         cout << "✓ Generated " << mappingFile << endl;
 
-        // 產生 DEF 檔案
-        string defFile = outputName_ + ".def";
-        // TODO: 實作 DEF 輸出
-        cout << "  [TODO] Generate " << defFile << endl;
+      
 
         // 產生 Verilog 檔案
         string verilogFile = outputName_ + ".v";
-        // TODO: 實作 Verilog 輸出
-        cout << "  [TODO] Generate " << verilogFile << endl;
+        if (!inputVerilogFile_.empty()) {
+            ifstream fin(inputVerilogFile_);
+            ofstream fout(verilogFile);
+            string line;
+            while (getline(fin, line)) {
+                fout << line << '\n';
+            }
+            fin.close();
+            fout.close();
+            cout << "✓ Copied original Verilog to " << verilogFile << endl;
+        }
+        else {
+            cout << "  [Warning] No input Verilog file specified, cannot copy." << endl;
+        }
+
 
         return true;
     }

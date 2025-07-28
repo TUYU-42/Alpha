@@ -28,7 +28,7 @@ private:
     std::unique_ptr<SdcParser> sdcParser_;
     std::unique_ptr<TechParser> techParser_;
     std::unique_ptr<LibParser> libParser_;  // 新增
-
+    std::string inputVerilogFile_;  // 新增
     // File paths
     std::string baseName_;
     std::string outputName_;
@@ -184,7 +184,7 @@ public:
 
     // Legalization method
     bool performLegalization();
-
+    void setInputVerilogFile(const std::string& filename) { inputVerilogFile_ = filename; }
 private:
     // Error tracking
     mutable std::vector<std::string> errors_;

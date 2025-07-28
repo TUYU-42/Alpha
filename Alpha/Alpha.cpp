@@ -228,7 +228,9 @@ int main(int argc, char* argv[]) {
     try {
         // Create Parser object
         Parser parser("", args.outputName);
-
+        if (!args.verilogFiles.empty()) {
+            parser.setInputVerilogFile(args.verilogFiles[0]);
+        }
         // Execute contest workflow with new .lib-first approach
         if (!executeContestWorkflow(parser, args)) {
             cerr << "Error: Contest workflow failed" << endl;
