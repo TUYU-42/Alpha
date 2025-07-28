@@ -776,7 +776,7 @@ bool Parser::writeOutputFiles() const {
 
     try {
         // 產生 mapping 檔案 (.txt)
-        string mappingFile = outputName_ + ".txt";
+        string mappingFile = outputName_ + ".list";
         ofstream mapFile(mappingFile);
         if (!mapFile.is_open()) {
             addError("Cannot create mapping file: " + mappingFile);

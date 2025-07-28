@@ -443,7 +443,7 @@ bool Legalizer::legalizeCellInRow(CellToLegalize& cell, int rowIdx) {
             if (findAvailableSites(row, needSites, startSite, cell.origX)) {
                 cell.newX = row.getSiteX(startSite);
                 cell.newY = row.y;
-                cell.newOrient = cellOrient; // 實際記錄cell orient
+                cell.newOrient = finalOrient; // 實際記錄cell orient
                 cell.startSite = startSite;
                 cell.legalized = true;
                 markSitesOccupied(row, startSite, needSites, cell.instName);
@@ -459,7 +459,7 @@ bool Legalizer::legalizeCellInRow(CellToLegalize& cell, int rowIdx) {
                 findAvailableSites(nextRow, needSites, startSite, cell.origX)) {
                 cell.newX = row.getSiteX(startSite);
                 cell.newY = row.y;
-                cell.newOrient = cellOrient;
+                cell.newOrient = finalOrient;
                 cell.startSite = startSite;
                 cell.legalized = true;
                 markSitesOccupied(row, startSite, needSites, cell.instName);
