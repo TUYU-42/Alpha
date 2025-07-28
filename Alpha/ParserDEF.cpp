@@ -930,7 +930,7 @@ void DefParser::computeRowDimensions() {
 }
 
 void DefParser::assignComponentsToRows() {
-    std::ofstream fout("component_rowinfo.txt");
+   // std::ofstream fout("component_rowinfo.txt");
     std::map<std::string, int> rowCountMap;
     rowToComponentsMap_.clear();
     rowComponentCount_.clear();
@@ -961,13 +961,13 @@ void DefParser::assignComponentsToRows() {
             rowToComponentsMap_["UNPLACED"].push_back(&comp);
         }
 
-        fout << comp.name << " : " << comp.rowName << std::endl;
+    //    fout << comp.name << " : " << comp.rowName << std::endl;
     }
 
-    fout.close();
+   //fout.close();
 
     // Write row:component count file
-    std::ofstream countOut("row_component_count.txt");
+   /* std::ofstream countOut("row_component_count.txt");
     for (const auto& entry : rowCountMap) {
         const std::string& rowName = entry.first;
         int count = entry.second;
@@ -975,4 +975,5 @@ void DefParser::assignComponentsToRows() {
         rowComponentCount_[rowName] = count;
     }
     countOut.close();
+    */
 }

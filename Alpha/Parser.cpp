@@ -968,8 +968,8 @@ bool Parser::performLegalization() {
         }
 
         // Export legalization report
-        std::string reportFile = outputName_ + "_legalization_report.txt";
-        legalizer.exportLegalizationReport(reportFile);
+     //   std::string reportFile = outputName_ + "_legalization_report.txt";
+     //   legalizer.exportLegalizationReport(reportFile);
 
         // Print summary
         legalizer.printLegalizationSummary();
