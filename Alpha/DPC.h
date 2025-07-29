@@ -15,7 +15,7 @@ struct ScanChainClustered;
 struct BankingCandidate;
 
 // --------------------------------
-// DPC 基本資料結構
+// DPC 基本資料結?
 // --------------------------------
 struct DPCPoint {
     std::string instanceName;
@@ -68,7 +68,7 @@ struct DPCStatistics {
 };
 
 // --------------------------------
-// DPC 類別
+// DPC ?別
 // --------------------------------
 class DensityPeakClustering {
 public:
@@ -78,23 +78,23 @@ public:
     // 主流程（從 FlipFlopInfo 轉換點並分群）
     void performClustering(const std::vector<FlipFlopInfo>& flipFlops, bool autoTune = true);
 
-    // 針對一個 scan chain（需要查詢 FF lookup）- 使用 ScanChainClustered
+    // ?對一? scan chain（需要查? FF lookup）- 使用 ScanChainClustered
     void performClusteringOnScanChain(
         const ScanChainClustered& chain,
         const std::map<std::string, FlipFlopInfo>& ffLookup,
         bool autoTune = true);
 
-    // 直接對自訂 DPC 點分群（最底層，不依賴 FlipFlopInfo）
+    // 直接對自? DPC 點分群（最底層，不依? FlipFlopInfo）
     void performClusteringOnPoints(const std::vector<DPCPoint>& pts, bool autoTune = true);
 
-    // 參數設定 / 查詢
+    // 參數設定 / 查?
     void setCutoffDistance(double dc) { cutoffDistance_ = dc; }
     void setDensityThreshold(double thr) { densityThreshold_ = thr; }
     void setDistanceThreshold(double thr) { distanceThreshold_ = thr; }
     void setUseGaussianKernel(bool b) { useGaussianKernel_ = b; }
     int estimateBestClusterCount() const;
 
-    // 自動參數估計（可在外部手動呼叫）
+    // 自動參數估?（可在外部手動呼叫）
     void autoTuneParameters();
 
     // 結果

@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <climits>
 #include <iomanip>
 #include <map>
 #include <set>
@@ -107,7 +108,10 @@ bool DefParser::parseFile(const string& filename) {
                     xMin = std::min(xMin, x); xMax = std::max(xMax, x);
                     yMin = std::min(yMin, y); yMax = std::max(yMax, y);
                 }
-                defData_.dieArea = { xMin, yMin, xMax, yMax };
+                defData_.dieArea.xMin = xMin;
+                defData_.dieArea.yMin = yMin;
+                defData_.dieArea.xMax = xMax;
+                defData_.dieArea.yMax = yMax;
                 continue;
             }
 

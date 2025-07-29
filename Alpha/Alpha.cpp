@@ -1,7 +1,7 @@
 ﻿#include "Parser.h"
 #include "DataStructures.h"
 #include "place.h"
-#include "dpc.h"
+#include "DPC.h"
 #include "Legalizer.h"
 #include <iostream>
 #include <fstream>

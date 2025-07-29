@@ -1,5 +1,6 @@
-#include "dpc.h"
+#include "DPC.h"
 #include "DataStructures.h"
+#include <cmath>
 #include <iostream>
 
 DensityPeakClustering::DensityPeakClustering() {}
