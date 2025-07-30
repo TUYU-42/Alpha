@@ -170,9 +170,9 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
                     qNetToFF[conn.second] = ff.instName;
                 }
             }
-            // 處理多位元 FF 的 Q pins (Q0, Q1, Q2, Q3...)
+            // ?理多位元 FF 的 Q pins (Q0, Q1, Q2, Q3...)
             else if (regex_match(conn.first, regex("Q\\d+|q\\d+"))) {
-                // 記錄最高位的 Q pin 作為潛在的 SO
+                // ??最高位的 Q pin 作為?在的 SO
                 int bitIndex = stoi(conn.first.substr(1));
                 if (bitIndex == getCellBitWidth(ff.cellType) - 1) {
                     qNet = conn.second;
@@ -206,13 +206,13 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
 
         if (!siNet.empty() && siNet != "UNCONNECTED" &&
             siNet.find("UNCONNECTED") == string::npos) {
-            // 檢查是否有 FF 的 SO 連到這個 SI
+            // 檢查是否有 FF 的 SO 連到這? SI
             if (soNetToFF.find(siNet) != soNetToFF.end()) {
                 isChainStart = false;
             }
-            // 檢查是否有 FF 的 Q 連到這個 SI（Q-as-SO case）
+            // 檢查是否有 FF 的 Q 連到這? SI（Q-as-SO case）
             else if (qNetToFF.find(siNet) != qNetToFF.end()) {
-                // 確認這個 Q 確實被用作 scan out
+                // 確認這? Q 確?被用作 scan out
                 string sourceFF = qNetToFF[siNet];
                 if (ffToSoNet[sourceFF] == siNet) {
                     isChainStart = false;
@@ -240,13 +240,13 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
             chainVisited.insert(current);
             visited.insert(current);
 
-            // 找到下一個 FF
+            // 找到下一? FF
             string outNet = ffToSoNet[current]; // 可能是 SO 或 Q
             string next = "";
 
             if (!outNet.empty() && outNet != "UNCONNECTED" &&
                 outNet.find("UNCONNECTED") == string::npos) {
-                // 找到由這個 net 連接的 FF 的 SI
+                // 找到由這? net 連接的 FF 的 SI
                 auto it = siNetToFF.find(outNet);
                 if (it != siNetToFF.end()) {
                     next = it->second;
@@ -304,7 +304,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
         }
     }
 
-    // 檢查是否有未訪問的 FF
+    // 檢查是否有未訪?的 FF
     vector<string> unvisited;
     for (const auto& ff : flipFlops) {
         if (visited.find(ff.instName) == visited.end()) {

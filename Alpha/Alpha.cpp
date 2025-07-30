@@ -285,30 +285,195 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            /*
+            
             // Perform clustering
-            cout << "\n=== Hierarchical Clustering Phase ===" << endl;
-           parser.performHierarchicalClustering();
-
             //*dpc test*
-            const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
-            std::map<std::string, FlipFlopInfo> ffLookup;
-            const auto& clockDomains = clustering->getClockDomains();
-            for (const auto& [clk, ffs] : clockDomains) {
-               for (const auto& ff : ffs) {
-                    ffLookup[ff.instName] = ff;
-               }
-            }
-           DensityPeakClustering dpc;
+            const auto& ffList = parser.getDefParser()->getFlipFlops();
+            DensityPeakClustering dpc;
             dpc.setMacroMap(&parser.getMacroMap());
-            const auto& clusteredDesign = clustering->getClusteredDesign();
-           auto result = dpc.clusterByScanChain(clusteredDesign, ffLookup);
-           
 
-           // Perform banking optimization
-            cout << "\n=== Banking Optimization Phase ===" << endl;
-           parser.performBankingOptimization();
-           */
+            // 構造 ffLookup（map: instance name → FlipFlopInfo）
+            std::map<std::string, FlipFlopInfo> ffLookup;
+            for (const auto& ff : ffList) {
+                ffLookup[ff.instName] = ff;
+            }
+
+
+            // bankingList 不經 cluster 直接合併
+            auto bankingList = dpc.clusterByAllFFs(ffList, parser.getLibParser(), parser.getWeightParser());
+
+            // 這裡要把 ffLookup 傳進去
+            dpc.exportBankingDebugReport(bankingList, "banking_debug_report.txt", ffLookup, parser.getLibParser());
+            parser.setBankingList(bankingList);
+
+
+            //write def test
+            std::ofstream ofs("original_nets_debug.txt");
+            if (!ofs) {
+                std::cerr << "Failed to open nets_debug.txt for writing!" << std::endl;
+            }
+            else {
+                ofs << "=== DEF NetInfo Debug Output ===\n";
+                ofs << "Total nets: " << parser.getDefData().nets.size() << "\n\n";
+                for (const auto& net : parser.getDefData().nets) {
+                    ofs << "Net: " << net.name << " (use: " << net.use << ")\n";
+                    for (const auto& conn : net.connections) {
+                        ofs << "  - Instance: " << conn.instance << ", Pin: " << conn.pin << "\n";
+                    }
+                    ofs << "---------------------------------\n";
+                }
+            }
+
+            // 先備份原本的 defdata
+            auto defdatacopy = parser.getDefData();
+            parser.getDefData().components.clear();
+
+            // 1. 先推 MBFF
+            for (const auto& mbff : bankingList) {
+                ComponentInfo newComp;
+                newComp.name = mbff.newInstanceName;
+                newComp.cellType = mbff.mbffCellType;
+                newComp.x = mbff.x;
+                newComp.y = mbff.y;
+                if (!mbff.mergedFFs.empty()) {
+                    auto it = ffLookup.find(mbff.mergedFFs[0]);
+                    newComp.orient = (it != ffLookup.end()) ? it->second.orient : "N";
+                }
+                else {
+                    newComp.orient = "N";
+                }
+                parser.getDefData().components.push_back(newComp);
+            }
+
+            // 2. 再推回原本 def 裡面的其他非 FF（邏輯閘、buffer 等）
+            // 假設 ffLookup 裡面存的都是 FF
+            std::set<std::string> ffNames;
+            for (const auto& kv : ffLookup) ffNames.insert(kv.first);
+
+            for (const auto& comp : defdatacopy.components) {
+                if (ffNames.count(comp.name) == 0) {
+                    // 不是 FF，直接加回去
+                    parser.getDefData().components.push_back(comp);
+                }
+            }
+
+
+            // 1. STEP 1: 建立 instance pin 對 net 的 lookup
+            std::map<std::pair<std::string, std::string>, std::string> instPinToNet;
+            for (const auto& net : defdatacopy.nets) {
+                for (const auto& np : net.connections) {
+                    instPinToNet[{np.instance, np.pin}] = net.name;
+                }
+            }
+
+            // 2. STEP 2: 收集所有被 merge 的 FF instance name
+            std::set<std::string> mergedFFs;
+            for (const auto& mb : bankingList)
+                for (const auto& ff : mb.mergedFFs)
+                    mergedFFs.insert(ff);
+
+            // 3. STEP 3: 遍歷所有 nets，**先保留沒有被 merge 的 instance/pin**
+            std::vector<NetInfo> newNets;
+            for (const auto& net : defdatacopy.nets) {
+                NetInfo n = net;
+                std::vector<NetPin> filtered;
+                for (const auto& np : net.connections) {
+                    if (mergedFFs.count(np.instance) == 0) {
+                        filtered.push_back(np);
+                    }
+                }
+                if (!filtered.empty()) {
+                    n.connections = filtered;
+                    newNets.push_back(n);
+                }
+            }
+
+            // 4. STEP 4: 為每個 MBFF 新增正確的連線
+            for (const auto& mbff : bankingList) {
+                for (const auto& [mbffPin, origFFPin] : mbff.mbffPinToOrigPin) {
+                    auto slashPos = origFFPin.find('/');
+                    std::string origInst = origFFPin.substr(0, slashPos);
+                    std::string origPin = origFFPin.substr(slashPos + 1);
+                    auto netIt = instPinToNet.find({ origInst, origPin });
+                    if (netIt == instPinToNet.end()) continue;
+
+                    std::string origNetName = netIt->second;
+                    auto found = std::find_if(newNets.begin(), newNets.end(),
+                        [&](const NetInfo& n) { return n.name == origNetName; });
+                    if (found == newNets.end()) {
+                        NetInfo newNet;
+                        newNet.name = origNetName;
+                        newNet.use = ""; // 可以根據原本 net 填
+                        newNet.connections.push_back({ mbff.newInstanceName, mbffPin });
+                        newNets.push_back(newNet);
+                    }
+                    else {
+                        found->connections.push_back({ mbff.newInstanceName, mbffPin });
+                    }
+                }
+            }
+
+            // 5. STEP 5: 單顆 FF
+            for (const auto& mbff : bankingList) {
+                if (mbff.bitWidth == 1) {
+                    const std::string& origInst = mbff.newInstanceName;
+                    for (const auto& net : defdatacopy.nets) {
+                        for (const auto& np : net.connections) {
+                            if (np.instance == origInst) {
+                                auto found = std::find_if(newNets.begin(), newNets.end(),
+                                    [&](const NetInfo& n) { return n.name == net.name; });
+                                if (found != newNets.end()) {
+                                    auto same = std::find_if(found->connections.begin(), found->connections.end(),
+                                        [&](const NetPin& conn) { return conn.instance == np.instance && conn.pin == np.pin; });
+                                    if (same == found->connections.end())
+                                        found->connections.push_back(np);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            parser.getDefData().nets = newNets;
+
+
+            // DEBUG 1: 輸出每個 MBFF/pin 對應原 FF/pin/net
+            {
+                std::ofstream dbg("banking_net_debug.txt");
+                for (const auto& mbff : bankingList) {
+                    dbg << "MBFF instance: " << mbff.newInstanceName << " (cell=" << mbff.mbffCellType << ", bitWidth=" << mbff.bitWidth << ")\n";
+                    for (const auto& [mbffPin, origFFPin] : mbff.mbffPinToOrigPin) {
+                        dbg << "  MBFF pin: " << mbffPin;
+                        dbg << "  -> original FF pin: " << origFFPin;
+                        auto slashPos = origFFPin.find('/');
+                        std::string origInst = origFFPin.substr(0, slashPos);
+                        std::string origPin = origFFPin.substr(slashPos + 1);
+                        auto netIt = instPinToNet.find({ origInst, origPin });
+                        if (netIt != instPinToNet.end())
+                            dbg << "  [net=" << netIt->second << "]";
+                        else
+                            dbg << "  [net=N/A]";
+                        dbg << "\n";
+                    }
+                    dbg << "-----------------------------------\n";
+                }
+            }
+
+            // DEBUG 2: 輸出完整 net 資訊
+            {
+                std::ofstream ofs("nets_debug.txt");
+                ofs << "=== DEF NetInfo Debug Output ===\n";
+                for (const auto& net : parser.getDefData().nets) {
+                    ofs << "Net: " << net.name << " (use: " << net.use << ")\n";
+                    for (const auto& conn : net.connections) {
+                        ofs << "  - Instance: " << conn.instance << ", Pin: " << conn.pin << "\n";
+                    }
+                    ofs << "---------------------------------\n";
+                }
+                ofs << "Total nets: " << parser.getDefData().nets.size() << "\n";
+            }
+
+
         }
 
         // Generate output files

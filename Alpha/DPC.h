@@ -1,9 +1,12 @@
 #pragma once
 #include "DataStructures.h"
+#include "Parser.h"
+#include "LibParser.h"
 #include <algorithm>
 #include <iostream>
 #include <vector>
 #include <string>
+#include <cmath>
 #include <map>
 #include <utility>
 #include <limits>
@@ -11,17 +14,17 @@
 
 // Forward declarations to avoid heavy includes
 struct FlipFlopInfo;
-struct ScanChainClustered;
+struct ScanChain;
 struct BankingCandidate;
 
 // --------------------------------
-// DPC 基本資料結?
+// DPC 膀セ戈挡篶
 // --------------------------------
 struct DPCPoint {
     std::string instanceName;
     std::string cellType;
     std::string rowName;   // optional
-    double x = 0;          // coord (database units or micron: caller保證一致)
+    double x = 0;          // coord (database units or micron: caller玂靡璓)
     double y = 0;
     double width = 0;      // optional: for later packing
     double height = 0;
@@ -68,36 +71,36 @@ struct DPCStatistics {
 };
 
 // --------------------------------
-// DPC ?別
+// DPC 摸
 // --------------------------------
 class DensityPeakClustering {
 public:
     DensityPeakClustering();
     ~DensityPeakClustering();
 
-    // 主流程（從 FlipFlopInfo 轉換點並分群）
+    // 瑈祘眖 FlipFlopInfo 玻ネ翴だ竤
     void performClustering(const std::vector<FlipFlopInfo>& flipFlops, bool autoTune = true);
 
-    // ?對一? scan chain（需要查? FF lookup）- 使用 ScanChainClustered
+    // 皐癸虫 scan chain惠办 FF lookup
     void performClusteringOnScanChain(
-        const ScanChainClustered& chain,
+        const ScanChain& chain,
         const std::map<std::string, FlipFlopInfo>& ffLookup,
         bool autoTune = true);
 
-    // 直接對自? DPC 點分群（最底層，不依? FlipFlopInfo）
+    // 钡癸称 DPC 翴だ竤程┏糷ぃㄌ苦 FlipFlopInfo
     void performClusteringOnPoints(const std::vector<DPCPoint>& pts, bool autoTune = true);
 
-    // 參數設定 / 查?
+    // 把计砞﹚ / 琩高
     void setCutoffDistance(double dc) { cutoffDistance_ = dc; }
     void setDensityThreshold(double thr) { densityThreshold_ = thr; }
     void setDistanceThreshold(double thr) { distanceThreshold_ = thr; }
     void setUseGaussianKernel(bool b) { useGaussianKernel_ = b; }
     int estimateBestClusterCount() const;
 
-    // 自動參數估?（可在外部手動呼叫）
+    // 笆把计︳璸场も笆㊣
     void autoTuneParameters();
 
-    // 結果
+    // 挡狦
     const std::vector<DPCPoint>& points() const { return points_; }
     const std::vector<DPCCluster>& clusters() const { return clusters_; }
     const DPCStatistics& stats() const { return statistics_; }
@@ -106,23 +109,32 @@ public:
     std::vector<DecisionPoint> getDecisionGraph() const;
     void exportDecisionGraphCSV(const std::string& filename) const;
 
-    // 報告
+    // 厨
     void printClusteringSummary() const;
     void printDetailedReport() const;
     void exportClustersCSV(const std::string& filename) const;
+    // dpc.h
+    void exportClusteringSummary(
+        const std::string& chainId,
+        const std::string& filename,
+        const LibParser* libParser) const;
 
-    // 評估
+
+
+    // 蝶︳
     double silhouetteScore() const;
     double daviesBouldinIndex() const;
 
-    // 批次：對 clockDomain→scanChains 做分群 - 使用 ScanChainClustered
-    using ClockScanMap = std::map<std::string, std::vector<ScanChainClustered>>;
+    // уΩ癸 clockDomain△scanChains 暗だ竤
+    using ClockScanMap = std::map<std::string, std::vector<ScanChain>>;
     std::map<std::string, std::vector<DPCCluster>>
-        clusterByScanChain(const ClockScanMap& scanChains,
+        clusterByScanChain(
+            const std::map<std::string, std::vector<ScanChainClustered>>& scanChains,
             const std::map<std::string, FlipFlopInfo>& ffLookup,
-            bool autoTune = true);
+            const LibParser* libParser,   // 穝糤硂把计
+            bool autoTune);
 
-    // Banking 候選（由分群結果推薦）
+    // Banking 匡パだ竤挡狦崩
     std::vector<BankingCandidate> findBankingCandidatesInClusters() const;
 
     //read information
@@ -131,22 +143,41 @@ public:
     }
     void clear();
 
+    LibParser* libParser_ = nullptr;
+    void setLibParser(LibParser* p) { libParser_ = p; }
+    //banking
+    std::vector<MBFFInstance>
+        generateBankingResults(
+            const std::map<std::string, std::vector<DPCCluster>>& clusterResult,
+            const std::map<std::string, FlipFlopInfo>& ffLookup,
+            const LibParser* libParser,
+            const WeightParser* weights_) const;
+    void exportBankingDebugReport(
+        const std::vector<MBFFInstance>& bankingList,
+        const std::string& filename,
+        const std::map<std::string, FlipFlopInfo>& ffLookup,
+        const LibParser* libParser) const;
+    std::vector<MBFFInstance> clusterByAllFFs(
+        const std::vector<FlipFlopInfo>& ffList,
+        const LibParser* libParser,
+        const WeightParser* weights);
+
 private:
-    // 資料
+    // 戈
     std::vector<DPCPoint> points_;
     std::vector<std::vector<double>> distMat_;
     std::vector<DPCCluster> clusters_;
     DPCStatistics statistics_;
     const std::unordered_map<std::string, LefMacroInfo>* macroMap_ = nullptr;
 
-    // 參數
+    // 把计
     double cutoffDistance_ = -1;
     double densityThreshold_ = -1;
     double distanceThreshold_ = -1;
     bool useGaussianKernel_ = true;
 
-    // --- 私有流程 ---
-    void loadPointsFromFF(const std::vector<FlipFlopInfo>&); // 格式轉換
+    // --- ╬Τ瑈祘 ---
+    void loadPointsFromFF(const std::vector<FlipFlopInfo>&); // 畒夹锣传
     void buildDistanceMatrix();
 
     static double boxManhattanDistance(const DPCPoint& a, const DPCPoint& b);
@@ -161,4 +192,5 @@ private:
     // helper
     double estimateOptimalCutoffDistance() const;
     std::pair<double, double> estimateThresholdsFromDecisionGraph() const;
+
 };

@@ -305,4 +305,20 @@ struct LefData {
     std::vector<LefMacroInfo> macros;
 };
 
+// 合併後的 MBFF 結構
+struct MBFFInstance {
+    std::string mbffCellType;                 // 合併後的 cell type (2bit/4bit MBFF名)
+    std::vector<std::string> mergedFFs;       // 原來的 instance names
+    double x = 0, y = 0;                      // 放置的質心
+    int bitWidth;                             // 2 or 4 (或 1, 單顆)
+    double width = 0, height = 0;             // MBFF cell 長寬（由 lib 取得，方便placement）
+    double cellLeakagePower = 0;              // MBFF cell leakage（由 lib 取得，方便功耗統計）
+    double totalOrigArea = 0;                 // 合併前原本的總面積
+    double totalOrigLeakage = 0;              // 合併前原本的總leakage
+    std::string newInstanceName;
+    std::string orientation = "N";            // <--- 新增，預設為 "N"
+    std::map<std::string, std::string> mbffPinToOrigPin; // 例如 D[0] -> foo1__100/D
+    std::map<std::string, std::string> mbffPinToOrigFF;  // 例如 D[0] -> foo1__100
+};
+
 #endif // DATASTRUCTURES_H

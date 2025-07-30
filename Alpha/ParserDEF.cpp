@@ -337,35 +337,36 @@ bool DefParser::parsePinInfo(ifstream& file, const string& line) {
     return false;
 }
 
-bool DefParser::parseNetInfo(ifstream& file, const string& line) {
+bool DefParser::parseNetInfo(ifstream& file, const string& firstLine) {
     smatch m;
-    if (regex_search(line, m, netStartRegex_)) {
-        NetInfo net;
-        net.name = m[1];
+    if (!std::regex_search(firstLine, m, netStartRegex_)) return false;
 
-        string nextLine;
-        while (getline(file, nextLine)) {
-            smatch pinMatch;
-            if (regex_search(nextLine, pinMatch, netPinRegex_)) {
-                NetPin netPin;
-                netPin.instance = pinMatch[1];
-                netPin.pin = pinMatch[2];
-                net.connections.push_back(netPin);
-            }
-            else {
-                smatch useMatch;
-                if (regex_search(nextLine, useMatch, netUseRegex_)) {
-                    net.use = useMatch[1];
-                    break;
-                }
-            }
+    NetInfo net;
+    net.name = m[1];
+    string line = firstLine;
+    bool netEnded = false;
+    while (!netEnded && getline(file, line)) {
+        smatch pinMatch;
+        if (std::regex_search(line, pinMatch, netPinRegex_)) {
+            NetPin netPin;
+            netPin.instance = pinMatch[1];
+            netPin.pin = pinMatch[2];
+            net.connections.push_back(netPin);
         }
-
-        defData_.nets.push_back(net);
-        return true;
+        smatch useMatch;
+        if (std::regex_search(line, useMatch, netUseRegex_)) {
+            net.use = useMatch[1];
+        }
+        if (line.find(";") != string::npos) {
+            netEnded = true;
+        }
     }
-    return false;
+    if (!net.connections.empty()) {
+        defData_.nets.push_back(net);
+    }
+    return true;
 }
+
 
 
 void DefParser::analyzeFlipFlops() {
@@ -805,7 +806,7 @@ bool DefParser::writeDefFile(const string& filename) const {
     if (!defFile.is_open()) return false;
 
     try {
-        // 1. 手動輸出你要覆寫的部份
+        // 1. 輸出 header
         defFile << "VERSION 5.8 ;" << endl;
         defFile << "DIVIDERCHAR \"/\" ;" << endl;
         defFile << "BUSBITCHARS \"[]\" ;" << endl;
@@ -820,21 +821,18 @@ bool DefParser::writeDefFile(const string& filename) const {
             << defData_.dieArea.xMax << " " << defData_.dieArea.yMax << " ) ( "
             << defData_.dieArea.xMax << " " << defData_.dieArea.yMin << " ) ;" << endl;
 
-
-        // 2. 輸出新的 ROW/TRACKS/COMPONENTS
+        // 2. 輸出 ROW/TRACKS/COMPONENTS（自己生成）
         for (const auto& row : defData_.rows) {
             defFile << "ROW " << row.name << " " << row.siteName << " " << row.x << " " << row.y
                 << " " << row.orientation << " DO " << row.count
                 << " BY " << row.by << " STEP " << row.stepX << " " << row.stepY << " ;" << endl;
         }
-        defFile << "END ROWS" << endl;
 
         for (const auto& track : defData_.tracks) {
             defFile << "TRACKS " << track.direction << " " << track.start
                 << " DO " << track.count << " STEP " << track.step
                 << " LAYER " << track.layer << " ;" << endl;
         }
-        defFile << "END TRACKS" << endl;
 
         defFile << "COMPONENTS " << defData_.components.size() << " ;" << endl;
         for (const auto& comp : defData_.components) {
@@ -843,35 +841,47 @@ bool DefParser::writeDefFile(const string& filename) const {
         }
         defFile << "END COMPONENTS" << endl;
 
-        // 3. 複製其餘原始內容，排除你已經手動寫入的三大區塊
-        enum State { NORMAL, SKIP_ROW, SKIP_TRACK, SKIP_COMPONENTS };
-        State state = NORMAL;
-
+        // 3. 複製 PINS、PINPROPERTIES 區塊
+        bool inPins = false, inPinProps = false;
         for (const auto& line : defData_.originalDefLines) {
-            // 1. 跳過你自己手動產生的header
-            if (line.find("VERSION") == 0)      continue;
-            if (line.find("DIVIDERCHAR") == 0)  continue;
-            if (line.find("BUSBITCHARS") == 0)  continue;
-            if (line.find("DESIGN") == 0)       continue;
-            if (line.find("UNITS") == 0)        continue;
-            if (line.find("PROPERTYDEFINITIONS") == 0) continue;
-            if (line.find("COMPONENTPIN ACCESS_DIRECTION") == 0) continue;
-            if (line.find("END PROPERTYDEFINITIONS") == 0) continue;
-            if (line.find("DIEAREA") == 0)      continue;
-
-            // 2. 跳過ROW/TRACKS/COMPONENTS區塊
-            if (line.find("ROW ") == 0) { state = SKIP_ROW;        continue; }
-            if (line.find("TRACKS ") == 0) { state = SKIP_TRACK;      continue; }
-            if (line.find("COMPONENTS ") == 0) { state = SKIP_COMPONENTS; continue; }
-
-            if (state == SKIP_ROW && line.find("END ROWS") != std::string::npos) { state = NORMAL; continue; }
-            if (state == SKIP_TRACK && line.find("END TRACKS") != std::string::npos) { state = NORMAL; continue; }
-            if (state == SKIP_COMPONENTS && line.find("END COMPONENTS") != std::string::npos) { state = NORMAL; continue; }
-
-            // 3. 其他都複製
-            if (state == NORMAL) {
+            // 複製 PINS 區塊
+            if (line.find("PINS ") == 0) inPins = true;
+            if (inPins) {
                 defFile << line << endl;
+                if (line.find("END PINS") != std::string::npos) {
+                    inPins = false;
+                }
+                continue;
             }
+            // 複製 PINPROPERTIES 區塊
+            if (line.find("PINPROPERTIES") == 0) inPinProps = true;
+            if (inPinProps) {
+                defFile << line << endl;
+                if (line.find("END PINPROPERTIES") != std::string::npos) {
+                    inPinProps = false;
+                }
+                continue;
+            }
+        }
+
+        // 4. 新的 NETS 區塊
+        defFile << "NETS " << defData_.nets.size() << " ;" << endl;
+        for (const auto& net : defData_.nets) {
+            defFile << " - " << net.name << endl;
+            for (const auto& conn : net.connections) {
+                defFile << "   ( " << conn.instance << " " << conn.pin << " )" << endl;
+            }
+            if (!net.use.empty())
+                defFile << "   + USE " << net.use << " ;" << endl;
+            else
+                defFile << "   ;" << endl;
+        }
+        defFile << "END NETS" << endl;
+
+        // 5. 複製 END DESIGN
+        for (const auto& line : defData_.originalDefLines) {
+            if (line.find("END DESIGN") == 0)
+                defFile << line << endl;
         }
 
         defFile.close();

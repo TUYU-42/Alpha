@@ -4,13 +4,13 @@
 
 #include "LibParser.h"
 #include "ParserVerilog.h"
-#include"DataStructures.h"
+#include "DataStructures.h"
 #include <string>
 #include <vector>
 #include <map>
 #include <set>
 
-// 用於存儲 pin mapping 資訊
+// 用於存儲 pin mapping 資?
 struct PinMapping {
     std::string sourceInstance;
     std::string sourcePin;
@@ -44,7 +44,7 @@ public:
         : libParser_(lib), verilogParser_(verilog) {
     }
 
-    // 基本查詢功能
+    // 基本查?功能
     const LibCell* getCellForInstance(const VerilogInstance& inst);
     std::vector<std::string> getInstanceScanPins(const VerilogInstance& inst);
     bool isInstanceScanPin(const VerilogInstance& inst, const std::string& pinName);
@@ -68,7 +68,7 @@ public:
         const std::vector<std::string>& singleBitInstances,
         const std::string& singleBitCellType);
 
-    // 驗證功能
+    // ?證功能
     bool validateScanChainIntegrity();
     bool validatePinConnections(const VerilogInstance& inst);
 

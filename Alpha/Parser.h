@@ -55,6 +55,7 @@ private:
 
     std::map<std::string, std::vector<FlipFlopInfo>> ffGroupsByType_;
     std::set<std::string> ffCellTypes_;  // All known FF cell types from .lib
+    std::vector<MBFFInstance> bankingList_;
 public:
     // Constructor & Destructor
     explicit Parser(const std::string& baseName = "testcase1",
@@ -90,7 +91,9 @@ public:
     const std::set<std::string>& getFinalCellList() const {
         return finalCellList_;
     }
-
+    void setBankingList(const std::vector<MBFFInstance>& bankingList) {
+        bankingList_ = bankingList;
+    }
     // Main parsing interface
     bool parseAllFiles();
     bool parseFile(const std::string& filename, const std::string& fileType);

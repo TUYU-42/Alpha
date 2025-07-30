@@ -947,7 +947,7 @@ bool Parser::performLegalization() {
 
     // Create legalizer
     Legalizer legalizer(defData, getMacroMap(), getLefSites());
-
+    legalizer.setBankingList(bankingList_);
     // Run legalization
     if (legalizer.legalizeAll()) {
         std::cout << "✓ All flip-flops legalized successfully" << std::endl;

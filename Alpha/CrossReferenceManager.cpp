@@ -14,7 +14,7 @@ const LibCell* CrossReferenceManager::getCellForInstance(const VerilogInstance& 
         return it->second;
     }
 
-    // 從 LibParser 查詢
+    // 從 LibParser 查?
     const LibCell* cell = libParser_->getCell(inst.cellType);
     if (cell) {
         cellCache_[inst.cellType] = cell;
@@ -31,14 +31,14 @@ vector<string> CrossReferenceManager::getInstanceScanPins(const VerilogInstance&
         return it->second;
     }
 
-    // 從 LibParser 查詢
+    // 從 LibParser 查?
     vector<string> scanPins = libParser_->getCellScanPins(inst.cellType);
     scanPinCache_[inst.cellType] = scanPins;
 
     return scanPins;
 }
 
-// 判斷 instance 的某個 pin 是否為 scan pin
+// 判斷 instance 的某? pin 是否為 scan pin
 bool CrossReferenceManager::isInstanceScanPin(const VerilogInstance& inst, const string& pinName) {
     return libParser_->isScanPin(inst.cellType, pinName);
 }
@@ -53,7 +53,7 @@ vector<string> CrossReferenceManager::getInstanceBundleMembers(const VerilogInst
     return cell->getBundleMembers(bundleName);
 }
 
-// 找出 instance 的 scan out pin (可能是 SO 或某個 Qn)
+// 找出 instance 的 scan out pin (可能是 SO 或某? Qn)
 string CrossReferenceManager::findScanOutPin(const VerilogInstance& inst) {
     const LibCell* cell = getCellForInstance(inst);
     if (!cell) {
@@ -75,7 +75,7 @@ string CrossReferenceManager::findScanOutPin(const VerilogInstance& inst) {
         if (!qPins.empty()) {
             string highestQ = qPins.back();  // 假設已排序
 
-            // 確認這個 pin 在 instance connections 中存在
+            // 確認這? pin 在 instance connections 中存在
             for (const auto& conn : inst.connections) {
                 if (conn.first == highestQ) {
                     return highestQ;
@@ -137,7 +137,7 @@ vector<ScanChainSegment> CrossReferenceManager::analyzeScanChainConnections() {
             continue;
         }
 
-        // 找出這個 net 連接到的 SI pin
+        // 找出這? net 連接到的 SI pin
         auto it = netToInstPin.find(scanOutNet);
         if (it != netToInstPin.end()) {
             for (const auto& instPin : it->second) {
@@ -225,7 +225,7 @@ vector<PinMapping> CrossReferenceManager::generateBankingMapping(
         qPins = mbCell->getBundleMembers("Q");
     }
 
-    // 對每個 single-bit instance 建立 mapping
+    // 對每? single-bit instance 建立 mapping
     for (size_t i = 0; i < singleBitInstances.size() && i < dPins.size(); ++i) {
         const string& sbInst = singleBitInstances[i];
 
@@ -325,17 +325,17 @@ vector<PinMapping> CrossReferenceManager::generateDebankingMapping(
     }
 
     // Handle scan chain connections
-    // ... (根據 scan chain 順序建立 SI/SO 連接)
+    // ... (根據 scan chain ?序建立 SI/SO 連接)
 
     return mappings;
 }
 
-// 驗證 scan chain 完整性
+// ?證 scan chain 完整性
 bool CrossReferenceManager::validateScanChainIntegrity() {
     vector<ScanChainSegment> segments = analyzeScanChainConnections();
     map<string, vector<string>> chains = buildScanChains();
 
-    // 檢查是否有斷鏈
+    // 檢查是否有斷?
     set<string> allFFInstances;
     for (const auto& inst : verilogParser_->getInstances()) {
         if (VerilogUtils::isFlipFlopCell(inst.cellType)) {
@@ -364,7 +364,7 @@ bool CrossReferenceManager::validateScanChainIntegrity() {
     return true;
 }
 
-// 驗證 pin 連接
+// ?證 pin 連接
 bool CrossReferenceManager::validatePinConnections(const VerilogInstance& inst) {
     const LibCell* cell = getCellForInstance(inst);
     if (!cell) {
@@ -399,7 +399,7 @@ bool CrossReferenceManager::validatePinConnections(const VerilogInstance& inst) 
     return valid;
 }
 
-// 打印 instance 詳細資訊
+// 打印 instance ??資?
 void CrossReferenceManager::printInstanceDetails(const string& instName) {
     const VerilogInstance* inst = verilogParser_->findInstance(instName);
     if (!inst) {
@@ -447,7 +447,7 @@ void CrossReferenceManager::printInstanceDetails(const string& instName) {
         cout << endl;
     }
 
-    // 顯示 scan chain 資訊
+    // 顯示 scan chain 資?
     string scanOut = findScanOutPin(*inst);
     if (!scanOut.empty()) {
         cout << "\nScan Out Pin: " << scanOut;
@@ -497,7 +497,7 @@ void CrossReferenceManager::printScanChainReport() {
         }
     }
 
-    // 驗證完整性
+    // ?證完整性
     cout << "\nIntegrity Check: ";
     if (validateScanChainIntegrity()) {
         cout << "PASSED" << endl;

@@ -658,3 +658,8 @@ void Legalizer::exportLegalizationReport(const string& filename) const {
     ofs.close();
     cout << "Legalization report exported to: " << filename << endl;
 }
+
+// 加在檔案適當位置
+void Legalizer::setBankingList(const std::vector<MBFFInstance>& bankingList) {
+    bankingList_ = bankingList; // 你要先在 Legalizer class 裡面宣告 bankingList_ 這個 member!
+}

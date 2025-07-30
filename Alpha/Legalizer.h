@@ -109,6 +109,7 @@ private:
     void markSitesOccupied(LegalizerRow& row, int startSite,
         int numSites, const std::string& instName);
     std::vector<std::string> getAllowedCellOrients(const std::string& cellType) const;
+    std::vector<MBFFInstance> bankingList_; // <--- ·s¼W
 public:
     // Constructor
     Legalizer(const DefData& defData,
@@ -131,6 +132,7 @@ public:
     const std::vector<CellToLegalize>& getLegalizedCells() const {
         return cellsToLegalize_;
     }
+    void setBankingList(const std::vector<MBFFInstance>& bankingList);
 };
 
 #endif // LEGALIZER_H
