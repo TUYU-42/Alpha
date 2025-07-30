@@ -176,7 +176,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     }
 
     // Parse Verilog
-  /*  if (!args.verilogFiles.empty()) {
+   if (!args.verilogFiles.empty()) {
         cout << "  Parsing Verilog file..." << endl;
         if (!parser.parseVerilog(args.verilogFiles[0])) {
             cerr << "Warning: Failed to parse Verilog file" << endl;
@@ -190,7 +190,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
 
     if (!args.tfFiles.empty()) {
         parser.parseTech(args.tfFiles[0]);
-    }*/
+    }
 
     // STEP 5: Group FF instances by cell type for pre-banking analysis
     cout << "\n=== STEP 5: Group FF Instances by Cell Type ===" << endl;

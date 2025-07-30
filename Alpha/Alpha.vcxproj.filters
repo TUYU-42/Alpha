@@ -47,6 +47,9 @@
     <Filter Include="Cluster">
       <UniqueIdentifier>{b525bef6-5e9d-4174-b1a0-1d089f12f1d8}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Mapping%28verilog，Lib%29">
+      <UniqueIdentifier>{3cd9edfd-16ae-4016-a5fe-cf24db57776b}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -70,9 +73,6 @@
     <ClCompile Include="Alpha.cpp">
       <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="Parser.cpp">
-      <Filter>Parser</Filter>
-    </ClCompile>
     <ClCompile Include="LibParser.cpp">
       <Filter>Parser\Lib</Filter>
     </ClCompile>
@@ -87,6 +87,12 @@
     </ClCompile>
     <ClCompile Include="Legalizer.cpp">
       <Filter>Legalizer</Filter>
+    </ClCompile>
+    <ClCompile Include="Parser.cpp">
+      <Filter>Parser</Filter>
+    </ClCompile>
+    <ClCompile Include="CrossReferenceManager.cpp">
+      <Filter>Mapping%28verilog，Lib%29</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -128,6 +134,9 @@
     </ClInclude>
     <ClInclude Include="Legalizer.h">
       <Filter>Legalizer</Filter>
+    </ClInclude>
+    <ClInclude Include="CrossReferenceManager.h">
+      <Filter>Mapping%28verilog，Lib%29</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

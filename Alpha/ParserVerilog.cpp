@@ -113,16 +113,39 @@ void VerilogParser::printScanChainTopology(const vector<VerilogInstance>& flipFl
         }
     }
 }
+int VerilogParser::getCellBitWidth(const string& cellType) const {
+    // Extract bit width from cell name
+    regex pattern(R"(_(\d+)$|_(\d+)_)");
+    smatch match;
 
+    if (regex_search(cellType, match, pattern)) {
+        for (size_t i = 1; i < match.size(); ++i) {
+            if (match[i].matched) {
+                return stoi(match[i]);
+            }
+        }
+    }
+
+    // Check for explicit bit indicators
+    if (cellType.find("2BIT") != string::npos || cellType.find("2_") != string::npos) return 2;
+    if (cellType.find("4BIT") != string::npos || cellType.find("4_") != string::npos) return 4;
+    if (cellType.find("8BIT") != string::npos || cellType.find("8_") != string::npos) return 8;
+
+    return 1; // Default single bit
+}
 void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlops) {
     // 建立連接圖
     map<string, string> ffToSiNet; // FF instance -> SI net
-    map<string, string> ffToSoNet; // FF instance -> SO net
+    map<string, string> ffToSoNet; // FF instance -> SO net (or Q net if no SO)
     map<string, string> siNetToFF; // SI net -> FF instance  
     map<string, string> soNetToFF; // SO net -> FF instance
+    map<string, string> qNetToFF;  // Q net -> FF instance (for Q-as-SO cases)
 
-    // 收集所有 scan 連接
+    // 收集所有 scan 連接，包括 Q 作為 SO 的情況
     for (const auto& ff : flipFlops) {
+        bool hasSO = false;
+        string qNet = "";
+
         for (const auto& conn : ff.connections) {
             if (conn.first == "SI" || conn.first == "si") {
                 ffToSiNet[ff.instName] = conn.second;
@@ -132,16 +155,42 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
                 }
             }
             else if (conn.first == "SO" || conn.first == "so") {
+                hasSO = true;
                 ffToSoNet[ff.instName] = conn.second;
                 if (conn.second != "UNCONNECTED" &&
                     conn.second.find("UNCONNECTED") == string::npos) {
                     soNetToFF[conn.second] = ff.instName;
                 }
             }
+            else if (conn.first == "Q" || conn.first == "q") {
+                qNet = conn.second;
+                if (conn.second != "UNCONNECTED" &&
+                    conn.second.find("UNCONNECTED") == string::npos) {
+                    qNetToFF[conn.second] = ff.instName;
+                }
+            }
+            // 處理多位元 FF 的 Q pins (Q0, Q1, Q2, Q3...)
+            else if (regex_match(conn.first, regex("Q\\d+|q\\d+"))) {
+                // 記錄最高位的 Q pin 作為潛在的 SO
+                int bitIndex = stoi(conn.first.substr(1));
+                if (bitIndex == getCellBitWidth(ff.cellType) - 1) {
+                    qNet = conn.second;
+                    if (conn.second != "UNCONNECTED" &&
+                        conn.second.find("UNCONNECTED") == string::npos) {
+                        qNetToFF[conn.second] = ff.instName;
+                    }
+                }
+            }
+        }
+
+        // 如果沒有 SO pin，使用 Q net 作為 scan out
+        if (!hasSO && !qNet.empty()) {
+            ffToSoNet[ff.instName] = qNet;
+            cout << "  FF " << ff.instName << " using Q as SO: " << qNet << endl;
         }
     }
 
-    // 找到 scan chain 的起始點（SI 沒有?動的 FF）
+    // 找到 scan chain 的起始點
     vector<string> chainStarts;
     set<string> visited;
 
@@ -151,10 +200,26 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
 
         string siNet = ffToSiNet[ffName];
 
-        // 如果 SI 沒有連接或連接到外部（不是其他 FF 的 SO）
-        if (siNet.empty() || siNet == "UNCONNECTED" ||
-            siNet.find("UNCONNECTED") != string::npos ||
-            soNetToFF.find(siNet) == soNetToFF.end()) {
+        // 檢查 SI 是否來自其他 FF 的 SO 或 Q
+        bool isChainStart = true;
+
+        if (!siNet.empty() && siNet != "UNCONNECTED" &&
+            siNet.find("UNCONNECTED") == string::npos) {
+            // 檢查是否有 FF 的 SO 連到這個 SI
+            if (soNetToFF.find(siNet) != soNetToFF.end()) {
+                isChainStart = false;
+            }
+            // 檢查是否有 FF 的 Q 連到這個 SI（Q-as-SO case）
+            else if (qNetToFF.find(siNet) != qNetToFF.end()) {
+                // 確認這個 Q 確實被用作 scan out
+                string sourceFF = qNetToFF[siNet];
+                if (ffToSoNet[sourceFF] == siNet) {
+                    isChainStart = false;
+                }
+            }
+        }
+
+        if (isChainStart) {
             chainStarts.push_back(ffName);
         }
     }
@@ -174,14 +239,14 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
             chainVisited.insert(current);
             visited.insert(current);
 
-            // 找到下一? FF（通過 SO -> SI 連接）
-            string soNet = ffToSoNet[current];
+            // 找到下一個 FF
+            string outNet = ffToSoNet[current]; // 可能是 SO 或 Q
             string next = "";
 
-            if (!soNet.empty() && soNet != "UNCONNECTED" &&
-                soNet.find("UNCONNECTED") == string::npos) {
-                // 找到由這? SO net ?動的 FF 的 SI
-                auto it = siNetToFF.find(soNet);
+            if (!outNet.empty() && outNet != "UNCONNECTED" &&
+                outNet.find("UNCONNECTED") == string::npos) {
+                // 找到由這個 net 連接的 FF 的 SI
+                auto it = siNetToFF.find(outNet);
                 if (it != siNetToFF.end()) {
                     next = it->second;
                 }
@@ -198,17 +263,39 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
             string ffName = chain[i];
             string siNet = ffToSiNet[ffName];
             string soNet = ffToSoNet[ffName];
+            bool usesQasSO = false;
+
+            // 檢查是否使用 Q 作為 SO
+            for (const auto& ff : flipFlops) {
+                if (ff.instName == ffName) {
+                    bool hasSO = false;
+                    for (const auto& conn : ff.connections) {
+                        if (conn.first == "SO" || conn.first == "so") {
+                            hasSO = true;
+                            break;
+                        }
+                    }
+                    if (!hasSO && !soNet.empty()) {
+                        usesQasSO = true;
+                    }
+                    break;
+                }
+            }
 
             cout << "  " << (i + 1) << ". " << ffName;
             if (!siNet.empty() && siNet != "UNCONNECTED") {
                 cout << " (SI: " << siNet << ")";
             }
             if (!soNet.empty() && soNet != "UNCONNECTED") {
-                cout << " (SO: " << soNet << ")";
+                if (usesQasSO) {
+                    cout << " (Q as SO: " << soNet << ")";
+                }
+                else {
+                    cout << " (SO: " << soNet << ")";
+                }
             }
             cout << endl;
 
-            // 如果不是最後一?，顯示連接
             if (i < chain.size() - 1) {
                 cout << "     |" << endl;
                 cout << "     v" << endl;
@@ -216,7 +303,7 @@ void VerilogParser::reconstructScanChains(const vector<VerilogInstance>& flipFlo
         }
     }
 
-    // 檢查是否有未訪?的 FF（可能形成環路或孤立）
+    // 檢查是否有未訪問的 FF
     vector<string> unvisited;
     for (const auto& ff : flipFlops) {
         if (visited.find(ff.instName) == visited.end()) {

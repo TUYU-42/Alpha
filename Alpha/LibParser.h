@@ -7,15 +7,29 @@
 #include <set>
 #include <memory>
 
-// .lib 中的 pin 資訊
+// 增強的 LibPin 結構，加入 signal_type
 struct LibPin {
     std::string name;
     std::string direction;  // input, output, inout
     std::string function;   // Boolean function
+    std::string signalType; // test_scan_in, test_scan_out, data, clock, etc.
     double capacitance = 0.0;
+    double maxCapacitance = 0.0;
+    double minCapacitance = 0.0;
+    double maxTransition = 0.0;
     std::map<std::string, std::string> attributes;
 };
 
+// 新增 Bundle 結構
+struct LibBundle {
+    std::string name;
+    std::vector<std::string> members;
+    std::string direction;
+    std::string signalType;
+    std::map<std::string, std::string> attributes;
+};
+
+// 增強的 LibCell 結構
 struct LibCell {
     std::string name;
     std::string libraryName;
@@ -23,8 +37,8 @@ struct LibCell {
     double cellLeakagePower = 0.0;
     std::string singleBitDegenerate;
 
-
     std::map<std::string, LibPin> pins;
+    std::map<std::string, LibBundle> bundles;  // 新增 bundle 支援
     std::map<std::string, std::string> attributes;
 
     // FF 相關資訊
@@ -32,6 +46,19 @@ struct LibCell {
     int bitWidth = 1;
     bool isScannable = false;
     bool hasFF = false;
+
+    // 輔助方法
+    bool hasBundle(const std::string& bundleName) const {
+        return bundles.find(bundleName) != bundles.end();
+    }
+
+    std::vector<std::string> getBundleMembers(const std::string& bundleName) const {
+        auto it = bundles.find(bundleName);
+        if (it != bundles.end()) {
+            return it->second.members;
+        }
+        return std::vector<std::string>();
+    }
 };
 
 // Library 資訊
@@ -45,13 +72,14 @@ class LibParser {
 private:
     std::map<std::string, LibCell> cellLibrary_;
     std::set<std::string> parsedCells_;
-    std::map<std::string, LibraryInfo> libraries_;  // 新增：library 資訊
+    std::map<std::string, LibraryInfo> libraries_;
     bool isLoaded_ = false;
 
     // Helper methods
     bool parseCell(std::ifstream& file, const std::string& cellName, LibCell& cell, const std::string& libraryName);
     bool parseCellForFF(std::ifstream& file, const std::string& cellName, LibCell& cell, const std::string& libraryName);
     bool parsePin(std::ifstream& file, const std::string& pinName, LibPin& pin);
+    bool parseBundle(std::ifstream& file, const std::string& bundleName, LibBundle& bundle);
     bool parseFF(std::ifstream& file, LibCell& cell);
     std::string extractQuotedString(const std::string& line);
     double extractNumericValue(const std::string& line);
@@ -65,13 +93,14 @@ private:
     std::string extractBaseFFType(const std::string& cellName) const;
     std::string generateMultibitName(const std::string& baseType, int bitWidth) const;
 
-    // Parse a cell specifically looking for FF characteristics
+    // 新增：從 bundles 更新 bitWidth
+    void updateCellBitWidthFromBundles(LibCell& cell) const;
 
 public:
     LibParser() = default;
     ~LibParser() = default;
 
-    // 新的主要函數介面：專門解析所有 FF cells
+    // 新的主要函數：解析所有 FF cells
     bool parseAllLibraries(const std::vector<std::string>& libFiles);
 
     // 取得所有 FF cell names (包含有 single_bit_degenerate 或 ff() 的)
@@ -96,24 +125,26 @@ public:
     std::vector<std::string> getMultiBitCells() const;
     std::string getSingleBitDegenerate(const std::string& cellName) const;
 
-    // 新增：多位元 FF 查詢方法
+    // 多位元 FF 查詢方法
     std::string getmultibitff2(const std::string& cellName) const;
     std::string getmultibitff4(const std::string& cellName) const;
 
-    // LibParser.h
     const std::map<std::string, LibraryInfo>& getLibraries() const { return libraries_; }
+
+    // 新增：取得 cell 的 scan pins
+    std::vector<std::string> getCellScanPins(const std::string& cellName) const;
+
+    // 新增：判斷 pin 是否為 scan pin
+    bool isScanPin(const std::string& cellName, const std::string& pinName) const;
 
     void clear();
     void printSummary() const;
     void printCellDetails(const std::string& cellName) const;
     void printFFCellList() const;
     bool isLoaded() const { return isLoaded_; }
-    // New method for parsing all libraries to find FF cells
+
     int extractBitWidth(const std::string& cellName) const;
-
     void updateCellBitWidth(LibCell& cell) const;
-
-   
     int getCellBitWidth(const std::string& cellName) const;
 };
 

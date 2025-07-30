@@ -130,6 +130,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Alpha.cpp" />
+    <ClCompile Include="CrossReferenceManager.cpp" />
     <ClCompile Include="DPC.cpp" />
     <ClCompile Include="HierarchicalClustering.cpp" />
     <ClCompile Include="Legalizer.cpp" />
@@ -144,6 +145,7 @@
     <ClCompile Include="place.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CrossReferenceManager.h" />
     <ClInclude Include="DataStructures.h" />
     <ClInclude Include="DPC.h" />
     <ClInclude Include="HierarchicalClustering.h" />
