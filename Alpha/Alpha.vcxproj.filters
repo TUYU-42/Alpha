@@ -120,9 +120,6 @@
     <ClInclude Include="Parser.h">
       <Filter>Parser</Filter>
     </ClInclude>
-    <ClInclude Include="LibParser.h">
-      <Filter>Parser\Lib</Filter>
-    </ClInclude>
     <ClInclude Include="place.h">
       <Filter>Parser\place</Filter>
     </ClInclude>
@@ -134,6 +131,9 @@
     </ClInclude>
     <ClInclude Include="Legalizer.h">
       <Filter>Legalizer</Filter>
+    </ClInclude>
+    <ClInclude Include="LibParser.h">
+      <Filter>Parser\Lib</Filter>
     </ClInclude>
     <ClInclude Include="CrossReferenceManager.h">
       <Filter>Mapping%28verilog，Lib%29</Filter>

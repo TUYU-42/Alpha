@@ -5,12 +5,13 @@
 #include "ParserLEF.h"
 #include "ParserWeights.h"
 #include "HierarchicalClustering.h"
+#include"LibParser.h"
 #include <string>
 #include <vector>
 #include <memory>
 #include <set>
 #include <unordered_map>
-
+#include"CrossReferenceManager.h"
 // Forward declarations
 class DefParser;
 class VerilogParser;

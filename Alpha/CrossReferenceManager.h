@@ -4,6 +4,7 @@
 
 #include "LibParser.h"
 #include "ParserVerilog.h"
+#include"DataStructures.h"
 #include <string>
 #include <vector>
 #include <map>

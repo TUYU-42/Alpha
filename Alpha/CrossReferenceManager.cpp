@@ -1,4 +1,5 @@
 #include "CrossReferenceManager.h"
+#include "LibParser.h"
 #include <iostream>
 #include <algorithm>
 #include <queue>

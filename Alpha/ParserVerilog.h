@@ -87,7 +87,7 @@ public:
     const VerilogInstance* findInstance(const std::string& name) const;
     std::vector<std::string> getInstancesOfType(const std::string& cellType) const;
     std::vector<std::string> getNetsConnectedToInstance(const std::string& instName) const;
-    int getCellBitWidth(const string& cellType) const;
+    int getCellBitWidth(const std::string& cellType) const;
     // Statistics methods
     size_t getModuleCount() const { return modules_.size(); }
     size_t getInstanceCount() const { return instances_.size(); }
