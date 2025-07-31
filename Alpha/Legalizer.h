@@ -51,14 +51,16 @@ struct CellToLegalize {
 
     // Legalized position
     double newX, newY;
-    std::string newOrient;
+    std::string newOrient;      // Final orientation after legalization
+    std::string cellOrient;     // Cell orientation used (before combining with row)
     int assignedRow;            // Row index where placed
     int startSite;              // Starting site index in row
     bool legalized;
 
     CellToLegalize() : origX(0), origY(0), width(0), height(0),
         needSites(0), newX(0), newY(0),
-        assignedRow(-1), startSite(-1), legalized(false) {
+        assignedRow(-1), startSite(-1), legalized(false),
+        cellOrient("N") {
     }
 };
 
@@ -81,6 +83,7 @@ private:
     std::vector<LegalizerRow> rows_;
     std::vector<CellToLegalize> cellsToLegalize_;
     std::vector<BlockageInfo> blockages_;
+    std::vector<MBFFInstance> bankingList_;
 
     double siteWidth_;
     double rowHeight_;
@@ -96,7 +99,8 @@ private:
     void getCellDimensions(const std::string& cellType,
         const std::string& finalOrient,
         double& width, double& height) const;
-
+    bool isOrientLegalForMacro(const LefMacroInfo& macro, const std::string& orient) const;
+    bool isFlipFlopCell(const std::string& cellType) const;
     void buildRows();
     void identifyBlockages();
     void markBlockedSites();
@@ -109,7 +113,7 @@ private:
     void markSitesOccupied(LegalizerRow& row, int startSite,
         int numSites, const std::string& instName);
     std::vector<std::string> getAllowedCellOrients(const std::string& cellType) const;
-    std::vector<MBFFInstance> bankingList_; // <--- ·s¼W
+
 public:
     // Constructor
     Legalizer(const DefData& defData,
@@ -132,6 +136,8 @@ public:
     const std::vector<CellToLegalize>& getLegalizedCells() const {
         return cellsToLegalize_;
     }
+
+    // Setters
     void setBankingList(const std::vector<MBFFInstance>& bankingList);
 };
 

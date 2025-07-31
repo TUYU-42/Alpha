@@ -175,7 +175,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
         // After parsing DEF, identify FF instances
         parser.identifyFFInstances();
     }
-
+    /*
     // Parse Verilog
    if (!args.verilogFiles.empty()) {
         cout << "  Parsing Verilog file..." << endl;
@@ -192,6 +192,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     if (!args.tfFiles.empty()) {
         parser.parseTech(args.tfFiles[0]);
     }
+    */
 
     // STEP 5: Group FF instances by cell type for pre-banking analysis
     cout << "\n=== STEP 5: Group FF Instances by Cell Type ===" << endl;
@@ -285,7 +286,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            
+            /*
             // Perform clustering
             //*dpc test*
             const auto& ffList = parser.getDefParser()->getFlipFlops();
@@ -472,10 +473,10 @@ int main(int argc, char* argv[]) {
                 }
                 ofs << "Total nets: " << parser.getDefData().nets.size() << "\n";
             }
-
+            */
 
         }
-
+        
         // Generate output files
         cout << "\n=== Output Generation ===" << endl;
         if (!parser.writeOutputFiles()) {

@@ -51,10 +51,10 @@ Legalizer::Legalizer(const DefData& defData,
 
 // Initialize orientation mapping based on the provided table
 void Legalizer::initializeOrientationMap() {
-    // 8x8組合：row orient x cell orient = final orient
+    // 8x8 orientation table: row orient x cell orient = final orient
     std::vector<std::string> orients = { "N", "S", "E", "W", "FN", "FS", "FE", "FW" };
 
-    // 依官方定義 (LEF/DEF/OpenAccess spec, 旋轉+鏡射組合)
+    // Based on LEF/DEF/OpenAccess spec
     // N row
     orientMap_["N"]["N"] = "N";
     orientMap_["N"]["S"] = "S";
@@ -136,6 +136,21 @@ void Legalizer::initializeOrientationMap() {
     orientMap_["FW"]["FW"] = "N";
 }
 
+// Helper function to check if a cell is a flip-flop
+bool Legalizer::isFlipFlopCell(const std::string& cellType) const {
+    // Check if cell type contains FF-related keywords
+    std::string upperType = cellType;
+    std::transform(upperType.begin(), upperType.end(), upperType.begin(), ::toupper);
+
+    return (upperType.find("FF") != std::string::npos ||
+        upperType.find("DFF") != std::string::npos ||
+        upperType.find("SDFF") != std::string::npos ||
+        upperType.find("FLIP") != std::string::npos ||
+        upperType.find("FLOP") != std::string::npos ||
+        upperType.find("LATCH") != std::string::npos ||
+        upperType.find("REG") != std::string::npos);
+}
+
 // Get combined orientation from row and cell orientations
 string Legalizer::getCombinedOrientation(const string& rowOrient,
     const string& cellOrient) const {
@@ -176,6 +191,7 @@ void Legalizer::getCellDimensions(const string& cellType,
         height = baseWidth;
     }
 }
+
 std::vector<std::string> Legalizer::getAllowedCellOrients(const std::string& cellType) const {
     std::vector<std::string> orients;
     auto it = macroMap_.find(cellType);
@@ -183,25 +199,200 @@ std::vector<std::string> Legalizer::getAllowedCellOrients(const std::string& cel
         orients.push_back("N");
         return orients;
     }
+
     std::string sym = it->second.symmetry;
-    // 簡單 robust 做法
     std::transform(sym.begin(), sym.end(), sym.begin(), ::toupper);
+
     bool hasX = (sym.find('X') != std::string::npos);
     bool hasY = (sym.find('Y') != std::string::npos);
+    bool hasR90 = (sym.find("R90") != std::string::npos);
+
+    // N orientation is always available
+    orients.push_back("N");
+
+    // Add orientations based on symmetry capabilities
+    if (hasY) {
+        orients.push_back("FN");
+    }
+
+    if (hasX) {
+        orients.push_back("FS");
+    }
+
+    // S orientation requires BOTH X and Y symmetry (180-degree rotation)
     if (hasX && hasY) {
-        orients = { "N", "FN", "FS", "S" };
+        orients.push_back("S");
     }
-    else if (hasX) {
-        orients = { "FS", "S" };
+
+    // 90-degree rotations require R90 capability
+    if (hasR90) {
+        orients.push_back("E");
+        orients.push_back("W");
+        orients.push_back("FE");
+        orients.push_back("FW");
     }
-    else if (hasY) {
-        orients = { "N", "FN" };
-    }
-    else {
-        orients = { "N" };
-    }
+
+    // Remove duplicates (though there shouldn't be any with current logic)
+    std::sort(orients.begin(), orients.end());
+    orients.erase(std::unique(orients.begin(), orients.end()), orients.end());
+
     return orients;
 }
+
+bool Legalizer::isOrientLegalForMacro(const LefMacroInfo& macro, const std::string& orient) const {
+    std::string sym = macro.symmetry;
+    std::transform(sym.begin(), sym.end(), sym.begin(), ::toupper);
+
+    bool hasX = (sym.find('X') != std::string::npos);
+    bool hasY = (sym.find('Y') != std::string::npos);
+    bool hasR90 = (sym.find("R90") != std::string::npos);
+    bool hasR180 = (sym.find("R180") != std::string::npos) ||
+        (sym.find("180") != std::string::npos);
+
+    // N orientation is always legal (identity)
+    if (orient == "N") return true;
+
+    // Mirror Y (flip around Y-axis)
+    if (orient == "FN") return hasY;
+
+    // Mirror X (flip around X-axis) 
+    if (orient == "FS") return hasX;
+
+    // 180-degree rotation (requires both X and Y symmetry OR explicit R180)
+    if (orient == "S") return (hasX && hasY) || hasR180;
+
+    // 90-degree rotations (requires R90 capability)
+    if (orient == "E" || orient == "W" || orient == "FE" || orient == "FW") {
+        return hasR90;
+    }
+
+    return false;
+}
+
+// Modified legalizeCellInRow method with final orientation validation:
+bool Legalizer::legalizeCellInRow(CellToLegalize& cell, int rowIdx) {
+    if (rowIdx < 0 || rowIdx >= rows_.size()) return false;
+    LegalizerRow& row = rows_[rowIdx];
+
+    // Get macro info
+    auto macroIt = macroMap_.find(cell.cellType);
+    if (macroIt == macroMap_.end()) return false;
+
+    // For FS (flipped) rows, we need to use specific orientations
+    // According to LEF/DEF spec, in FS rows:
+    // - Cells with symmetry Y: can use N or FN
+    // - Cells with symmetry X: can use FS or S
+    // - Cells with symmetry X Y: can use N, FN, FS, or S
+
+    std::vector<std::string> allowedOrients;
+    if (row.orientation == "FS") {
+        // Special handling for FS rows
+        std::string sym = macroIt->second.symmetry;
+        std::transform(sym.begin(), sym.end(), sym.begin(), ::toupper);
+
+        bool hasX = (sym.find('X') != std::string::npos);
+        bool hasY = (sym.find('Y') != std::string::npos);
+
+        if (hasX && hasY) {
+            // Can use all four orientations in FS row
+            allowedOrients = { "N", "FN", "FS", "S" };
+        }
+        else if (hasX) {
+            // Only FS and S allowed
+            allowedOrients = { "FS", "S" };
+        }
+        else if (hasY) {
+            // Only N and FN allowed
+            allowedOrients = { "N", "FN" };
+        }
+        else {
+            // No symmetry, only N allowed
+            allowedOrients = { "N" };
+        }
+    }
+    else if (row.orientation == "N") {
+        // For N rows, use standard allowed orientations
+        allowedOrients = getAllowedCellOrients(cell.cellType);
+    }
+    else {
+        // For other row orientations, get allowed orientations
+        allowedOrients = getAllowedCellOrients(cell.cellType);
+    }
+
+    for (const auto& cellOrient : allowedOrients) {
+        // For FS rows, use the cell orientation directly as final orientation
+        string finalOrient;
+        if (row.orientation == "FS") {
+            finalOrient = cellOrient;
+        }
+        else {
+            finalOrient = getCombinedOrientation(row.orientation, cellOrient);
+        }
+
+        // Validate that the final orientation is legal for this macro
+        if (!isOrientLegalForMacro(macroIt->second, finalOrient)) {
+            continue; // Skip this orientation combination
+        }
+
+        double width, height;
+        getCellDimensions(cell.cellType, finalOrient, width, height);
+
+        // Improved tall macro detection
+        int needRows = (height > 1.5 * rowHeight_) ? 2 : 1;
+        int needSites = (int)ceil(width / siteWidth_);
+
+        // Single-row cell
+        if (needRows == 1) {
+            int startSite;
+            if (findAvailableSites(row, needSites, startSite, cell.origX)) {
+                cell.newX = row.getSiteX(startSite);
+                cell.newY = row.y;
+                cell.newOrient = finalOrient;
+                cell.cellOrient = cellOrient;  // Store the chosen cell orientation
+                cell.startSite = startSite;
+                cell.legalized = true;
+                markSitesOccupied(row, startSite, needSites, cell.instName);
+                return true;
+            }
+        }
+        // Double-row cell (tall macro)
+        else {
+            if (rowIdx + 1 >= rows_.size()) continue;
+            LegalizerRow& nextRow = rows_[rowIdx + 1];
+            int startSiteTop, startSiteBot;
+            if (findAvailableSites(row, needSites, startSiteTop, cell.origX) &&
+                findAvailableSites(nextRow, needSites, startSiteBot, cell.origX)) {
+                // Ensure both rows use the same starting site
+                if (startSiteTop != startSiteBot) {
+                    // Try to align to the same position
+                    int alignedSite = min(startSiteTop, startSiteBot);
+                    bool topOk = true, botOk = true;
+
+                    // Check if aligned position works for both rows
+                    for (int s = alignedSite; s < alignedSite + needSites; ++s) {
+                        if (s >= row.siteCount || row.sites[s].occupied) topOk = false;
+                        if (s >= nextRow.siteCount || nextRow.sites[s].occupied) botOk = false;
+                    }
+
+                    if (!topOk || !botOk) continue; // Can't align, try next orientation
+                    startSiteTop = startSiteBot = alignedSite;
+                }
+
+                cell.newX = row.getSiteX(startSiteTop);
+                cell.newY = row.y;
+                cell.newOrient = finalOrient;
+                cell.cellOrient = cellOrient;  // Store the chosen cell orientation
+                cell.startSite = startSiteTop;
+                cell.legalized = true;
+                markSitesOccupied(row, startSiteTop, needSites, cell.instName);
+                markSitesOccupied(nextRow, startSiteBot, needSites, cell.instName);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // Build row structures from DEF data
 void Legalizer::buildRows() {
     rows_.clear();
@@ -224,6 +415,7 @@ void Legalizer::buildRows() {
 
     cout << "Total rows: " << rows_.size() << endl;
 }
+
 // Identify blockages (macros, blockages, combinational cells)
 void Legalizer::identifyBlockages() {
     blockages_.clear();
@@ -419,58 +611,6 @@ void Legalizer::markSitesOccupied(LegalizerRow& row, int startSite,
     }
 }
 
-// Legalize a cell in a specific row
-bool Legalizer::legalizeCellInRow(CellToLegalize& cell, int rowIdx) {
-    if (rowIdx < 0 || rowIdx >= rows_.size()) return false;
-    LegalizerRow& row = rows_[rowIdx];
-
-    //【新增】根據 macro symmetry，獲得所有可用 orient
-    auto allowedOrients = getAllowedCellOrients(cell.cellType);
-
-    for (const auto& cellOrient : allowedOrients) {
-        // 結合 row orientation 和 cell orientation，得到 finalOrient
-        string finalOrient = getCombinedOrientation(row.orientation, cellOrient);
-
-        double width, height;
-        getCellDimensions(cell.cellType, finalOrient, width, height);
-
-        int needRows = (height > rowHeight_ + 1e-3) ? 2 : 1;
-        int needSites = (int)ceil(width / siteWidth_);
-
-        // 單層cell
-        if (needRows == 1) {
-            int startSite;
-            if (findAvailableSites(row, needSites, startSite, cell.origX)) {
-                cell.newX = row.getSiteX(startSite);
-                cell.newY = row.y;
-                cell.newOrient = finalOrient; // 實際記錄cell orient
-                cell.startSite = startSite;
-                cell.legalized = true;
-                markSitesOccupied(row, startSite, needSites, cell.instName);
-                return true;
-            }
-        }
-        // 雙層cell (double-row macro)
-        else {
-            if (rowIdx + 1 >= rows_.size()) continue;
-            LegalizerRow& nextRow = rows_[rowIdx + 1];
-            int startSite;
-            if (findAvailableSites(row, needSites, startSite, cell.origX) &&
-                findAvailableSites(nextRow, needSites, startSite, cell.origX)) {
-                cell.newX = row.getSiteX(startSite);
-                cell.newY = row.y;
-                cell.newOrient = finalOrient;
-                cell.startSite = startSite;
-                cell.legalized = true;
-                markSitesOccupied(row, startSite, needSites, cell.instName);
-                markSitesOccupied(nextRow, startSite, needSites, cell.instName);
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 // Try to spill cell to nearby rows
 bool Legalizer::spillToNearbyRow(CellToLegalize& cell, int origRowIdx) {
     // Try adjacent rows (alternating up and down)
@@ -573,6 +713,11 @@ void Legalizer::updateDefComponents(DefData& defData) {
     // Update components
     int updateCount = 0;
     for (auto& comp : defData.components) {
+        // Only update flip-flops that were legalized
+        if (!isFlipFlopCell(comp.cellType)) {
+            continue; // Skip non-flip-flop cells
+        }
+
         auto it = cellMap.find(comp.name);
         if (it != cellMap.end()) {
             const CellToLegalize* cell = it->second;
@@ -583,14 +728,15 @@ void Legalizer::updateDefComponents(DefData& defData) {
             }
             comp.x = cell->newX;
             comp.y = cell->newY;
-            comp.orient = cell->newOrient;  // 這裡已經是合法 orient
+            comp.orient = cell->newOrient;
             comp.status = "PLACED";
             updateCount++;
         }
     }
 
-    cout << "Updated " << updateCount << " component positions" << endl;
+    cout << "Updated " << updateCount << " flip-flop positions" << endl;
 }
+
 // Get count of successfully legalized cells
 int Legalizer::getLegalizedCount() const {
     int count = 0;
@@ -642,7 +788,7 @@ void Legalizer::exportLegalizationReport(const string& filename) const {
     ofs << "# Total cells: " << cellsToLegalize_.size() << endl;
     ofs << "# Successfully legalized: " << getLegalizedCount() << endl;
     ofs << "#" << endl;
-    ofs << "# Format: InstName CellType Width Sites OrigX OrigY NewX NewY Orient Status" << endl;
+    ofs << "# Format: InstName CellType Width Sites OrigX OrigY OrigOrient CellOrient NewX NewY FinalOrient Status" << endl;
 
     for (const auto& cell : cellsToLegalize_) {
         ofs << cell.instName << " "
@@ -650,6 +796,8 @@ void Legalizer::exportLegalizationReport(const string& filename) const {
             << fixed << setprecision(3) << cell.width << " "
             << cell.needSites << " "
             << cell.origX << " " << cell.origY << " "
+            << cell.origOrient << " "
+            << cell.cellOrient << " "
             << cell.newX << " " << cell.newY << " "
             << cell.newOrient << " "
             << (cell.legalized ? "LEGALIZED" : "FAILED") << endl;
@@ -659,7 +807,7 @@ void Legalizer::exportLegalizationReport(const string& filename) const {
     cout << "Legalization report exported to: " << filename << endl;
 }
 
-// 加在檔案適當位置
+// Set banking list
 void Legalizer::setBankingList(const std::vector<MBFFInstance>& bankingList) {
-    bankingList_ = bankingList; // 你要先在 Legalizer class 裡面宣告 bankingList_ 這個 member!
+    bankingList_ = bankingList;
 }
