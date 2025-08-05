@@ -27,8 +27,79 @@ DefParser::DefParser() : isLoaded_(false) {
 
     // Add new regex patterns for scan chains
     scanChainLineRegex_ = regex(R"(^\s*-\s*(\S+)\s+(.*);)");
+    // 在其他 regex 初始化之後添加
+    blockageStartRegex_ = std::regex(R"(^\s*BLOCKAGES\s+(\d+)\s*;)");
+    blockagePlacementRegex_ = std::regex(R"(^\s*-\s*PLACEMENT)");
+    blockageLayerRegex_ = std::regex(R"(^\s*-\s*LAYER\s+(\w+)\s*\+?\s*SPACING\s+(\d+))");
+    blockageRectRegex_ = std::regex(R"(^\s*RECT\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\(\s*(\d+)\s+(\d+)\s*\)\s*;)");
 }
+bool DefParser::parseBlockageInfo(std::ifstream& file, const std::string& firstLine) {
+    std::smatch m;
+    if (!std::regex_search(firstLine, m, blockageStartRegex_)) {
+        return false;
+    }
 
+    int numBlockages = std::stoi(m[1]);
+    std::cout << "  Found BLOCKAGES section with " << numBlockages << " blockages" << std::endl;
+
+    std::string line;
+    DefBlockageInfo::BlockageType currentType;
+    std::string currentLayer;
+    int currentSpacing = 0;
+    bool inBlockage = false;
+
+    while (std::getline(file, line)) {
+        // Check for end of blockages section
+        if (line.find("END BLOCKAGES") != std::string::npos) {
+            std::cout << "  End of BLOCKAGES section" << std::endl;
+            break;
+        }
+
+        // Check for placement blockage
+        if (std::regex_search(line, m, blockagePlacementRegex_)) {
+            currentType = DefBlockageInfo::PLACEMENT;
+            currentLayer.clear();
+            currentSpacing = 0;
+            inBlockage = true;
+            continue;
+        }
+
+        // Check for layer blockage
+        if (std::regex_search(line, m, blockageLayerRegex_)) {
+            currentType = DefBlockageInfo::LAYER;
+            currentLayer = m[1];
+            currentSpacing = std::stoi(m[2]);
+            inBlockage = true;
+            continue;
+        }
+
+        // Check for rectangle
+        if (inBlockage && std::regex_search(line, m, blockageRectRegex_)) {
+            int x1 = std::stoi(m[1]);
+            int y1 = std::stoi(m[2]);
+            int x2 = std::stoi(m[3]);
+            int y2 = std::stoi(m[4]);
+
+            if (currentType == DefBlockageInfo::PLACEMENT) {
+                defData_.blockages.emplace_back(currentType, x1, y1, x2, y2);
+            }
+            else {
+                defData_.blockages.emplace_back(currentType, currentLayer, currentSpacing, x1, y1, x2, y2);
+            }
+
+            if (defData_.blockages.size() <= 5) {
+                const auto& blk = defData_.blockages.back();
+                std::cout << "    Blockage " << defData_.blockages.size() << ": "
+                    << (blk.type == DefBlockageInfo::PLACEMENT ? "PLACEMENT" : "LAYER " + blk.layer)
+                    << " RECT (" << blk.x1 << " " << blk.y1 << ") ("
+                    << blk.x2 << " " << blk.y2 << ")" << std::endl;
+            }
+        }
+    }
+
+    std::cout << "  Total blockages parsed: " << defData_.blockages.size() << std::endl;
+    return true;
+}
 bool DefParser::parseFile(const string& filename) {
     ifstream in(filename);
     if (!in) {
@@ -127,6 +198,7 @@ bool DefParser::parseFile(const string& filename) {
             }
             if (parsePinInfo(in, line)) continue;
             if (parseNetInfo(in, line)) continue;
+            if (parseBlockageInfo(in, line)) continue;
         }
 
         in.close();
@@ -608,6 +680,7 @@ void DefParser::clear() {
     defData_.pins.clear();
     defData_.nets.clear();
     defData_.instPinNets.clear();
+    defData_.blockages.clear();
     defData_.flipFlops.clear();
     defData_.clockDomains.clear();
     defData_.scanChains.clear();  // Clear scan chains
@@ -625,7 +698,7 @@ void DefParser::printSummary() const {
     cout << "Nets: " << defData_.nets.size() << endl;
     cout << "Flip-Flops: " << defData_.flipFlops.size() << endl;
     cout << "Scan Chains: " << defData_.scanChains.size() << endl;  // Add scan chains
-
+    cout << "Blockages: " << defData_.blockages.size() << endl;
     if (!defData_.flipFlops.empty()) {
         int totalBits = 0;
         for (const auto& ff : defData_.flipFlops) {
@@ -683,10 +756,10 @@ namespace DefUtils {
         }
 
         // Debug output for first 20 calls or all flip-flops found
-        if (debugCount <= 20 || result) {
-            cout << "DEBUG: isFlipFlopCell(\"" << cellType << "\") -> "
-                << (result ? "TRUE" : "FALSE") << " (" << reason << ")" << endl;
-        }
+     //   if (debugCount <= 20 || result) {
+           // cout << "DEBUG: isFlipFlopCell(\"" << cellType << "\") -> "
+             //   << (result ? "TRUE" : "FALSE") << " (" << reason << ")" << endl;
+     //   }
 
         return result;
     }

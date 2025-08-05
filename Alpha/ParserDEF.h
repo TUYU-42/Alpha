@@ -33,7 +33,10 @@ private:
     std::regex dieAreaRegex_;
     std::regex unitsRegex_;
     std::regex scanChainLineRegex_;  // New regex for scan chains
-
+    std::regex blockageStartRegex_;
+    std::regex blockagePlacementRegex_;
+    std::regex blockageLayerRegex_;
+    std::regex blockageRectRegex_;
     // Helper methods
     bool parseRowInfo(const std::string& line);
     bool parseTrackInfo(const std::string& line);
@@ -43,6 +46,7 @@ private:
     bool parseScanChainLine(const std::string& line);  // New method for parsing scan chains
     void addError(const std::string& error);
     void addWarning(const std::string& warning);
+    bool parseBlockageInfo(std::ifstream& file, const std::string& line);
 
 public:
     // Constructor & Destructor
@@ -115,6 +119,8 @@ public:
     void printComponentsByRow() const; // optional
     void clearFlipFlops() { defData_.flipFlops.clear(); }
     void addFlipFlop(const FlipFlopInfo& ff) { defData_.flipFlops.push_back(ff); }
+    const std::vector<DefBlockageInfo>& getBlockages() const { return defData_.blockages; }
+    size_t getBlockageCount() const { return defData_.blockages.size(); }
 };
 
 // Utility functions for DEF parsing
