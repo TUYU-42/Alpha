@@ -1,58 +1,56 @@
-#include "dpc.h"
+ï»¿#include "dpc.h"
 #include "DataStructures.h"
-#include <iomanip>
+#include "ParserDEF.h"
 #include <iostream>
 #include <fstream>
+#include <string>
+#include <vector>
+#include <tuple>
 #include <numeric>
-#include <set>
-#include <map>
+#include <unordered_set>
+
+
 
 DensityPeakClustering::DensityPeakClustering() {}
 DensityPeakClustering::~DensityPeakClustering() {}
 
 std::map<std::string, std::vector<DPCCluster>>
 DensityPeakClustering::clusterByScanChain(
-    const std::map<std::string, std::vector<ScanChainClustered>>& scanChains,
+    const std::map<std::string, std::vector<ScanChain>>& scanChains,
     const std::map<std::string, FlipFlopInfo>& ffLookup,
-    const LibParser* libParser,   // ·s¼W³o­Ó°Ñ¼Æ¡I
     bool autoTune)
 {
     std::map<std::string, std::vector<DPCCluster>> result;
-    for (const auto& [clockNet, chains] : scanChains) {
-        // --- 1. ¦¬¶°¦P¤@ clockNet ¤U©Ò¦³ flip-flop ---
-        std::vector<FlipFlopInfo> allFFs;
-        for (const auto& chain : chains) {
-            for (const auto& node : chain.nodes) {
-                auto it = ffLookup.find(node.instanceName);
-                if (it != ffLookup.end()) {
-                    allFFs.push_back(it->second);
-                }
-            }
-        }
-        // --- 2. ¤@¦¸¥á¶i DPC ---
-        performClustering(allFFs, autoTune);
+    for (std::map<std::string, std::vector<ScanChain>>::const_iterator it = scanChains.begin(); it != scanChains.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<ScanChain>& chains = it->second;
 
-        // --- 3. ¿é¥X©Ò¦³¤À¸sµ²ªG ---
-        result[clockNet] = clusters_;
-        exportClusteringSummary(clockNet, "my_dpc_output.txt", libParser); // ¦h¶Ç¤@­Ó libParser
+        std::vector<DPCCluster> allClusters;
+        for (std::vector<ScanChain>::const_iterator cit = chains.begin(); cit != chains.end(); ++cit) {
+            // é‡å°æ¯ä¸€æ¢ scan chain å€‹åˆ¥åˆ†ç¾¤
+            performClusteringOnScanChain(*cit, ffLookup, autoTune);
+            // æŠŠ clusters_ çš„å…§å®¹å–å‡ºï¼Œæ”¾é€² allClusters
+            allClusters.insert(allClusters.end(), clusters_.begin(), clusters_.end());
+        }
+        result[clockNet] = allClusters;
     }
     return result;
 }
 
-
-
-
-
-
-// ¥i¥H³o¼ËÅı¥¦Ô£³£¤£°µ¡A©ÎªÌª½±µ¤£¥Î©I¥s¡G
 void DensityPeakClustering::performClusteringOnScanChain(
     const ScanChain& chain,
     const std::map<std::string, FlipFlopInfo>& ffLookup,
     bool autoTune)
 {
-    // ªÅ¹ê§@¡A¦]¬°¤£»İ­n
+    std::vector<FlipFlopInfo> ffList;
+    for (const auto& name : chain.ffNames) {
+        auto it = ffLookup.find(name);
+        if (it != ffLookup.end()) {
+            ffList.push_back(it->second);
+        }
+    }
+    performClustering(ffList, autoTune); // é€™è¡Œä¸€å®šè¦åŠ ï¼ï¼
 }
-
 
 
 void DensityPeakClustering::performClustering(const std::vector<FlipFlopInfo>& flipFlops, bool autoTune) {
@@ -65,7 +63,6 @@ void DensityPeakClustering::performClustering(const std::vector<FlipFlopInfo>& f
     computeDelta();
     auto centerIndices = selectCenters();
     assignClusters(centerIndices);
-    computeClusterGeometry();
 }
 
 void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& flipFlops) {
@@ -79,8 +76,8 @@ void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& fl
 
         if (macroMap_ && macroMap_->count(pt.cellType)) {
             const auto& info = macroMap_->at(pt.cellType);
-            pt.width = info.sizeX * 1000;
-            pt.height = info.sizeY * 1000;
+            pt.width = info.sizeX;
+            pt.height = info.sizeY;
         }
         else {
             pt.width = 0;
@@ -88,7 +85,7 @@ void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& fl
         }
         points_.push_back(pt);
     }
-    //std::cout << "[DPC] Loaded " << points_.size() << " points from flip-flop info (with macroMap).\n";
+    std::cout << "[DPC] Loaded " << points_.size() << " points from flip-flop info (with macroMap).\n";
 }
 
 void DensityPeakClustering::buildDistanceMatrix() {
@@ -108,9 +105,9 @@ double DensityPeakClustering::boxManhattanDistance(const DPCPoint& a, const DPCP
     double ay0 = a.y, ay1 = a.y + a.height;
     double bx0 = b.x, bx1 = b.x + b.width;
     double by0 = b.y, by1 = b.y + b.height;
-    // ¤ô¥­
+    // æ°´å¹³
     double dx = std::max(0.0, std::max(ax0, bx0) - std::min(ax1, bx1));
-    // ««ª½
+    // å‚ç›´
     double dy = std::max(0.0, std::max(ay0, by0) - std::min(ay1, by1));
     return dx + dy;
 }
@@ -134,7 +131,7 @@ void DensityPeakClustering::computeRho() {
         }
     }
 
-    // Åã¥Ü max/min ¨Ñ debug
+    // é¡¯ç¤º max/min ä¾› debug
     double minRho = std::numeric_limits<double>::max();
     double maxRho = std::numeric_limits<double>::lowest();
     for (const auto& pt : points_) {
@@ -148,25 +145,25 @@ void DensityPeakClustering::computeDelta() {
     int N = points_.size();
     if (N == 0) return;
 
-    // (1) ·Ç³Æ rho ­°§Ç¯Á¤Ş
+    // (1) æº–å‚™ rho é™åºç´¢å¼•
     std::vector<int> sortedIdx(N);
     for (int i = 0; i < N; ++i) sortedIdx[i] = i;
     std::sort(sortedIdx.begin(), sortedIdx.end(),
         [this](int a, int b) { return points_[a].rho > points_[b].rho; });
 
-    // (2) ¹w³B²z¥ş³õ³Ì¤j¶ZÂ÷
+    // (2) é è™•ç†å…¨å ´æœ€å¤§è·é›¢
     double maxDist = 0;
     for (int i = 0; i < N; ++i)
         for (int j = 0; j < N; ++j)
             if (i != j) maxDist = std::max(maxDist, distMat_[i][j]);
 
-    // (3) ¨Ì§Ç­pºâ delta, nearestHigher
+    // (3) ä¾åºè¨ˆç®— delta, nearestHigher
     for (int rank = 0; rank < N; ++rank) {
         int idx = sortedIdx[rank];
         double myRho = points_[idx].rho;
         double minDist = std::numeric_limits<double>::max();
         int nearestIdx = -1;
-        // ¤ñ¦Û¤v rho °ªªº¥u¦³«e­±¡]rank 0 ~ rank-1¡^
+        // æ¯”è‡ªå·± rho é«˜çš„åªæœ‰å‰é¢ï¼ˆrank 0 ~ rank-1ï¼‰
         for (int r = 0; r < rank; ++r) {
             int jdx = sortedIdx[r];
             double d = distMat_[idx][jdx];
@@ -176,9 +173,9 @@ void DensityPeakClustering::computeDelta() {
             }
         }
         if (rank == 0) {
-            // ¥ş³õ³Ì°ª±K«×
+            // å…¨å ´æœ€é«˜å¯†åº¦
             points_[idx].delta = maxDist;
-            points_[idx].nearestHigher = -1; // ¨S¦³°ª©ó¥¦ªº
+            points_[idx].nearestHigher = -1; // æ²’æœ‰é«˜æ–¼å®ƒçš„
         }
         else {
             points_[idx].delta = minDist;
@@ -186,7 +183,7 @@ void DensityPeakClustering::computeDelta() {
         }
     }
 
-    // debug: ¦L¥Xdelta½d³ò
+    // debug: å°å‡ºdeltaç¯„åœ
     double minD = std::numeric_limits<double>::max(), maxD = -1;
     for (const auto& pt : points_) {
         minD = std::min(minD, pt.delta);
@@ -197,28 +194,37 @@ void DensityPeakClustering::computeDelta() {
 
 
 std::vector<int> DensityPeakClustering::selectCenters() {
+
     std::vector<int> centerIndices;
     int N = points_.size();
     if (N == 0) return centerIndices;
 
-    // --- Step 1. ­pºâ rho*delta ­¼¿n ---
+    // --- Step 1. è¨ˆç®— rho*delta ä¹˜ç© ---
     std::vector<std::pair<double, int>> rhoDeltaProduct;
     for (int i = 0; i < N; ++i) {
         double score = points_[i].rho * points_[i].delta;
         rhoDeltaProduct.emplace_back(score, i);
     }
 
-    // --- Step 2. ¨Ì·Ó score ¥Ñ¤j¨ì¤p±Æ§Ç ---
+    // --- Step 2. ä¾ç…§ score ç”±å¤§åˆ°å°æ’åº ---
     std::sort(rhoDeltaProduct.rbegin(), rhoDeltaProduct.rend());
 
-    // --- Step 3. ¿ï Top-K ·í¤¤¤ß ---
-    int K = estimateBestClusterCount();  // §A¥i¥H®Ú¾Ú¸gÅç«ü©w K¡A¤]¥i¤â°Ê¶Ç°Ñ¼Æ
-    if (K <= 0) K = std::min(8, N);      // ¹w³]8¸s¡A©ÎµøÂI¼Æ¨M©w
+    // --- Step 3. é¸ Top-K ç•¶ä¸­å¿ƒ ---
+   // int K = estimateBestClusterCount();  // ä½ å¯ä»¥æ ¹æ“šç¶“é©—æŒ‡å®š Kï¼Œä¹Ÿå¯æ‰‹å‹•å‚³åƒæ•¸
+    //if (K <= 0) K = std::min(8, N);      // é è¨­8ç¾¤ï¼Œæˆ–è¦–é»æ•¸æ±ºå®š
+    //int K = 3;
+
+    int K = estimateBestClusterCount();  // ä½ å¯ä»¥æ ¹æ“šç¶“é©—æŒ‡å®š Kï¼Œä¹Ÿå¯æ‰‹å‹•å‚³åƒæ•¸
+    if (K <= 0) K = std::min(8, N);      // é è¨­8ç¾¤ï¼Œæˆ–è¦–é»æ•¸æ±ºå®š
+
+
+
+
 
     for (int i = 0; i < K; ++i) {
         int idx = rhoDeltaProduct[i].second;
         points_[idx].isCenter = true;
-        points_[idx].clusterId = idx;    // ¥Î index ·í cluster id
+        points_[idx].clusterId = idx;    // ç”¨ index ç•¶ cluster id
         centerIndices.push_back(idx);
         // Debug log:
         std::cout << "[DPC] Center #" << i << " : " << points_[idx].instanceName
@@ -227,10 +233,10 @@ std::vector<int> DensityPeakClustering::selectCenters() {
             << ", product=" << rhoDeltaProduct[i].first << ")\n";
     }
 
-    // ­Y·Q¥Î threshold¡]¨Ò¦p delta > £__thr & rho > £l_thr¡^¡A¥i¥Î³o­Ó¼gªk¡G
+    // è‹¥æƒ³ç”¨ thresholdï¼ˆä¾‹å¦‚ delta > Î´_thr & rho > Ï_thrï¼‰ï¼Œå¯ç”¨é€™å€‹å¯«æ³•ï¼š
     /*
-    double rho_thr = ...;    // ¥i¥~³¡ set ©Î¦Û°Êºâ
-    double delta_thr = ...;  // ¥i¥~³¡ set ©Î¦Û°Êºâ
+    double rho_thr = ...;    // å¯å¤–éƒ¨ set æˆ–è‡ªå‹•ç®—
+    double delta_thr = ...;  // å¯å¤–éƒ¨ set æˆ–è‡ªå‹•ç®—
     for (int i = 0; i < N; ++i) {
         if (points_[i].rho > rho_thr && points_[i].delta > delta_thr) {
             points_[i].isCenter = true;
@@ -251,6 +257,7 @@ int DensityPeakClustering::estimateBestClusterCount() const {
 double DensityPeakClustering::estimateOptimalCutoffDistance() const {
     if (distMat_.empty() || points_.size() < 2)
         return 10.0;
+
     std::vector<double> dists;
     int N = points_.size();
     for (int i = 0; i < N; ++i) {
@@ -258,158 +265,327 @@ double DensityPeakClustering::estimateOptimalCutoffDistance() const {
             dists.push_back(distMat_[i][j]);
         }
     }
+
     if (dists.empty()) return 10.0;
+
     std::sort(dists.begin(), dists.end());
 
-    // ·Q­n¨C­ÓÂI¥­§¡¦³ targetNeighbor ­Ó¾F©~
-    int targetNeighbor = std::clamp(N / 100, 10, 50); // 1%N¡A³Ì¤Ö10¡A³Ì¦h50
-    int cutoffIdx = std::min(targetNeighbor * N, (int)dists.size() - 1);
+    // æ›¿ä»£ std::clamp çš„å¯«æ³•
+    int targetNeighbor = N / 100;
+    if (targetNeighbor < 10) targetNeighbor = 10;
+    if (targetNeighbor > 50) targetNeighbor = 50;
+
+    int cutoffIdx = std::min(targetNeighbor * N, static_cast<int>(dists.size()) - 1);
     return dists[cutoffIdx];
 }
 
 
+
 void DensityPeakClustering::assignClusters(const std::vector<int>& centerIndices) {
     int N = points_.size();
-    // 1. ¥ı§â¤¤¤ßÂI³] clusterId
-    for (int idx : centerIndices)
-        points_[idx].clusterId = idx;
 
-    // 2. ¨ä¥LÂI¡uªuµÛ nearestHigher¡vª¦¨ì¤¤¤ß¡A½Æ»s center ªº clusterId
-    for (int i = 0; i < N; ++i) {
-        if (points_[i].isCenter) continue;
-        int cur = i;
-        while (!points_[cur].isCenter) {
-            cur = points_[cur].nearestHigher;
-            // ¹w¨¾¦³¦ºÁå
-            if (cur == -1) break;
-        }
-        points_[i].clusterId = (cur == -1) ? -1 : cur;
+    if (N == 0) return;
+
+    // åˆå§‹åŒ–ä¸­å¿ƒé»çš„ clusterId
+    for (size_t i = 0; i < centerIndices.size(); ++i) {
+        int idx = centerIndices[i];
+        points_[idx].clusterId = idx;
     }
+
+    // æŒ‰ç…§ rho é™åºæ’åº
+    std::vector<int> sortedIdx(N);
+    for (int i = 0; i < N; ++i) sortedIdx[i] = i;
+
+    std::sort(sortedIdx.begin(), sortedIdx.end(),
+        [this](int a, int b) { return points_[a].rho > points_[b].rho; });
+
+    for (size_t i = 0; i < sortedIdx.size(); ++i) {
+        int idx = sortedIdx[i];
+        if (points_[idx].isCenter) continue;
+        int parent = points_[idx].nearestHigher;
+        if (parent != -1) {
+            points_[idx].clusterId = points_[parent].clusterId;
+        }
+    }
+
+    // å»ºç«‹ clusterMap
+    std::unordered_map<int, DPCCluster> clusterMap;
+    for (int i = 0; i < N; ++i) {
+        int cid = points_[i].clusterId;
+        if (cid == -1) continue;
+        clusterMap[cid].members.push_back(i);
+    }
+
+    // è£½ä½œ clusters_
+    clusters_.clear();
+    for (std::unordered_map<int, DPCCluster>::iterator it = clusterMap.begin(); it != clusterMap.end(); ++it) {
+        int cid = it->first;
+        DPCCluster& cluster = it->second;
+        cluster.clusterId = cid;
+
+        // æ‰¾å‡ºä¸­å¿ƒé» index
+        cluster.centerIdx = -1;
+        for (size_t j = 0; j < cluster.members.size(); ++j) {
+            int idx = cluster.members[j];
+            if (points_[idx].isCenter) {
+                cluster.centerIdx = idx;
+                break;
+            }
+        }
+        if (cluster.centerIdx == -1 && !cluster.members.empty()) {
+            cluster.centerIdx = cluster.members[0];
+        }
+
+        // è¨­å®š celltype
+        cluster.celltype = points_[cluster.centerIdx].cellType;
+
+        clusters_.push_back(cluster);
+    }
+
+    if (clusters_.empty()) {
+        std::cerr << "[DPC] Warning: No clusters assigned! Check if selectCenters() returned any.\n";
+    }
+
+    // å»ºç«‹ cluster æŸ¥è¡¨
+    instanceToClusterId_.clear();
+    clusterIdToCluster_.clear();
+    for (size_t i = 0; i < clusters_.size(); ++i) {
+        const DPCCluster& cluster = clusters_[i];
+        clusterIdToCluster_[cluster.clusterId] = cluster;
+        for (size_t j = 0; j < cluster.members.size(); ++j) {
+            int idx = cluster.members[j];
+            if (idx >= 0 && idx < static_cast<int>(points_.size())) {
+                instanceToClusterId_[points_[idx].instanceName] = cluster.clusterId;
+            }
+        }
+    }
+
+    std::cout << "[DPC] Assigned " << clusters_.size() << " clusters.\n";
+    computeClusterGeometry();
 }
+
 
 
 void DensityPeakClustering::computeClusterGeometry() {
-    clusters_.clear();
-    // (1) ¨Ì clusterId ¤À²Õ
-    std::map<int, DPCCluster> clusterMap;
-    for (int i = 0; i < points_.size(); ++i) {
-        int cid = points_[i].clusterId;
-        if (cid < 0) continue;
-        clusterMap[cid].clusterId = cid;
-        clusterMap[cid].members.push_back(i);
-        if (points_[cid].isCenter) {
-            clusterMap[cid].centerIdx = cid;
-        }
-    }
-    // (2) ­pºâ¨C¸s geometry
-    for (auto& [cid, cl] : clusterMap) {
+    for (auto& cluster : clusters_) {
         double sumX = 0, sumY = 0;
-        double minX = 1e20, maxX = -1e20, minY = 1e20, maxY = -1e20;
-        for (int idx : cl.members) {
-            sumX += points_[idx].x;
-            sumY += points_[idx].y;
-            minX = std::min(minX, points_[idx].x);
-            maxX = std::max(maxX, points_[idx].x);
-            minY = std::min(minY, points_[idx].y);
-            maxY = std::max(maxY, points_[idx].y);
-        }
-        cl.avgX = sumX / cl.members.size();
-        cl.avgY = sumY / cl.members.size();
-        cl.minX = minX; cl.maxX = maxX; cl.minY = minY; cl.maxY = maxY;
-        // ­pºâ radius¡]¤¤¤ßÂI¨ì³Ì»·¦¨­ûªº¶ZÂ÷¡^
-        double r = 0;
-        for (int idx : cl.members) {
-            double dx = points_[idx].x - cl.avgX;
-            double dy = points_[idx].y - cl.avgY;
-            r = std::max(r, std::sqrt(dx * dx + dy * dy));
-        }
-        cl.radius = r;
-        clusters_.push_back(cl);
-    }
-}
+        double minX = std::numeric_limits<double>::max();
+        double maxX = std::numeric_limits<double>::lowest();
+        double minY = std::numeric_limits<double>::max();
+        double maxY = std::numeric_limits<double>::lowest();
 
-
-void DensityPeakClustering::exportClusteringSummary(
-    const std::string& chainId,
-    const std::string& filename,
-    const LibParser* libParser) const
-{
-    std::ofstream ofs(filename, std::ios::app); // append ¼Ò¦¡
-    ofs << "=== DPC Clustering Summary ===\n";
-    ofs << "  Scan Chain: " << chainId << "\n";
-    ofs << "  Total clusters: " << clusters_.size() << "\n";
-    for (int i = 0; i < clusters_.size(); ++i) {
-        const auto& c = clusters_[i];
-        ofs << "  Cluster #" << i
-            << " | clusterId: " << c.clusterId
-            << " | Size: " << c.members.size()
-            << " | Center: " << points_[c.centerIdx].instanceName
-            << " | AvgX=" << c.avgX << ", AvgY=" << c.avgY
-            << " | Radius=" << c.radius
-            << " | X=[" << c.minX << "," << c.maxX << "]"
-            << " | Y=[" << c.minY << "," << c.maxY << "]"
-            << "\n";
-        ofs << "    Members:\n";
-        std::map<std::string, std::vector<std::string>> typeToInstances;
-        for (int idx : c.members) {
+        for (int idx : cluster.members) {
             const auto& pt = points_[idx];
-            ofs << "      - " << pt.instanceName
-                << " | cellType: " << pt.cellType
-                << " | x=" << pt.x
-                << " | y=" << pt.y
-                << " | rho=" << pt.rho
-                << " | delta=" << pt.delta
-                << " | isCenter: " << (pt.isCenter ? "Y" : "N")
-                << "\n";
-            typeToInstances[pt.cellType].push_back(pt.instanceName);
+            sumX += pt.x;
+            sumY += pt.y;
+            minX = std::min(minX, pt.x);
+            maxX = std::max(maxX, pt.x);
+            minY = std::min(minY, pt.y);
+            maxY = std::max(maxY, pt.y);
         }
-        ofs << "    [Banking Candidates]\n";
-        for (const auto& [cellType, instList] : typeToInstances) {
-            const LibCell* cell = libParser ? libParser->getCell(cellType) : nullptr;
-            if (!cell || cell->bitWidth != 1) continue;
-            int total = instList.size();
-            int group_id = 1;
-            // ¥ı 4-bit
-            for (int i = 0; i + 4 <= total; i += 4) {
-                std::string mb4 = libParser ? libParser->getmultibitff4(cellType) : "";
-                ofs << "      [MBFF-4] ";
-                for (int j = 0; j < 4; ++j) ofs << instList[i + j] << " ";
-                ofs << "| mbff_cell: " << (mb4.empty() ? "[µL¹ïÀ³4bit]" : mb4)
-                    << " | group#" << group_id++ << "\n";
-            }
-            // ³Ñ¤U 2-bit
-            int remain = total % 4;
-            for (int i = total - remain; i + 2 <= total; i += 2) {
-                std::string mb2 = libParser ? libParser->getmultibitff2(cellType) : "";
-                ofs << "      [MBFF-2] ";
-                for (int j = 0; j < 2; ++j) ofs << instList[i + j] << " ";
-                ofs << "| mbff_cell: " << (mb2.empty() ? "[µL¹ïÀ³2bit]" : mb2)
-                    << " | group#" << group_id++ << "\n";
-            }
+
+        int N = cluster.members.size();
+        if (N > 0) {
+            cluster.avgX = sumX / N;
+            cluster.avgY = sumY / N;
         }
-        ofs << "\n";
+        cluster.minX = minX;
+        cluster.maxX = maxX;
+        cluster.minY = minY;
+        cluster.maxY = maxY;
+
+        // Radius ç‚ºæ‰€æœ‰æˆå“¡é»åˆ°ä¸­å¿ƒé»çš„æœ€å¤§è·é›¢
+        double maxR = 0;
+        for (int idx : cluster.members) {
+            const auto& pt = points_[idx];
+            double dx = pt.x - cluster.avgX;
+            double dy = pt.y - cluster.avgY;
+            maxR = std::max(maxR, std::sqrt(dx * dx + dy * dy));
+        }
+        cluster.radius = maxR;
     }
-    ofs << "\n";
 }
 
-std::vector<MBFFInstance>
-DensityPeakClustering::generateBankingResults(
-    const std::map<std::string, std::vector<DPCCluster>>& clusterResult,
-    const std::map<std::string, FlipFlopInfo>& ffLookup,
-    const LibParser* libParser,
-    const WeightParser* weights_) const
-{
-    std::vector<MBFFInstance> bankingList;
-    std::vector<std::string> remainingSingleBitFFs; // °O¿ı³Ñ¾lªº1-bit FF
-
-    if (!libParser) {
-        std::cerr << "[DPC] Error: libParser is not set!\n";
-        return bankingList;
+void DensityPeakClustering::printClusteringSummary() const {
+    if (clusters_.empty()) {
+        std::cerr << "[DPC] No clusters found when printing summary!\n";
     }
 
-    std::cout << "\n=== [DPC] Generate Banking Results ===\n";
+    std::ofstream fout("DPC_ClusteringSummary.txt");
+    std::ostream& out = fout.is_open() ? fout : std::cout;
 
-    const auto& allCells = libParser->getAllCells();
+    out << "=== DPC Clustering Summary ===\n";
+    out << "Total points clustered: " << points_.size() << "\n";
+    out << "Total clusters formed : " << clusters_.size() << "\n\n";
+
+
+
+    for (const auto& cluster : clusters_) {
+        if (cluster.centerIdx >= 0 && cluster.centerIdx < points_.size()) {
+            const auto& centerPt = points_[cluster.centerIdx];
+            out << "Cluster ID    : " << cluster.clusterId << "\n";
+            out << "  Center      : " << centerPt.instanceName << "\n";
+        }
+        else {
+            out << "Cluster ID    : " << cluster.clusterId << "\n";
+            out << "  Center      : [Invalid index: " << cluster.centerIdx << "]\n";
+        }
+
+        out << "  Members     : " << cluster.members.size() << "-->" << cluster.celltype << "\n";
+        out << "  Member List : [ ";
+        for (int idx : cluster.members) {
+            if (idx >= 0 && idx < points_.size()) {
+                out << points_[idx].instanceName << "-->" << points_[idx].cellType << " ";
+            }
+        }
+        out << "]\n";
+
+        out << "  Avg Coord   : (" << cluster.avgX << ", " << cluster.avgY << ")\n";
+        out << "  Radius      : " << cluster.radius << "\n";
+        out << "  BoundingBox : ["
+            << cluster.minX << ", " << cluster.maxX << "] x ["
+            << cluster.minY << ", " << cluster.maxY << "]\n";
+        /*if (libParser_) {
+            std::map<std::string, std::vector<std::string>> sbffToMBFFs;
+            for (const auto& pt : points_) {
+                const LibCell* cell = libParser_->getCell(pt.cellType);
+                if (cell) {
+                    if (!cell->singleBitDegenerate.empty()) {
+                        sbffToMBFFs[cell->singleBitDegenerate].push_back(pt.cellType);
+                        std::cout << "[DPC Debug] " << pt.instanceName << " (" << pt.cellType
+                            << ") é€€åŒ–ç‚º " << cell->singleBitDegenerate << "\n";
+                    }
+                    else {
+                        std::cout << "[DPC Debug] " << pt.instanceName << " (" << pt.cellType
+                            << ") æ²’æœ‰é€€åŒ–è¨­å®š\n";
+                    }
+                }
+                else {
+                    std::cout << "[DPC Debug] " << pt.instanceName << " ç„¡æ³•åœ¨ libParser ä¸­æ‰¾åˆ°å°æ‡‰ cell: " << pt.cellType << "\n";
+                }
+            }
+            out << "\n=== MBFF Reverse Mapping ===\n";
+            for (const auto& [sbff, mbffs] : sbffToMBFFs) {
+                out << "Single-bit FF \"" << sbff << "\" â†’ å¯å‡ç´šç‚º: ";
+                for (const auto& mb : mbffs) {
+                    out << mb << " ";
+                }
+                out << "\n";
+            }
+            out << "-----------------------------------\n";
+        }*/
+
+
+        out << "-----------------------------------\n";
+    }
+    /* std::string targetFF = "SNPSLOPT25_FSDN_V2_1";
+
+    for (const auto& cluster : clusters_) {
+        int targetCount = 0;
+
+        // Step 1: çµ±è¨ˆè©² cluster ä¸­ç›®æ¨™ cellType å‡ºç¾æ¬¡æ•¸
+        for (int idx : cluster.members) {
+            if (idx >= 0 && idx < points_.size()) {
+                if (points_[idx].cellType == targetFF) {
+                    targetCount++;
+                }
+            }
+        }
+
+        // Step 2: è‹¥å‡ºç¾æ¬¡æ•¸ >= 2ï¼Œæ‰å°å‡ºé€™å€‹ cluster
+        if (targetCount >= 2) {
+            out << "Cluster ID    : " << cluster.clusterId << "\n";
+            if (cluster.centerIdx >= 0 && cluster.centerIdx < points_.size()) {
+                const auto& centerPt = points_[cluster.centerIdx];
+                out << "  Center      : " << centerPt.instanceName << "\n";
+            }
+            else {
+                out << "  Center      : [Invalid index: " << cluster.centerIdx << "]\n";
+            }
+
+            out << "  Members     : " << cluster.members.size() << " --> " << cluster.celltype << "\n";
+
+            // Optionalï¼šå°å‡ºæˆå“¡æ¸…å–®
+            out << "  Member List : [ ";
+            for (int idx : cluster.members) {
+                if (idx >= 0 && idx < points_.size()) {
+                    const auto& pt = points_[idx];
+                    out << pt.instanceName << "-->" << pt.cellType << " ";
+                }
+            }
+            out << "]\n";
+
+            out << "  âš ï¸  Found " << targetCount << " instances of " << targetFF << " in this cluster!\n";
+            out << "  Avg Coord   : (" << cluster.avgX << ", " << cluster.avgY << ")\n";
+            out << "  Radius      : " << cluster.radius << "\n";
+            out << "  BoundingBox : [" << cluster.minX << ", " << cluster.maxX
+                << "] x [" << cluster.minY << ", " << cluster.maxY << "]\n";
+            out << "-----------------------------------\n";
+        }
+    }*/
+
+    if (fout.is_open()) {
+        std::cout << "[DPC] Clustering summary saved to DPC_ClusteringSummary.txt\n";
+        fout.close();
+    }
+}
+std::map<std::string, std::vector<DPCCluster>>
+DensityPeakClustering::clusterByClockNet(
+    const std::map<std::string, FlipFlopInfo>& ffLookup,
+    bool autoTune)
+{
+    // Step 1: å°‡ flip-flops ä¾ clockNet åˆ†çµ„
+    std::map<std::string, std::vector<FlipFlopInfo>> clockToFFs;
+    for (std::map<std::string, FlipFlopInfo>::const_iterator it = ffLookup.begin(); it != ffLookup.end(); ++it) {
+        const FlipFlopInfo& ff = it->second;
+        clockToFFs[ff.clockNet].push_back(ff);
+    }
+
+    // Step 2: å°æ¯å€‹ clockNet é€²è¡Œ clustering
+    std::map<std::string, std::vector<DPCCluster>> result;
+    for (std::map<std::string, std::vector<FlipFlopInfo> >::const_iterator it = clockToFFs.begin(); it != clockToFFs.end(); ++it) {
+        const std::string& clockNet = it->first;
+        const std::vector<FlipFlopInfo>& ffList = it->second;
+
+        performClustering(ffList, autoTune);    // æ ¸å¿ƒåˆ†ç¾¤
+        result[clockNet] = clusters_;           // clusters_ æ˜¯æˆå“¡è®Šæ•¸
+        std::cout << "[DPC] ClockNet " << clockNet
+            << " clustered into " << clusters_.size() << " clusters.\n";
+    }
+
+    return result;
+}
+
+int DensityPeakClustering::getClusterIdForInstance(const std::string& name) const {
+    auto it = instanceToClusterId_.find(name);
+    return (it != instanceToClusterId_.end()) ? it->second : -1;
+}
+
+const DPCCluster* DensityPeakClustering::getClusterById(int cid) const {
+    auto it = clusterIdToCluster_.find(cid);
+    return (it != clusterIdToCluster_.end()) ? &(it->second) : nullptr;
+}
+
+
+
+
+
+// çµ±ä¸€è™•ç† Single-Bit FF Merge with fallback width logicï¼ŒåŒ…å«è·é›¢å„ªåŒ–ç¾¤çµ„é¸æ“‡
+
+void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
+    int twobitFF = 0;
+    int fourbitFF = 0;
+
+    mergeMap_.clear();
+    if (!libParser_) {
+        std::cerr << "[DPC] Error: libParser is not set!" << std::endl;
+        return;
+    }
+
+    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates ===" << std::endl;
+    mergedFFResults_.clear();
+
+    const auto& allCells = libParser_->getAllCells();
     int totalClustersWithMerges = 0;
     int totalMergePairs = 0;
 
@@ -421,465 +597,470 @@ DensityPeakClustering::generateBankingResults(
         return 1;
         };
 
-    // ­pºâ¨â­Ó FF ¤§¶¡ªº¼Ú¦¡¶ZÂ÷
-    auto calculateDistance = [&ffLookup](const std::string& ff1, const std::string& ff2) -> double {
-        auto it1 = ffLookup.find(ff1);
-        auto it2 = ffLookup.find(ff2);
-        if (it1 == ffLookup.end() || it2 == ffLookup.end()) return 1e9;
-
-        double dx = it1->second.x - it2->second.x;
-        double dy = it1->second.y - it2->second.y;
-        return std::sqrt(dx * dx + dy * dy);
+    auto distSq = [](int x1, int y1, int x2, int y2) {
+        return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
         };
 
-    // ³q¥Îªº§ä³ÌªñN­ÓFF²Õ¦Xªº¨ç¼Æ
-    auto findClosestNGroup = [&](const std::vector<std::string>& instList, int N) -> std::vector<std::string> {
-        if (instList.size() < N) return {};
-
-        double minTotalDist = 1e9;
-        std::vector<std::string> bestGroup;
-
-        // ¥Í¦¨©Ò¦³N­ÓFFªº²Õ¦X
-        std::vector<int> indices(instList.size());
-        std::iota(indices.begin(), indices.end(), 0);
-
-        std::vector<bool> selector(instList.size(), false);
-        std::fill(selector.begin(), selector.begin() + N, true);
-
-        do {
-            std::vector<std::string> group;
-            for (int i = 0; i < instList.size(); ++i) {
-                if (selector[i]) {
-                    group.push_back(instList[i]);
+    auto calcGroupCenter = [&](const std::vector<std::string>& group) -> std::pair<int, int> {
+        int sumX = 0, sumY = 0;
+        for (const auto& name : group) {
+            for (const auto& pt : points_) {
+                if (pt.instanceName == name) {
+                    sumX += pt.x;
+                    sumY += pt.y;
+                    break;
                 }
             }
-
-            // ­pºâ³o­Ó²Õ¦XªºÁ`¶ZÂ÷¡]©Ò¦³pair¤§¶¡ªº¶ZÂ÷©M¡^
-            double totalDist = 0;
-            for (int a = 0; a < N; ++a) {
-                for (int b = a + 1; b < N; ++b) {
-                    totalDist += calculateDistance(group[a], group[b]);
-                }
-            }
-
-            if (totalDist < minTotalDist) {
-                minTotalDist = totalDist;
-                bestGroup = group;
-            }
-        } while (std::prev_permutation(selector.begin(), selector.end()));
-
-        return bestGroup;
+        }
+        return { sumX / static_cast<int>(group.size()), sumY / static_cast<int>(group.size()) };
         };
 
-    // ½T©w³ÌÀuªº¤À²Õµ¦²¤
-    auto determineOptimalGroupingStrategy = [&](int totalCount, const std::vector<std::string>& mbffCandidates) -> std::vector<int> {
-        // §ä¥X¥i¥Îªº³Ì¤jbit width
-        std::vector<int> availableBitWidths;
-        for (const auto& mbff : mbffCandidates) {
-            int bitWidth = getBitWidthFromName(mbff);
-            if (std::find(availableBitWidths.begin(), availableBitWidths.end(), bitWidth) == availableBitWidths.end()) {
-                availableBitWidths.push_back(bitWidth);
-            }
-        }
-        std::sort(availableBitWidths.rbegin(), availableBitWidths.rend()); // ­°§Ç±Æ¦C
+    std::vector<std::string> remainingSingleBitFFs;
 
-        std::vector<int> strategy;
-        int remaining = totalCount;
-
-        // ³g¤ßµ¦²¤¡GÀu¥ı¨Ï¥Î³Ì¤jªºbit width
-        for (int bitWidth : availableBitWidths) {
-            if (bitWidth == 1) continue; // ¸õ¹L1-bit¡A¦]¬°§Ú­Ì¤£¦X¨Ö³æ­ÓFF
-
-            while (remaining >= bitWidth) {
-                strategy.push_back(bitWidth);
-                remaining -= bitWidth;
-            }
+    for (const auto& cluster : clusters_) {
+        // collect by "single-bit degenerate" type
+        std::map<std::string, std::vector<std::string>> sbffToInstances;
+        std::map<std::string, std::pair<int, int>> coords;
+        for (int idx : cluster.members) {
+            const auto& pt = points_[idx];
+            std::string sbff = libParser_->getSingleBitDegenerate(pt.cellType);
+            if (sbff.empty()) sbff = pt.cellType;
+            sbffToInstances[sbff].push_back(pt.instanceName);
+            coords[pt.instanceName] = { pt.x, pt.y };
         }
 
-        return strategy;
-        };
+        bool clusterPrinted = false;
 
-    // ±q¦Cªí¤¤²¾°£«ü©wªº¤¸¯À
-    auto removeFromList = [](std::vector<std::string>& list, const std::vector<std::string>& toRemove) {
-        for (const auto& item : toRemove) {
-            list.erase(std::remove(list.begin(), list.end(), item), list.end());
-        }
-        };
-
-    // ¹M¾ú©Ò¦³ clockNet ªº cluster µ²ªG
-    for (const auto& [clockNet, clusters] : clusterResult) {
-        std::cout << "\nProcessing Clock Net: " << clockNet << "\n";
-
-        for (const auto& cluster : clusters) {
-            std::map<std::string, std::vector<std::string>> sbffToInstances;
-
-            // ®Ú¾Ú cluster.members ¦¬¶° flip-flop ¸ê°T
-            for (int idx : cluster.members) {
-                if (idx < points_.size()) {
-                    const auto& pt = points_[idx];
-                    auto ffIt = ffLookup.find(pt.instanceName);
-                    if (ffIt != ffLookup.end()) {
-                        std::string sbff = libParser->getSingleBitDegenerate(ffIt->second.cellType);
-                        if (sbff.empty()) sbff = ffIt->second.cellType;
-                        sbffToInstances[sbff].push_back(pt.instanceName);
-                    }
-                }
+        for (auto& kv : sbffToInstances) {
+            const std::string& sbff = kv.first;
+            const auto& instListRaw = kv.second;
+            if (instListRaw.size() < 2) {
+                remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instListRaw.begin(), instListRaw.end());
+                continue;
             }
-
-            bool clusterPrinted = false;
-
-            for (const auto& [sbff, originalInstList] : sbffToInstances) {
-                if (originalInstList.size() < 2) {
-                    // ³æ­ÓFFª½±µ¥[¤J³Ñ¾l¦Cªí
-                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(),
-                        originalInstList.begin(), originalInstList.end());
+            // extra: group by path prefix
+            std::map<std::string, std::vector<std::string>> prefixGroups;
+            for (const auto& inst : instListRaw) {
+                auto pos = inst.find_last_of('/');
+                std::string prefix = (pos != std::string::npos ? inst.substr(0, pos) : "");
+                prefixGroups[prefix].push_back(inst);
+            }
+            for (auto& pg : prefixGroups) {
+                auto& instList = pg.second;
+                if (instList.size() < 2) {
+                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instList.begin(), instList.end());
                     continue;
                 }
-
-                std::vector<std::string> mbffCandidates;
-                for (const auto& [cellName, cell] : allCells) {
-                    if (cell.singleBitDegenerate == sbff)
-                        mbffCandidates.push_back(cellName);
-                }
-
-                if (mbffCandidates.empty()) {
-                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(),
-                        originalInstList.begin(), originalInstList.end());
-                    continue;
-                }
-
                 if (!clusterPrinted) {
                     std::cout << "\nCluster #" << cluster.clusterId << ":\n";
                     clusterPrinted = true;
                     totalClustersWithMerges++;
                 }
 
-                std::cout << "  SBFF Type: " << sbff << "\n";
-                std::cout << "    Instance Count: " << originalInstList.size() << "\n";
-
-                // ½Æ»s¦Cªí¶i¦æ³B²z
-                std::vector<std::string> instList = originalInstList;
-                int groupId = 1;
-
-                // ½T©w³ÌÀuªº¤À²Õµ¦²¤
-                std::vector<int> groupingStrategy = determineOptimalGroupingStrategy(instList.size(), mbffCandidates);
-
-                std::cout << "    Optimal grouping strategy for " << instList.size() << " FFs: ";
-                for (int bitWidth : groupingStrategy) {
-                    std::cout << bitWidth << "-bit ";
+                std::vector<std::string> mbffCandidates;
+                for (auto& cellIt : allCells) {
+                    if (cellIt.second.singleBitDegenerate == sbff)
+                        mbffCandidates.push_back(cellIt.first);
                 }
-                std::cout << "\n";
+                if (mbffCandidates.empty()) {
+                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instList.begin(), instList.end());
+                    continue;
+                }
 
-                // «ö·Óµ¦²¤¶i¦æ¤À²Õ
-                for (int targetBitWidth : groupingStrategy) {
-                    if (instList.size() < targetBitWidth) continue;
+                // find best 4-bit groups
+                auto findGroups = [&](int bitSize) {
+                    std::vector<std::vector<std::string>> groups;
+                    auto tmpList = instList;
+                    while (tmpList.size() >= bitSize) {
+                        std::vector<std::string> bestGroup;
+                        int bestD = INT_MAX;
+                        std::vector<int> idx(tmpList.size()); std::iota(idx.begin(), idx.end(), 0);
+                        std::vector<bool> sel(tmpList.size(), false); std::fill(sel.begin(), sel.begin() + bitSize, true);
+                        do {
+                            std::vector<std::string> cand;
+                            for (int i = 0; i < sel.size(); ++i) if (sel[i]) cand.push_back(tmpList[i]);
+                            int dsum = 0;
+                            for (int a = 0; a < bitSize; ++a) for (int b = a + 1; b < bitSize; ++b)
+                                dsum += distSq(coords[cand[a]].first, coords[cand[a]].second,
+                                    coords[cand[b]].first, coords[cand[b]].second);
+                            if (dsum < bestD) { bestD = dsum; bestGroup = cand; }
+                        } while (std::prev_permutation(sel.begin(), sel.end()));
+                        if (bestGroup.empty()) break;
+                        groups.push_back(bestGroup);
+                        for (auto& n : bestGroup) tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), n), tmpList.end());
+                    }
+                    return groups;
+                    };
+                auto groups4 = findGroups(4);
+                auto groups2 = findGroups(2);
 
-                    // §ä³ÌªñªºN­ÓFF
-                    std::vector<std::string> groupN = findClosestNGroup(instList, targetBitWidth);
-                    if (groupN.empty()) continue;
-
-                    // §ä³Ì¨ÎN-bit MBFF
-                    std::string bestFF;
-                    double bestMetric = 1e9;
-                    for (const auto& mbff : mbffCandidates) {
-                        const auto& cell = allCells.at(mbff);
-                        if (getBitWidthFromName(mbff) == targetBitWidth) {
-                            double metric = (weights_ && weights_->getBeta() / weights_->getGamma() > 3000)
-                                ? cell.cellLeakagePower : cell.area;
-                            if (metric < bestMetric) {
-                                bestMetric = metric;
-                                bestFF = mbff;
-                            }
+                auto handle = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
+                    for (auto& group : groups) {
+                        // pick best MBFF cell
+                        std::string bestFF;
+                        double bestM = 1e9;
+                        for (auto& mbff : mbffCandidates) if (getBitWidthFromName(mbff) == bit) {
+                            const auto& cell = allCells.at(mbff);
+                            double metric = (weights_.Beta / weights_.Gamma > 3000) ? cell.cellLeakagePower : cell.area;
+                            if (metric < bestM) { bestM = metric; bestFF = mbff; }
                         }
-                    }
+                        if (bestFF.empty()) continue;
 
-                    if (bestFF.empty()) continue;
-
-                    std::cout << "      ¡÷ [";
-                    for (int i = 0; i < groupN.size(); ++i) {
-                        if (i > 0) std::cout << ", ";
-                        std::cout << groupN[i];
-                    }
-                    std::cout << "] ¡÷ " << bestFF << " (" << targetBitWidth << "-bit, group#" << groupId++ << ")\n";
-                    totalMergePairs++;
-
-                    // ³Ğ«Ø MBFFInstance
-                    MBFFInstance mbffInst;
-                    static int global_mbff_id = 1;
-
-                    mbffInst.newInstanceName = "merged_" + std::to_string(global_mbff_id++) +
-                        "_" + std::to_string(targetBitWidth) + "bit";
-
-                    mbffInst.mbffCellType = bestFF;
-                    mbffInst.mergedFFs = groupN;
-                    mbffInst.bitWidth = targetBitWidth;
-
-                    // ­pºâ½è¤ß®y¼Ğ
-                    int sumX = 0, sumY = 0;
-                    for (const auto& name : groupN) {
-                        auto ffIt = ffLookup.find(name);
-                        if (ffIt != ffLookup.end()) {
-                            sumX += ffIt->second.x;
-                            sumY += ffIt->second.y;
+                        totalMergePairs++;
+                        MergedFF merged;
+                        merged.mbffType = bestFF;
+                        merged.bitwidth = bit;
+                        merged.mergedFFs = group;
+                        // newInstanceName = same prefix + "/merged_x"
+                        std::string base = "merged_" + std::to_string(totalMergePairs);
+                        merged.newInstanceName = (pg.first.empty() ? base : pg.first + "/" + base);
+                        auto cen = calcGroupCenter(group);
+                        merged.newX = cen.first; merged.newY = cen.second;
+                        auto& cellInfo = allCells.at(bestFF);
+                        merged.power = cellInfo.cellLeakagePower;
+                        merged.area = cellInfo.area;
+                        const auto& mbffMacro = macroMap_->at(merged.mbffType).pins;
+                        for (int i = 0; i < merged.mergedFFs.size(); ++i) {
+                            std::string d_pin = "D" + std::to_string(i);
+                            std::string q_pin = "Q" + std::to_string(i);
+                            merged.mbffPinToOrigPin[d_pin] = merged.mergedFFs[i] + "/D";
+                            merged.mbffPinToOrigPin[q_pin] = merged.mergedFFs[i] + "/Q";
+                            merged.mbffPinToOrigFF[d_pin] = merged.mergedFFs[i];
+                            merged.mbffPinToOrigFF[q_pin] = merged.mergedFFs[i];
                         }
+                        mergedFFResults_.push_back(merged);
                     }
-
-                    mbffInst.x = sumX / targetBitWidth;
-                    mbffInst.y = sumY / targetBitWidth;
-
-                    //pin map
-                    const auto& mbffMacro = macroMap_->at(mbffInst.mbffCellType).pins;
-                    for (int i = 0; i < mbffInst.mergedFFs.size(); ++i) {
-                        std::string d_pin = "D" + std::to_string(i);
-                        std::string q_pin = "Q" + std::to_string(i);
-                        mbffInst.mbffPinToOrigPin[d_pin] = mbffInst.mergedFFs[i] + "/D";
-                        mbffInst.mbffPinToOrigPin[q_pin] = mbffInst.mergedFFs[i] + "/Q";
-                        mbffInst.mbffPinToOrigFF[d_pin] = mbffInst.mergedFFs[i];
-                        mbffInst.mbffPinToOrigFF[q_pin] = mbffInst.mergedFFs[i];
-                    }
-
-                    bankingList.push_back(mbffInst);
-                    removeFromList(instList, groupN);
-                }
-
-                // ³Ñ¾lªº³æ­ÓFF¥[¤J³Ñ¾l¦Cªí
-                if (!instList.empty()) {
-                    std::cout << "    Remaining single-bit FFs: ";
-                    for (const auto& ff : instList) {
-                        std::cout << ff << " ";
-                    }
-                    std::cout << "\n";
-                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(),
-                        instList.begin(), instList.end());
-                }
+                    };
+                handle(groups4, 4);
+                handle(groups2, 2);
             }
         }
     }
+    // build mergeMap
+    for (auto& m : mergedFFResults_) for (auto& s : m.mergedFFs)
+        mergeMap_.addMapping(s, m.newInstanceName);
 
-    // ============= ·s¼W³¡¤À¡G±N³Ñ¾lªº1-bit FF¥[¤Jµ²ªG =============
-    std::cout << "\n=== Processing Remaining Single-bit FFs ===\n";
-    std::cout << "Total remaining single-bit FFs: " << remainingSingleBitFFs.size() << "\n";
-
-    // ¬°¨C­Ó³Ñ¾lªº1-bit FF³Ğ«Ø¤@­ÓMBFFInstance
-    for (const auto& ffName : remainingSingleBitFFs) {
-        auto ffIt = ffLookup.find(ffName);
-        if (ffIt != ffLookup.end()) {
-            const auto& ffInfo = ffIt->second;
-
-            MBFFInstance singleBitInst;
-            singleBitInst.newInstanceName = ffName;   // «O«ù­ì¥»ªºinstance name
-            singleBitInst.mbffCellType = ffInfo.cellType; // «O«ù­ì¥»ªºcell type
-            singleBitInst.mergedFFs.push_back(ffName);    // ¥u¥]§t¦Û¤v
-            singleBitInst.bitWidth = 1;                   // 1-bit
-            singleBitInst.orientation = ffInfo.orient;
-            singleBitInst.x = ffInfo.x;                // ¨Ï¥Î­ì¥»ªº®y¼Ğ
-            singleBitInst.y = ffInfo.y;
-
-            bankingList.push_back(singleBitInst);
-        }
-    }
-
-    std::cout << "  All " << remainingSingleBitFFs.size()
-        << " single-bit FFs added with original instance names\n";
-    // =========================================================
-
-    // ============= ²Î­p¤£¦Pbit widthªºbankingµ²ªG =============
-    std::map<int, int> bitWidthCount;
-    std::map<int, int> ffCount; // ²Î­p¨CºØbit width¥]§tªºFFÁ`¼Æ
-
-    for (const auto& mbff : bankingList) {
-        bitWidthCount[mbff.bitWidth]++;
-        ffCount[mbff.bitWidth] += mbff.bitWidth; // ¨C­Óinstance¥]§tªºFF¼Æ¶q = bitWidth
-    }
-
-    std::cout << "\n=== Banking Results Summary ===\n";
-    std::cout << "Total banking instances: " << bankingList.size() << "\n";
-    std::cout << "Bit-width distribution:\n";
-
-    int totalOriginalFFs = 0;
-    for (const auto& [bitWidth, count] : bitWidthCount) {
-        int totalFFsInThisBitWidth = ffCount[bitWidth];
-        totalOriginalFFs += totalFFsInThisBitWidth;
-
-        std::cout << "  " << bitWidth << "-bit MBFF: " << count << " instances"
-            << " (containing " << totalFFsInThisBitWidth << " FFs)\n";
-    }
-
-    std::cout << "Total FFs processed: " << totalOriginalFFs << "\n";
-
-    // ­pºâbanking®Ä²v
-    int mergedFFs = totalOriginalFFs - bitWidthCount[1]; // ¦©±¼1-bitªº
-    double bankingEfficiency = (totalOriginalFFs > 0) ?
-        (100.0 * mergedFFs / totalOriginalFFs) : 0.0;
-
-    std::cout << "Banking efficiency: " << std::fixed << std::setprecision(1)
-        << bankingEfficiency << "% (" << mergedFFs << "/" << totalOriginalFFs
-        << " FFs successfully merged)\n";
-
-    std::cout << "\n[DPC] Found " << totalClustersWithMerges << " clusters with mergeable FFs.\n";
-    std::cout << "[DPC] Total mergeable FF pairs: " << totalMergePairs << "\n";
-
-    return bankingList;
+    std::cout << "\n[DPC] Found " << mergedFFResults_.size() << " merged instances.\n";
 }
 
 
 
-void DensityPeakClustering::exportBankingDebugReport(
-    const std::vector<MBFFInstance>& bankingList,
-    const std::string& filename,
-    const std::map<std::string, FlipFlopInfo>& ffLookup,
-    const LibParser* libParser) const
-{
-    std::ofstream ofs(filename);
-    if (!ofs) {
-        std::cerr << "[DPC][BankingDebug] Failed to open file: " << filename << std::endl;
+void DensityPeakClustering::reportMergedFFResults() const {
+    std::cout << "\n=== [DPC] Merged FF Summary ===\n";
+    if (mergedFFResults_.empty()) {
+        std::cout << "No merged FF results available.\n";
+        return;
+    }
+    int compcount = 0;
+    for (const auto& merged : mergedFFResults_) {
+        std::cout << "Merged Instance: " << merged.newInstanceName << "\n";
+        std::cout << "  MBFF Type: " << merged.mbffType << "\n";
+        std::cout << "  Bitwidth: " << merged.bitwidth << "\n";
+        std::cout << "  Power: " << merged.power << ", Area: " << merged.area << "\n";
+        std::cout << "  Location: (" << merged.newX << ", " << merged.newY << ")\n";
+        std::cout << "  Merged Components: ";
+        for (const auto& name : merged.mergedFFs) {
+            std::cout << name << " ";
+        }
+        std::cout << "\n\n";
+        compcount++;
+    }
+
+    std::cout << "merged:" << compcount << std::endl << std::endl;
+}
+
+
+
+// æ–°å¢å°æ‡‰é—œä¿‚
+void MergeMapping::addMapping(const std::string& singleBit, const std::string& multiBit) {
+    singleToMultiBitName[singleBit] = multiBit;
+    multiBitToSingles[multiBit].push_back(singleBit);
+}
+
+// æŸ¥è©¢æŸå–®ä¸€ bit FF æ˜¯å¦å·²è¢« merge
+bool MergeMapping::isMerged(const std::string& singleBit) const {
+    return singleToMultiBitName.find(singleBit) != singleToMultiBitName.end();
+}
+
+// å–å¾—å–®ä¸€ bit FF å°æ‡‰çš„å¤š bit FF åç¨±ï¼ˆè‹¥ä¸å­˜åœ¨å‰‡å›å‚³ç©ºå­—ä¸²ï¼‰
+std::string MergeMapping::getMergedName(const std::string& singleBit) const {
+    auto it = singleToMultiBitName.find(singleBit);
+    return it != singleToMultiBitName.end() ? it->second : "";
+}
+
+// å–å¾—æŸå€‹å¤š bit FF åŒ…å«çš„æ‰€æœ‰ single-bit FF åç¨±ï¼ˆè‹¥ä¸å­˜åœ¨å‰‡å›å‚³ç©º vectorï¼‰
+std::vector<std::string> MergeMapping::getSingleBits(const std::string& multiBit) const {
+    auto it = multiBitToSingles.find(multiBit);
+    return it != multiBitToSingles.end() ? it->second : std::vector<std::string>();
+}
+
+// ç§»é™¤æŸå€‹ single-bit FF çš„ mapping
+void MergeMapping::removeMapping(const std::string& singleBit) {
+    auto it = singleToMultiBitName.find(singleBit);
+    if (it != singleToMultiBitName.end()) {
+        std::string multiBit = it->second;
+        singleToMultiBitName.erase(it);
+
+        auto& singles = multiBitToSingles[multiBit];
+        singles.erase(std::remove(singles.begin(), singles.end(), singleBit), singles.end());
+
+        if (singles.empty()) {
+            multiBitToSingles.erase(multiBit);
+        }
+    }
+}
+
+// æ¸…ç©ºæ‰€æœ‰ç´€éŒ„
+void MergeMapping::clear() {
+    singleToMultiBitName.clear();
+    multiBitToSingles.clear();
+}
+// å°å‡ºæ‰€æœ‰æ˜ å°„çµæœ
+void MergeMapping::printMappings() const {
+    for (auto it = multiBitToSingles.begin(); it != multiBitToSingles.end(); ++it) {
+        const std::string& multiBit = it->first;
+        const std::vector<std::string>& singleBits = it->second;
+
+        std::cout << "Multi-bit FF: " << multiBit << " [ ";
+        for (auto jt = singleBits.begin(); jt != singleBits.end(); ++jt) {
+            std::cout << *jt << " ";
+        }
+        std::cout << "]\n";
+    }
+}
+std::vector<PlacedComponent>
+DensityPeakClustering::generatePlacementComponents(const DefData& defData, const LefData& lefData) {
+    std::vector<PlacedComponent> result;
+
+    // å»ºç«‹ cell type -> size å¿«å–
+    std::unordered_map<std::string, std::pair<int, int>> cellSizes;
+    for (const auto& macro : lefData.macros) {
+        int width = static_cast<int>(macro.sizeX * defData.units);
+        int height = static_cast<int>(macro.sizeY * defData.units);
+        cellSizes[macro.name] = { width, height };
+    }
+
+    // Step 1: åŠ å…¥ merged FFs
+    for (std::vector<MergedFF>::const_iterator it = mergedFFResults_.begin(); it != mergedFFResults_.end(); ++it) {
+        const MergedFF& merged = *it;
+
+        std::pair<int, int> size = cellSizes.count(merged.mbffType)
+            ? cellSizes.at(merged.mbffType)
+            : std::pair<int, int>(0, 0);
+
+        int width = size.first;
+        int height = size.second;
+
+        result.emplace_back(
+            merged.newInstanceName,
+            merged.mbffType,
+            merged.newX,
+            merged.newY,
+            merged.orientation,
+            width,
+            height,
+            true, // isMergedFF
+            true  // isFF
+        );
+    }
+
+    // Step 2: åŠ å…¥æœªè¢« merge çš„åŸå§‹ FFs
+    MergeMapping mergeMap;
+    for (const auto& merged : mergedFFResults_) {
+        for (const auto& ff : merged.mergedFFs) {
+            mergeMap.addMapping(ff, merged.newInstanceName);
+        }
+    }
+
+    for (std::vector<FlipFlopInfo>::const_iterator it = defData.flipFlops.begin(); it != defData.flipFlops.end(); ++it) {
+        const FlipFlopInfo& ff = *it;
+
+        if (mergeMap.isMerged(ff.instName)) continue;
+
+        std::pair<int, int> size = cellSizes.count(ff.cellType)
+            ? cellSizes.at(ff.cellType)
+            : std::pair<int, int>(0, 0);
+
+        int width = size.first;
+        int height = size.second;
+
+        result.emplace_back(
+            ff.instName,
+            ff.cellType,
+            ff.x,
+            ff.y,
+            ff.orient,
+            width,
+            height,
+            false, // isMergedFF
+            true   // isFF
+        );
+    }
+
+    // âœ… Step 3: åŠ å…¥é‚è¼¯é–˜ç­‰ã€Œå…¶ä»–å…ƒä»¶ã€
+    // åˆ¤æ–·æ˜¯å¦æ˜¯ flip-flopï¼šå»ºç«‹ä¸€ä»½ lookup set
+    std::unordered_set<std::string> allFFs;
+    for (const auto& ff : defData.flipFlops) {
+        allFFs.insert(ff.instName);
+    }
+
+    for (const ComponentInfo& comp : defData.components) {
+        if (allFFs.count(comp.name)) continue;
+
+        std::pair<int, int> size = cellSizes.count(comp.cellType)
+            ? cellSizes.at(comp.cellType)
+            : std::pair<int, int>(0, 0);
+
+        int width = size.first;
+        int height = size.second;
+
+        result.emplace_back(
+            comp.name,
+            comp.cellType,
+            comp.x,
+            comp.y,
+            comp.orient,
+            width,
+            height,
+            false, // isMergedFF
+            false  // âœ… isFF
+        );
+    }
+    totalPlacedComponentCount_ = static_cast<long long int>(result.size());
+
+    return result;
+}
+
+
+
+std::vector<NewFlipFlopInfo>
+DensityPeakClustering::generatePlacementFFsNew(const DefData& defData, const LefData& lefData) const {
+    std::vector<NewFlipFlopInfo> result;
+
+    // å»ºç«‹ cell size map
+    std::unordered_map<std::string, std::pair<int, int>> cellSizes;
+    for (const auto& macro : lefData.macros) {
+        int width = static_cast<int>(macro.sizeX * defData.units);
+        int height = static_cast<int>(macro.sizeY * defData.units);
+        cellSizes[macro.name] = { width, height };
+    }
+
+    // 1. å»ºç«‹ merge mapping
+    MergeMapping mergeMap;
+    for (const auto& merged : mergedFFResults_) {
+        for (const auto& ff : merged.mergedFFs) {
+            mergeMap.addMapping(ff, merged.newInstanceName);
+        }
+    }
+
+    // 2. Merged FFs
+    for (const auto& merged : mergedFFResults_) {
+        NewFlipFlopInfo ff;
+        ff.instName = merged.newInstanceName;
+        ff.cellType = merged.mbffType;
+        ff.x = merged.newX;
+        ff.y = merged.newY;
+        ff.orient = merged.orientation;
+        ff.bitWidth = merged.bitwidth;
+        ff.isMultiBit = true;
+
+        if (cellSizes.count(merged.mbffType)) {
+            ff.width = cellSizes.at(merged.mbffType).first;
+            ff.height = cellSizes.at(merged.mbffType).second;
+        }
+
+        result.push_back(ff);
+    }
+
+    // 3. åŸå§‹æœª merge FFs
+    for (const auto& ffOrig : defData.flipFlops) {
+        if (!mergeMap.isMerged(ffOrig.instName)) {
+            NewFlipFlopInfo ff;
+            ff.instName = ffOrig.instName;
+            ff.cellType = ffOrig.cellType;
+            ff.x = ffOrig.x;
+            ff.y = ffOrig.y;
+            ff.orient = ffOrig.orient;
+            ff.orientation = ffOrig.orientation;
+            ff.clockNet = ffOrig.clockNet;
+            ff.dataPins = ffOrig.dataPins;
+            ff.outputPins = ffOrig.outputPins;
+            ff.scanIn = ffOrig.scanIn;
+            ff.scanOut = ffOrig.scanOut;
+            ff.dataIn = ffOrig.dataIn;
+            ff.dataOut = ffOrig.dataOut;
+            ff.scanEnable = ffOrig.scanEnable;
+            ff.bitWidth = ffOrig.bitWidth;
+            ff.isMultiBit = false;
+
+            if (cellSizes.count(ff.cellType)) {
+                ff.width = cellSizes.at(ff.cellType).first;
+                ff.height = cellSizes.at(ff.cellType).second;
+            }
+
+            result.push_back(ff);
+        }
+    }
+
+    return result;
+}
+
+void DensityPeakClustering::dumpNewFFsToTxt(const std::vector<NewFlipFlopInfo>& newFFs, const std::string& filename) const {
+    std::ofstream fout(filename);
+    if (!fout.is_open()) {
+        std::cerr << "[DPC] Error: Cannot open output file: " << filename << "\n";
         return;
     }
 
-    int cnt16 = 0, cnt8 = 0, cnt4 = 0, cnt2 = 0;
-    for (const auto& mb : bankingList) {
-        if (mb.bitWidth == 16) ++cnt16;
-        else if (mb.bitWidth == 8) ++cnt8;
-        else if (mb.bitWidth == 4) ++cnt4;
-        else if (mb.bitWidth == 2) ++cnt2;
+    for (const auto& ff : newFFs) {
+        fout << ff.instName << " "
+            << ff.cellType << " + PLACED ( "
+            << ff.x << " " << ff.y << " ) "
+            << ff.orient << " "
+            << "width=" << ff.width << " "
+            << "height=" << ff.height << " ;\n";
     }
 
-    // ­pºâ³Ñ¾lªº1-bit FF¼Æ¶q¡]»İ­n±q¥~³¡¶Ç¤J©Î¦bÃş¤¤ºûÅ@¡^
-    int remainingSingleBits = 0;
-
-    // ¹M¾ú©Ò¦³­ì©lFF¡A­pºâ­ş¨Ç¨S¦³³Q¦X¨Ö
-    std::set<std::string> mergedFFs;
-    for (const auto& mb : bankingList) {
-        for (const auto& ff : mb.mergedFFs) {
-            mergedFFs.insert(ff);
-        }
-    }
-
-    for (const auto& [name, info] : ffLookup) {
-        if (mergedFFs.find(name) == mergedFFs.end()) {
-            remainingSingleBits++;
-        }
-    }
-
-    ofs << "=== DPC Banking Debug Report ===\n";
-    ofs << "Total Merged MBFF Instances: " << bankingList.size() << "\n";
-    ofs << "  [16bit MBFF]: " << cnt16 << "\n";
-    ofs << "  [8bit MBFF]: " << cnt8 << "\n";
-    ofs << "  [4bit MBFF]: " << cnt4 << "\n";
-    ofs << "  [2bit MBFF]: " << cnt2 << "\n";
-    ofs << "  [Remaining Single-bit FF]: " << remainingSingleBits << "\n\n";
-
-    ofs << "Banking Summary:\n";
-    ofs << "  Original FFs: " << ffLookup.size() << "\n";
-    ofs << "  Merged into 16bit: " << cnt16 * 16 << " FFs\n";
-    ofs << "  Merged into 8bit: " << cnt8 * 8 << " FFs\n";
-    ofs << "  Merged into 4bit: " << cnt4 * 4 << " FFs\n";
-    ofs << "  Merged into 2bit: " << cnt2 * 2 << " FFs\n";
-    ofs << "  Remaining single: " << remainingSingleBits << " FFs\n";
-    ofs << "  Banking efficiency: " << std::fixed << std::setprecision(1)
-        << (100.0 * (cnt16 * 16 + cnt8 * 8 + cnt4 * 4 + cnt2 * 2) / ffLookup.size()) << "%\n\n";
-
-    int idx = 1;
-    for (const auto& mb : bankingList) {
-        ofs << "MBFF #" << idx++ << "\n";
-        ofs << "  Instance name   : " << mb.newInstanceName << "\n";
-        ofs << "  MBFF cell type  : " << mb.mbffCellType
-            << "  (bitWidth=" << mb.bitWidth;
-        if (mb.bitWidth == 16) ofs << " [16bit])";
-        else if (mb.bitWidth == 8) ofs << " [8bit])";
-        else if (mb.bitWidth == 4) ofs << " [4bit])";
-        else if (mb.bitWidth == 2) ofs << " [2bit])";
-        else ofs << ")";
-        ofs << "\n";
-        ofs << "  Centroid        : (" << mb.x << ", " << mb.y << ")\n";
-        ofs << "  Merged FFs      : ";
-        for (const auto& ff : mb.mergedFFs)
-            ofs << ff << " ";
-        ofs << "\n";
-
-        // Pin map debug info
-        if (!mb.mbffPinToOrigPin.empty()) {
-            ofs << "  [Pin Mapping]\n";
-            for (const auto& [mbffPin, origPin] : mb.mbffPinToOrigPin) {
-                ofs << "    " << mbffPin << " -> " << origPin << "\n";
-            }
-        }
-
-        // ÃB¥~²Ó¸`
-        ofs << "  Original FF cell types  : ";
-        std::set<std::string> types, degens;
-        for (const auto& ff : mb.mergedFFs) {
-            auto it = ffLookup.find(ff);
-            if (it != ffLookup.end()) {
-                types.insert(it->second.cellType);
-                // ¬d single_bit_degenerate
-                if (libParser) {
-                    std::string deg = libParser->getSingleBitDegenerate(it->second.cellType);
-                    if (!deg.empty()) degens.insert(deg);
-                }
-            }
-        }
-        for (auto& t : types) ofs << t << " ";
-        ofs << "\n";
-
-        ofs << "  single_bit_degenerate  : ";
-        for (auto& d : degens) ofs << d << " ";
-        ofs << "\n";
-
-        // ¥i¿ï¡Gcell ­±¿n/¥\¯Ó
-        if (libParser) {
-            const LibCell* cell = libParser->getCell(mb.mbffCellType);
-            if (cell) {
-                ofs << "  MBFF area     : " << cell->area << "\n";
-                ofs << "  MBFF leakage  : " << cell->cellLeakagePower << "\n";
-            }
-        }
-
-        // ­pºâ²Õ¤º FF ³Ì¤j/³Ì¤p¼Ú¦¡¶ZÂ÷
-        double maxDist = 0, minDist = 1e9;
-        for (size_t i = 0; i < mb.mergedFFs.size(); ++i) {
-            for (size_t j = i + 1; j < mb.mergedFFs.size(); ++j) {
-                auto it1 = ffLookup.find(mb.mergedFFs[i]);
-                auto it2 = ffLookup.find(mb.mergedFFs[j]);
-                if (it1 != ffLookup.end() && it2 != ffLookup.end()) {
-                    double dx = it1->second.x - it2->second.x;
-                    double dy = it1->second.y - it2->second.y;
-                    double dist = std::sqrt(dx * dx + dy * dy);
-                    maxDist = std::max(maxDist, dist);
-                    minDist = std::min(minDist, dist);
-                }
-            }
-        }
-        ofs << "  Intra-FF dist  : min = " << minDist << ", max = " << maxDist << "\n";
-
-        ofs << "-----------------------------------\n";
-    }
-
-    // ¦C¥X©Ò¦³³Ñ¾lªº³æbit FF
-    ofs << "\n=== Remaining Single-bit FFs ===\n";
-    ofs << "Count: " << remainingSingleBits << "\n";
-    for (const auto& [name, info] : ffLookup) {
-        if (mergedFFs.find(name) == mergedFFs.end()) {
-            ofs << "  " << name << " | " << info.cellType
-                << " | (" << info.x << ", " << info.y << ")\n";
-        }
-    }
+    fout.close();
+    std::cout << "[DPC] New FFs written to " << filename << "\n";
 }
 
 
-std::vector<MBFFInstance> DensityPeakClustering::clusterByAllFFs(
-    const std::vector<FlipFlopInfo>& ffList,
-    const LibParser* libParser,
-    const WeightParser* weights)
-{
-    // °µ clustering
-    performClustering(ffList, true); // §A¤]¥i¥H¦Û¤v¿ï autoTune
-    // ·Ç³Æ lookup
-    std::map<std::string, FlipFlopInfo> ffLookup;
-    for (const auto& ff : ffList) ffLookup[ff.instName] = ff;
-    // ²Õ fake cluster µ²ªG
-    std::map<std::string, std::vector<DPCCluster>> singleClusterMap;
-    singleClusterMap["ALL_FF"] = clusters_;
-    // ¶] banking
-    return generateBankingResults(singleClusterMap, ffLookup, libParser, weights);
+void DensityPeakClustering::dumpPlacedComponentsToTxt(const std::vector<PlacedComponent>& components, const std::string& filename) const {
+    std::ofstream fout(filename);
+    if (!fout.is_open()) {
+        std::cerr << "[DPC] Error: Cannot open output file: " << filename << "\n";
+        return;
+    }
+
+    for (const auto& comp : components) {
+        fout << comp.instanceName << " "
+            << comp.cellType << " + PLACED ( "
+            << comp.x << " " << comp.y << " ) "
+            << comp.orientation << " "
+            << "width=" << comp.width << " "
+            << "height=" << comp.height << " ;\n";
+    }
+
+    fout.close();
+    std::cout << "[DPC] Placed components written to " << filename << "\n";
 }
+
+const MergeMapping& DensityPeakClustering::getMergeMap() const {
+    return mergeMap_;
+}
+
+std::vector<std::pair<int, std::string>> MergeMapping::getBitIndexedPairs(const std::string& mbffName) const {
+    std::vector<std::pair<int, std::string>> result;
+    auto it = multiBitToSingles.find(mbffName);
+    if (it == multiBitToSingles.end()) return result;
+
+    const std::vector<std::string>& singles = it->second;
+    for (size_t i = 0; i < singles.size(); ++i) {
+        result.emplace_back(static_cast<int>(i), singles[i]);
+    }
+    return result;
+}
+
+
+

@@ -19,7 +19,7 @@ private:
     std::vector<std::string> warnings_;
     std::map<std::string, std::vector<ComponentInfo*>> rowToComponentsMap_;
     std::map<std::string, int> rowComponentCount_;
-
+    LibParser* libParser_;
     // Regex patterns
     std::regex rowRegex_;
     std::regex trackRegex_;
@@ -33,7 +33,10 @@ private:
     std::regex dieAreaRegex_;
     std::regex unitsRegex_;
     std::regex scanChainLineRegex_;  // New regex for scan chains
-
+    std::regex blockageStartRegex_;
+    std::regex blockagePlacementRegex_;
+    std::regex blockageLayerRegex_;
+    std::regex blockageRectRegex_;
     // Helper methods
     bool parseRowInfo(const std::string& line);
     bool parseTrackInfo(const std::string& line);
@@ -43,7 +46,8 @@ private:
     bool parseScanChainLine(const std::string& line);  // New method for parsing scan chains
     void addError(const std::string& error);
     void addWarning(const std::string& warning);
-
+    bool parseBlockageInfo(std::ifstream& file, const std::string& line);
+    bool isFlipFlopCell(const std::string& cellType);
 public:
     // Constructor & Destructor
     DefParser();
@@ -61,9 +65,11 @@ public:
     bool parseFromString(const std::string& content);
 
     // Data access methods
-  
+    void setDefData(const DefData& newData) {
+        this->defData_ = newData; // 假設你內部的 DefData 成員變數叫做 data_
+    }
     bool isLoaded() const { return isLoaded_; }
-
+    
     // Component access methods
     const std::vector<RowInfo>& getRows() const { return defData_.rows; }
     const std::vector<TrackInfo>& getTracks() const { return defData_.tracks; }
@@ -115,11 +121,13 @@ public:
     void printComponentsByRow() const; // optional
     void clearFlipFlops() { defData_.flipFlops.clear(); }
     void addFlipFlop(const FlipFlopInfo& ff) { defData_.flipFlops.push_back(ff); }
+    const std::vector<DefBlockageInfo>& getBlockages() const { return defData_.blockages; }
+    size_t getBlockageCount() const { return defData_.blockages.size(); }
 };
 
 // Utility functions for DEF parsing
 namespace DefUtils {
-    bool isFlipFlopCell(const std::string& cellType);
+   
     int getBitWidth(const std::string& cellType);
     std::string extractOrientation(const std::string& orientStr);
     bool validateCoordinate(int x, int y);

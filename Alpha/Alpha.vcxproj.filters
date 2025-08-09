@@ -50,6 +50,9 @@
     <Filter Include="Mapping%28verilog，Lib%29">
       <UniqueIdentifier>{3cd9edfd-16ae-4016-a5fe-cf24db57776b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="WriteOutput">
+      <UniqueIdentifier>{b1d45faf-8672-44c5-a2d4-7f66c1c82c05}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -94,6 +97,9 @@
     <ClCompile Include="CrossReferenceManager.cpp">
       <Filter>Mapping%28verilog，Lib%29</Filter>
     </ClCompile>
+    <ClCompile Include="WriteOutput.cpp">
+      <Filter>WriteOutput</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ParserWeights.h">
@@ -137,6 +143,9 @@
     </ClInclude>
     <ClInclude Include="CrossReferenceManager.h">
       <Filter>Mapping%28verilog，Lib%29</Filter>
+    </ClInclude>
+    <ClInclude Include="WriteOutput.h">
+      <Filter>WriteOutput</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -3,7 +3,7 @@
 #include "place.h"
 #include "DPC.h"
 #include "Legalizer.h"
-#include"LibParser.h"
+#include "WriteOutput.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -23,7 +23,7 @@ struct ContestArgs {
     vector<string> verilogFiles;
     vector<string> sdcFiles;
     vector<string> tfFiles;
-    vector<string> dbFiles; 
+    vector<string> dbFiles;
 
     string outputName;
 };
@@ -110,6 +110,8 @@ ContestArgs parseContestArgs(int argc, char* argv[]) {
     return args;
 }
 
+
+
 // 執行競賽專用的三步驟工作流程
 bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     cout << "\n=== Executing Contest Workflow ===" << endl;
@@ -175,8 +177,7 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
         // After parsing DEF, identify FF instances
         parser.identifyFFInstances();
     }
-    /*
-    // Parse Verilog
+
    if (!args.verilogFiles.empty()) {
         cout << "  Parsing Verilog file..." << endl;
         if (!parser.parseVerilog(args.verilogFiles[0])) {
@@ -185,14 +186,13 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     }
 
     // Parse other files
-    if (!args.sdcFiles.empty()) {
+   /* if (!args.sdcFiles.empty()) {
         parser.parseSDC(args.sdcFiles[0]);
     }
 
     if (!args.tfFiles.empty()) {
         parser.parseTech(args.tfFiles[0]);
-    }
-    */
+    }*/
 
     // STEP 5: Group FF instances by cell type for pre-banking analysis
     cout << "\n=== STEP 5: Group FF Instances by Cell Type ===" << endl;
@@ -251,7 +251,7 @@ int main(int argc, char* argv[]) {
             // Analyze each FF type group
             for (auto ff_it = ffGroups.begin(); ff_it != ffGroups.end(); ++ff_it) {
                 const std::string& cellType = ff_it->first;
-                const std::vector<FlipFlopInfo>& instances = ff_it->second; 
+                const std::vector<FlipFlopInfo>& instances = ff_it->second;
 
                 const LibCell* libCell = parser.getLibParser()->getCell(cellType);
 
@@ -286,221 +286,157 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            /*
-            // Perform clustering
-            //*dpc test*
-            const auto& ffList = parser.getDefParser()->getFlipFlops();
-            DensityPeakClustering dpc;
-            dpc.setMacroMap(&parser.getMacroMap());
-
-            // 構造 ffLookup（map: instance name → FlipFlopInfo）
-            std::map<std::string, FlipFlopInfo> ffLookup;
-            for (const auto& ff : ffList) {
-                ffLookup[ff.instName] = ff;
-            }
-
-
-            // bankingList 不經 cluster 直接合併
-            auto bankingList = dpc.clusterByAllFFs(ffList, parser.getLibParser(), parser.getWeightParser());
-
-            // 這裡要把 ffLookup 傳進去
-            dpc.exportBankingDebugReport(bankingList, "banking_debug_report.txt", ffLookup, parser.getLibParser());
-            parser.setBankingList(bankingList);
-
-
-            //write def test
-            std::ofstream ofs("original_nets_debug.txt");
-            if (!ofs) {
-                std::cerr << "Failed to open nets_debug.txt for writing!" << std::endl;
-            }
-            else {
-                ofs << "=== DEF NetInfo Debug Output ===\n";
-                ofs << "Total nets: " << parser.getDefData().nets.size() << "\n\n";
-                for (const auto& net : parser.getDefData().nets) {
-                    ofs << "Net: " << net.name << " (use: " << net.use << ")\n";
-                    for (const auto& conn : net.connections) {
-                        ofs << "  - Instance: " << conn.instance << ", Pin: " << conn.pin << "\n";
-                    }
-                    ofs << "---------------------------------\n";
-                }
-            }
-
-            // 先備份原本的 defdata
-            auto defdatacopy = parser.getDefData();
-            parser.getDefData().components.clear();
-
-            // 1. 先推 MBFF
-            for (const auto& mbff : bankingList) {
-                ComponentInfo newComp;
-                newComp.name = mbff.newInstanceName;
-                newComp.cellType = mbff.mbffCellType;
-                newComp.x = mbff.x;
-                newComp.y = mbff.y;
-                if (!mbff.mergedFFs.empty()) {
-                    auto it = ffLookup.find(mbff.mergedFFs[0]);
-                    newComp.orient = (it != ffLookup.end()) ? it->second.orient : "N";
-                }
-                else {
-                    newComp.orient = "N";
-                }
-                parser.getDefData().components.push_back(newComp);
-            }
-
-            // 2. 再推回原本 def 裡面的其他非 FF（邏輯閘、buffer 等）
-            // 假設 ffLookup 裡面存的都是 FF
-            std::set<std::string> ffNames;
-            for (const auto& kv : ffLookup) ffNames.insert(kv.first);
-
-            for (const auto& comp : defdatacopy.components) {
-                if (ffNames.count(comp.name) == 0) {
-                    // 不是 FF，直接加回去
-                    parser.getDefData().components.push_back(comp);
-                }
-            }
-
-
-            // 1. STEP 1: 建立 instance pin 對 net 的 lookup
-            std::map<std::pair<std::string, std::string>, std::string> instPinToNet;
-            for (const auto& net : defdatacopy.nets) {
-                for (const auto& np : net.connections) {
-                    instPinToNet[{np.instance, np.pin}] = net.name;
-                }
-            }
-
-            // 2. STEP 2: 收集所有被 merge 的 FF instance name
-            std::set<std::string> mergedFFs;
-            for (const auto& mb : bankingList)
-                for (const auto& ff : mb.mergedFFs)
-                    mergedFFs.insert(ff);
-
-            // 3. STEP 3: 遍歷所有 nets，**先保留沒有被 merge 的 instance/pin**
-            std::vector<NetInfo> newNets;
-            for (const auto& net : defdatacopy.nets) {
-                NetInfo n = net;
-                std::vector<NetPin> filtered;
-                for (const auto& np : net.connections) {
-                    if (mergedFFs.count(np.instance) == 0) {
-                        filtered.push_back(np);
-                    }
-                }
-                if (!filtered.empty()) {
-                    n.connections = filtered;
-                    newNets.push_back(n);
-                }
-            }
-
-            // 4. STEP 4: 為每個 MBFF 新增正確的連線
-            for (const auto& mbff : bankingList) {
-                for (const auto& [mbffPin, origFFPin] : mbff.mbffPinToOrigPin) {
-                    auto slashPos = origFFPin.find('/');
-                    std::string origInst = origFFPin.substr(0, slashPos);
-                    std::string origPin = origFFPin.substr(slashPos + 1);
-                    auto netIt = instPinToNet.find({ origInst, origPin });
-                    if (netIt == instPinToNet.end()) continue;
-
-                    std::string origNetName = netIt->second;
-                    auto found = std::find_if(newNets.begin(), newNets.end(),
-                        [&](const NetInfo& n) { return n.name == origNetName; });
-                    if (found == newNets.end()) {
-                        NetInfo newNet;
-                        newNet.name = origNetName;
-                        newNet.use = ""; // 可以根據原本 net 填
-                        newNet.connections.push_back({ mbff.newInstanceName, mbffPin });
-                        newNets.push_back(newNet);
-                    }
-                    else {
-                        found->connections.push_back({ mbff.newInstanceName, mbffPin });
-                    }
-                }
-            }
-
-            // 5. STEP 5: 單顆 FF
-            for (const auto& mbff : bankingList) {
-                if (mbff.bitWidth == 1) {
-                    const std::string& origInst = mbff.newInstanceName;
-                    for (const auto& net : defdatacopy.nets) {
-                        for (const auto& np : net.connections) {
-                            if (np.instance == origInst) {
-                                auto found = std::find_if(newNets.begin(), newNets.end(),
-                                    [&](const NetInfo& n) { return n.name == net.name; });
-                                if (found != newNets.end()) {
-                                    auto same = std::find_if(found->connections.begin(), found->connections.end(),
-                                        [&](const NetPin& conn) { return conn.instance == np.instance && conn.pin == np.pin; });
-                                    if (same == found->connections.end())
-                                        found->connections.push_back(np);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            parser.getDefData().nets = newNets;
-
-
-            // DEBUG 1: 輸出每個 MBFF/pin 對應原 FF/pin/net
-            {
-                std::ofstream dbg("banking_net_debug.txt");
-                for (const auto& mbff : bankingList) {
-                    dbg << "MBFF instance: " << mbff.newInstanceName << " (cell=" << mbff.mbffCellType << ", bitWidth=" << mbff.bitWidth << ")\n";
-                    for (const auto& [mbffPin, origFFPin] : mbff.mbffPinToOrigPin) {
-                        dbg << "  MBFF pin: " << mbffPin;
-                        dbg << "  -> original FF pin: " << origFFPin;
-                        auto slashPos = origFFPin.find('/');
-                        std::string origInst = origFFPin.substr(0, slashPos);
-                        std::string origPin = origFFPin.substr(slashPos + 1);
-                        auto netIt = instPinToNet.find({ origInst, origPin });
-                        if (netIt != instPinToNet.end())
-                            dbg << "  [net=" << netIt->second << "]";
-                        else
-                            dbg << "  [net=N/A]";
-                        dbg << "\n";
-                    }
-                    dbg << "-----------------------------------\n";
-                }
-            }
-
-            // DEBUG 2: 輸出完整 net 資訊
-            {
-                std::ofstream ofs("nets_debug.txt");
-                ofs << "=== DEF NetInfo Debug Output ===\n";
-                for (const auto& net : parser.getDefData().nets) {
-                    ofs << "Net: " << net.name << " (use: " << net.use << ")\n";
-                    for (const auto& conn : net.connections) {
-                        ofs << "  - Instance: " << conn.instance << ", Pin: " << conn.pin << "\n";
-                    }
-                    ofs << "---------------------------------\n";
-                }
-                ofs << "Total nets: " << parser.getDefData().nets.size() << "\n";
-            }
-            */
-
+           
         }
-        
-        // Generate output files
-        cout << "\n=== Output Generation ===" << endl;
-        if (!parser.writeOutputFiles()) {
-            cerr << "Error: Failed to write output files" << endl;
+
+        // Perform clustering
+        cout << "\n=== Hierarchical Clustering Phase ===" << endl;
+        parser.performHierarchicalClustering();
+
+        //*dpc test*
+        const HierarchicalClustering* clustering = parser.getHierarchicalClustering();
+        std::map<std::string, FlipFlopInfo> ffLookup;
+        const std::map<std::string, std::vector<FlipFlopInfo>>& clockDomains = clustering->getClockDomains();
+
+        for (std::map<std::string, std::vector<FlipFlopInfo>>::const_iterator it = clockDomains.begin(); it != clockDomains.end(); ++it) {
+            const std::string& clk = it->first;
+            const std::vector<FlipFlopInfo>& ffs = it->second;
+
+            for (std::vector<FlipFlopInfo>::const_iterator ffIt = ffs.begin(); ffIt != ffs.end(); ++ffIt) {
+                ffLookup[ffIt->instName] = *ffIt;
+            }
+        }
+        DensityPeakClustering dpc;
+
+
+        dpc.setMacroMap(&parser.getMacroMap());
+        dpc.setLibParser(parser.getLibParser());
+
+        //  const auto& clusteredDesign = clustering->getClusteredDesign();
+        //  auto result = dpc.clusterByScanChain(clusteredDesign, ffLookup);
+        auto result = dpc.clusterByClockNet(ffLookup, /*autoTune=*/true);
+
+
+        // 印出每個 clock 的分群數量
+        for (std::map<std::string, std::vector<DPCCluster>>::const_iterator it = result.begin(); it != result.end(); ++it) {
+            const std::string& clk = it->first;
+            const std::vector<DPCCluster>& clusters = it->second;
+            std::cout << "ClockNet: " << clk << " → " << clusters.size() << " clusters\n";
+        }
+
+        dpc.printClusteringSummary();
+        dpc.analyzeSingleBitMergeCandidates();
+        dpc.reportMergedFFResults();
+
+        DefData defData = parser.getDefParser()->getDefData(); // 用 -> 而不是 .
+        LefData lefData = parser.getLefParser()->getData();// 同上  const auto& defData = parser.getDefParser().getComponentMap();
+
+        // 產生 placement 結果
+        auto cleanComponents = dpc.generatePlacementComponents(defData, lefData);
+        auto cleanFFs = dpc.generatePlacementFFsNew(defData, lefData);
+        dpc.dumpNewFFsToTxt(cleanFFs, "cleaned_newFFs.txt");
+        dpc.dumpPlacedComponentsToTxt(cleanComponents, "placed_components.txt");
+
+        // 重建 defData.components 內容（完全替換）
+        defData.components.clear();
+
+        for (const auto& comp : cleanComponents) {
+            ComponentInfo info;
+            info.name = !comp.instanceName.empty() ? comp.instanceName : comp.instanceName;
+            info.cellType = comp.cellType;
+            info.x = comp.x;
+            info.y = comp.y;
+            info.orient = !comp.orientation.empty() ? comp.orientation : comp.orientation;
+            info.rowName = "";
+            info.status = "";
+            defData.components.push_back(info);
+        }
+
+        // optional: show mapping
+        MergeMapping map = dpc.getMergeMap();
+        map.printMappings();
+        cout << "\n=== Updating Parser State with DPC Results ===" << endl;
+        parser.getDefParser()->setDefData(defData);
+        // 進行 legalize
+        parser.performLegalization();
+
+
+     
+
+        const DefData& finalDefData = parser.getDefParser()->getDefData();
+
+        // Step 1: 創建 WriteOutput 物件
+        WriteOutput writer(args.outputName,
+            dpc.getMergeMap(),           // 合併映射
+            finalDefData,                 // 最終 DEF 資料
+            dpc.getMergedFFResults(),     // 合併結果
+            parser.getVerilogParser());   // Verilog Parser
+
+        // Step 2: 設定 LibParser（重要！用於判斷 FF 和取得 pin 資訊）
+        writer.setLibParser(parser.getLibParser());
+
+        // Step 3: 產生輸出檔案
+        cout << "\n--- Generating mapping list ---" << endl;
+        if (!writer.writeMapList()) {
+            cerr << "Error: Failed to generate mapping list" << endl;
             return 1;
         }
-        if (parser.isDefLoaded() && parser.isLefLoaded()) {
-            // Perform flip-flop legalization
-            cout << "\n=== Starting Flip-Flop Legalization ===" << endl;
-            if (parser.performLegalization()) {
-                cout << "✓ All flip-flops legalized successfully" << endl;
+        cout << "✓ Generated " << args.outputName << ".list" << endl;
 
-                // Write the updated DEF file
-                string outputDef = args.outputName + ".def";
-                parser.getDefParser()->writeDefFile(outputDef);
-
-                // The legalization report is automatically generated
-                // Check: outputName_legalization_report.txt
-            }
-            else {
-                cerr << "Error: Legalization failed" << endl;
-                // You might want to continue or return based on your requirements
-            }
+        cout << "\n--- Generating Verilog netlist ---" << endl;
+        if (!writer.writeVerilog()) {
+            cerr << "Error: Failed to generate Verilog netlist" << endl;
+            return 1;
         }
+        cout << "✓ Generated " << args.outputName << ".v" << endl;
+        if (!writer.writeDef()) {
+            cerr << "Error: Failed to generate Verilog netlist" << endl;
+            return 1;
+        }
+        cout << "✓ Generated " << args.outputName << ".def" << endl;
+        // Step 4: 產生 DEF 檔案（使用 DefParser）
+        //cout << "\n--- Generating DEF file ---" << endl;
+       // string outputDef = args.outputName + ".def";
+       // if (!parser.getDefParser()->writeDefFile(outputDef)) {
+        //    cerr << "Error: Failed to generate DEF file" << endl;
+         //   return 1;
+      //  }
+       // cout << "✓ Generated " << outputDef << endl;
+
+        // Step 5: 驗證輸出檔案
+        cout << "\n--- Verifying output files ---" << endl;
+
+        // 檢查檔案是否存在
+        ifstream checkList(args.outputName + ".list");
+        ifstream checkVerilog(args.outputName + ".v");
+        ifstream checkDef(args.outputName + ".def");
+
+        if (checkList.good() && checkVerilog.good() && checkDef.good()) {
+            cout << "✓ All output files generated successfully!" << endl;
+
+            // 顯示檔案大小
+            checkList.seekg(0, ios::end);
+            checkVerilog.seekg(0, ios::end);
+            checkDef.seekg(0, ios::end);
+
+            cout << "\nOutput file sizes:" << endl;
+            cout << "  " << args.outputName << ".list: "
+                << checkList.tellg() << " bytes" << endl;
+            cout << "  " << args.outputName << ".v: "
+                << checkVerilog.tellg() << " bytes" << endl;
+            cout << "  " << args.outputName << ".def: "
+                << checkDef.tellg() << " bytes" << endl;
+        }
+        else {
+            cerr << "✗ Some output files are missing or corrupted!" << endl;
+            return 1;
+        }
+
+        checkList.close();
+        checkVerilog.close();
+        checkDef.close();
+
+        // ============ 結束 ============
         // Display execution statistics
         auto endTime = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(endTime - startTime);
@@ -517,6 +453,53 @@ int main(int argc, char* argv[]) {
     catch (const exception& e) {
         cerr << "Fatal error: " << e.what() << endl;
         return 1;
+    }
+}
+// 驗證階層映射
+void verifyHierarchicalMapping(const Parser& parser) {
+    cout << "\n=== Verifying Hierarchical Mapping ===" << endl;
+
+    const VerilogParser* vParser = parser.getVerilogParser();
+    if (!vParser) {
+        cout << "No VerilogParser available" << endl;
+        return;
+    }
+
+    // 取得所有 FF 的階層路徑
+    auto ffPaths = vParser->getFFInstancesWithPaths();
+    cout << "Total FF instances with paths: " << ffPaths.size() << endl;
+
+    // 顯示前幾個映射
+    int count = 0;
+    for (const auto& pair : ffPaths) {
+        if (count++ >= 10) break;
+        cout << "  Local: " << pair.second
+            << " -> Full: " << pair.first << endl;
+    }
+
+    if (ffPaths.size() > 10) {
+        cout << "  ... and " << (ffPaths.size() - 10) << " more" << endl;
+    }
+}
+
+// 驗證合併映射
+void verifyMergeMapping(const MergeMapping& mergeMap) {
+    cout << "\n=== Verifying Merge Mapping ===" << endl;
+
+    cout << "Total merged single-bit FFs: "
+        << mergeMap.singleToMultiBitName.size() << endl;
+    cout << "Total multi-bit FFs created: "
+        << mergeMap.multiBitToSingles.size() << endl;
+
+    // 顯示前幾個映射
+    int count = 0;
+    for (const auto& pair : mergeMap.multiBitToSingles) {
+        if (count++ >= 5) break;
+        cout << "\nMBFF: " << pair.first << endl;
+        cout << "  Contains " << pair.second.size() << " single-bit FFs:" << endl;
+        for (const auto& singleFF : pair.second) {
+            cout << "    - " << singleFF << endl;
+        }
     }
 }
 void demonstrateClusteringUsage(const Parser& parser) {

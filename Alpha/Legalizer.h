@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <set>
-
+#include "LibParser.h"
 // Site occupancy info
 struct SiteOccupancy {
     bool occupied;
@@ -56,7 +56,7 @@ struct CellToLegalize {
     int assignedRow;            // Row index where placed
     int startSite;              // Starting site index in row
     bool legalized;
-
+    bool hasInitialOverlap = false;
     CellToLegalize() : origX(0), origY(0), width(0), height(0),
         needSites(0), newX(0), newY(0),
         assignedRow(-1), startSite(-1), legalized(false),
@@ -79,12 +79,19 @@ private:
     const DefData& defData_;
     const std::unordered_map<std::string, LefMacroInfo>& macroMap_;
     const std::vector<LefSiteInfo>& lefSites_;
-
+    std::unordered_map<std::string, std::vector<std::string>> overlappingGroups_;
+    void detectInitialOverlaps();
+    bool findEmergencyPosition(CellToLegalize& cell);
+    void handleFailedCells();
     std::vector<LegalizerRow> rows_;
     std::vector<CellToLegalize> cellsToLegalize_;
     std::vector<BlockageInfo> blockages_;
     std::vector<MBFFInstance> bankingList_;
+    // 新增：儲存所有 FF cell types
+    std::set<std::string> flipFlopCellTypes_;
 
+    // 新增：LibParser 的參考
+    const LibParser* libParser_;
     double siteWidth_;
     double rowHeight_;
     int defUnits_;
@@ -105,6 +112,8 @@ private:
     void identifyBlockages();
     void markBlockedSites();
     void collectCellsToLegalize();
+    void checkFinalOverlaps() const;
+    bool checkCellOverlap(double x1, double y1, double x2, double y2) const;
     void assignCellsToRows();
     bool findAvailableSites(LegalizerRow& row, int needSites,
         int& startSite, double targetX);
@@ -118,7 +127,8 @@ public:
     // Constructor
     Legalizer(const DefData& defData,
         const std::unordered_map<std::string, LefMacroInfo>& macroMap,
-        const std::vector<LefSiteInfo>& lefSites);
+        const std::vector<LefSiteInfo>& lefSites,
+        const LibParser* libParser = nullptr);
 
     // Main legalization method
     bool legalizeAll();

@@ -9,7 +9,7 @@
 
 
 
-// 增強的 LibPin 結構，加入 signal_type
+// 增?的 LibPin 結?，加入 signal_type
 struct LibPin {
     std::string name;
     std::string direction;  // input, output, inout
@@ -22,7 +22,7 @@ struct LibPin {
     std::map<std::string, std::string> attributes;
 };
 
-// 新增 Bundle 結構
+// 新增 Bundle 結?
 struct LibBundle {
     std::string name;
     std::vector<std::string> members;
@@ -31,7 +31,7 @@ struct LibBundle {
     std::map<std::string, std::string> attributes;
 };
 
-// 增強的 LibCell 結構
+// 增?的 LibCell 結?
 struct LibCell {
     std::string name;
     std::string libraryName;
@@ -43,7 +43,7 @@ struct LibCell {
     std::map<std::string, LibBundle> bundles;  // 新增 bundle 支援
     std::map<std::string, std::string> attributes;
 
-    // FF 相關資訊
+    // FF 相關資?
     std::string ffType;
     int bitWidth = 1;
     bool isScannable = false;
@@ -63,7 +63,7 @@ struct LibCell {
     }
 };
 
-// Library 資訊
+// Library 資?
 struct LibraryInfo {
     std::string name;
     std::string filename;
@@ -108,7 +108,7 @@ public:
     // 取得所有 FF cell names (包含有 single_bit_degenerate 或 ff() 的)
     std::set<std::string> getFFCellList() const;
 
-    // 競賽用：根據初始列表解析
+    // ??用：根據初始列表解析
     bool parseWithCellList(const std::vector<std::string>& libFiles,
         const std::vector<std::string>& initialCellList,
         std::set<std::string>& finalCellList);
@@ -122,12 +122,12 @@ public:
     const std::map<std::string, LibCell>& getAllCells() const { return cellLibrary_; }
     bool hasCell(const std::string& cellName) const;
 
-    // 查詢方法
+    // 查?方法
     std::vector<std::string> getFlipFlopCells() const;
     std::vector<std::string> getMultiBitCells() const;
     std::string getSingleBitDegenerate(const std::string& cellName) const;
 
-    // 多位元 FF 查詢方法
+    // 多位元 FF 查?方法
     std::string getmultibitff2(const std::string& cellName) const;
     std::string getmultibitff4(const std::string& cellName) const;
 

@@ -591,7 +591,7 @@ bool Parser::parseVerilog(const string& filename) {
         addError("Verilog parser not initialized");
         return false;
     }
-
+    verilogParser_->setLibParser(getLibParser());
     if (verilogParser_->parseFile(verilogFile)) {
         verilogLoaded_ = true;
         cout << "✓ Verilog file (" << verilogFile << ") parsed successfully" << endl;
@@ -934,16 +934,8 @@ bool Parser::performLegalization() {
     // Get reference to DEF data
     DefData& defData = getDefData();
 
-    // Debug: Show some components before legalization
-    std::cout << "\nSample components before legalization:" << std::endl;
-    int count = 0;
-    for (const auto& comp : defData.components) {
-        if (DefUtils::isFlipFlopCell(comp.cellType) && count++ < 5) {
-            std::cout << "  " << comp.name << " at ("
-                << comp.x << ", " << comp.y << ") orient: "
-                << comp.orient << std::endl;
-        }
-    }
+    
+
 
     // Create legalizer
     Legalizer legalizer(defData, getMacroMap(), getLefSites());
@@ -956,20 +948,7 @@ bool Parser::performLegalization() {
         legalizer.updateDefComponents(defData);
 
         // Debug: Show same components after legalization
-        std::cout << "\nSample components after legalization:" << std::endl;
-        count = 0;
-        for (const auto& comp : defData.components) {
-            if (DefUtils::isFlipFlopCell(comp.cellType) && count++ < 5) {
-                std::cout << "  " << comp.name << " at ("
-                    << comp.x << ", " << comp.y << ") orient: "
-                    << comp.orient << std::endl;
-            }
-        }
-
-        // Export legalization report
-     //   std::string reportFile = outputName_ + "_legalization_report.txt";
-     //   legalizer.exportLegalizationReport(reportFile);
-
+        
         // Print summary
         legalizer.printLegalizationSummary();
 

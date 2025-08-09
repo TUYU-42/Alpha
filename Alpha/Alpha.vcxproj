@@ -120,6 +120,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -143,6 +144,7 @@
     <ClCompile Include="ParserVerilog.cpp" />
     <ClCompile Include="ParserWeights.cpp" />
     <ClCompile Include="place.cpp" />
+    <ClCompile Include="WriteOutput.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CrossReferenceManager.h" />
@@ -159,6 +161,7 @@
     <ClInclude Include="ParserVerilog.h" />
     <ClInclude Include="ParserWeights.h" />
     <ClInclude Include="place.h" />
+    <ClInclude Include="WriteOutput.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

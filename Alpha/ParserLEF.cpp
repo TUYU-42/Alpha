@@ -113,8 +113,14 @@ ParseRes LefSite::parseNext(const vector<string>& tk, Statement*& child) {
     if (tk.empty()) return ParseRes::kContinue;
     if (tk[0] == "CLASS" && tk.size() >= 2)
         info["CLASS"] = tk[1];
-    else if (tk[0] == "SYMMETRY" && tk.size() >= 2)
-        info["SYMMETRY"] = tk[1];
+    else if (tk[0] == "SYMMETRY" && tk.size() >= 2) {
+        std::string sym_line;
+        for (size_t i = 1; i < tk.size(); ++i) {
+            if (i > 1) sym_line += " ";
+            sym_line += tk[i];
+        }
+        info["SYMMETRY"] = sym_line;
+    }
     else if (tk[0] == "SIZE" && tk.size() >= 4)
         size = { stod(tk[1]), stod(tk[3]) };
     else if (tk[0] == "END" && tk.size() == 2 && tk[1] == name)
@@ -252,7 +258,13 @@ LefData LefParser::convertToLefData() const {
         siteInfo.siteClass = (classIt != site->info.end()) ? classIt->second : "";
 
         auto symmetryIt = site->info.find("SYMMETRY");
-        siteInfo.symmetry = (symmetryIt != site->info.end()) ? symmetryIt->second : "";
+        if (symmetryIt != site->info.end()) {
+            std::istringstream iss(symmetryIt->second);
+            std::string s;
+            while (iss >> s) siteInfo.symmetry.push_back(s);
+        }
+
+
 
         siteInfo.width = site->size.first;
         siteInfo.height = site->size.second;
@@ -273,9 +285,13 @@ LefData LefParser::convertToLefData() const {
         macroInfo.originY = macro->origin.second;
         macroInfo.sizeX = macro->size.first;
         macroInfo.sizeY = macro->size.second;
-
         auto symmetryIt = macro->info.find("SYMMETRY");
-        macroInfo.symmetry = (symmetryIt != macro->info.end()) ? symmetryIt->second : "";
+        if (symmetryIt != macro->info.end()) {
+            std::istringstream iss(symmetryIt->second);
+            std::string s;
+            while (iss >> s) macroInfo.symmetry.push_back(s);
+        }
+
 
         auto siteIt = macro->info.find("SITE");
         macroInfo.site = (siteIt != macro->info.end()) ? siteIt->second : "";
