@@ -46,8 +46,7 @@ private:
     bool parseScanChainLine(const std::string& line);  // New method for parsing scan chains
     void addError(const std::string& error);
     void addWarning(const std::string& warning);
-    bool parseBlockageInfo(std::ifstream& file, const std::string& line);
-    bool isFlipFlopCell(const std::string& cellType);
+
 public:
     // Constructor & Destructor
     DefParser();

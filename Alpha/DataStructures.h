@@ -389,67 +389,6 @@ struct PlacedComponent {
     }
 };
 
-
-
-
-
-struct MergeMapping {
-    // 單一 bit FF 名稱 → 合併後多 bit FF 名稱
-    std::unordered_map<std::string, std::string> singleToMultiBitName;
-
-    // 多 bit FF 名稱 → 該 FF 所包含的所有 single-bit FF 名稱
-    std::unordered_map<std::string, std::vector<std::string>> multiBitToSingles;
-    void addMapping(const std::string&, const std::string&);
-    bool isMerged(const std::string&) const;
-    std::string getMergedName(const std::string&) const;
-    std::vector<std::string> getSingleBits(const std::string&) const;
-    void removeMapping(const std::string&);
-    void clear();
-    // 印出所有映射結果
-    void printMappings() const;
-    std::vector<std::pair<int, std::string>> getBitIndexedPairs(const std::string& mbffName) const;
-    int getBitIndex(const std::string& mbff, const std::string& singleName) const {
-        auto it = multiBitToSingles.find(mbff);
-        if (it == multiBitToSingles.end()) return -1;
-        const auto& vec = it->second;
-        for (size_t i = 0; i < vec.size(); ++i) {
-            if (vec[i] == singleName) return static_cast<int>(i);
-        }
-        return -1;
-    }
-
-};
-
-
-
-struct NewFlipFlopInfo {
-    std::string instName;
-    std::string cellType;
-    int x = 0, y = 0;
-    std::string orient;
-    std::string orientation;
-    std::string clockNet;
-    std::vector<std::string> dataPins;    // 可省略
-    std::vector<std::string> outputPins;  // 可省略
-    std::string scanIn;
-    std::string scanOut;
-    std::string dataIn;
-    std::string dataOut;
-    std::string scanEnable;
-    bool isMultiBit = false;
-    int bitWidth = 1;
-    int width = 0;
-    int height = 0;
-};
-
-// 每個 site 的資訊：是否被佔用、誰佔用
-struct LegalizerSite {
-    bool occupied = false;
-    std::string instanceName;  // 被誰佔用（optional，可省略）
-};
-
-
-
 // 合併後的 MBFF 結構
 struct MBFFInstance {
     std::string mbffCellType;                 // 合併後的 cell type (2bit/4bit MBFF名)
