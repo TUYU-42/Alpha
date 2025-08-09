@@ -46,7 +46,8 @@ private:
     bool parseScanChainLine(const std::string& line);  // New method for parsing scan chains
     void addError(const std::string& error);
     void addWarning(const std::string& warning);
-
+    bool parseBlockageInfo(std::ifstream& file, const std::string& line);
+    bool isFlipFlopCell(const std::string& cellType);
 public:
     // Constructor & Destructor
     DefParser();
@@ -68,7 +69,7 @@ public:
         this->defData_ = newData; // 假設你內部的 DefData 成員變數叫做 data_
     }
     bool isLoaded() const { return isLoaded_; }
-    
+
     // Component access methods
     const std::vector<RowInfo>& getRows() const { return defData_.rows; }
     const std::vector<TrackInfo>& getTracks() const { return defData_.tracks; }
@@ -126,7 +127,7 @@ public:
 
 // Utility functions for DEF parsing
 namespace DefUtils {
-   
+
     int getBitWidth(const std::string& cellType);
     std::string extractOrientation(const std::string& orientStr);
     bool validateCoordinate(int x, int y);

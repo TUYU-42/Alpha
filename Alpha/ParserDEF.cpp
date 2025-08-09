@@ -27,8 +27,79 @@ DefParser::DefParser() : isLoaded_(false), libParser_(nullptr) {
 
     // Add new regex patterns for scan chains
     scanChainLineRegex_ = regex(R"(^\s*-\s*(\S+)\s+(.*);)");
+    // 在其他 regex 初始化之後添加
+    blockageStartRegex_ = std::regex(R"(^\s*BLOCKAGES\s+(\d+)\s*;)");
+    blockagePlacementRegex_ = std::regex(R"(^\s*-\s*PLACEMENT)");
+    blockageLayerRegex_ = std::regex(R"(^\s*-\s*LAYER\s+(\w+)\s*\+?\s*SPACING\s+(\d+))");
+    blockageRectRegex_ = std::regex(R"(^\s*RECT\s*\(\s*(\d+)\s+(\d+)\s*\)\s*\(\s*(\d+)\s+(\d+)\s*\)\s*;)");
 }
+bool DefParser::parseBlockageInfo(std::ifstream& file, const std::string& firstLine) {
+    std::smatch m;
+    if (!std::regex_search(firstLine, m, blockageStartRegex_)) {
+        return false;
+    }
 
+    int numBlockages = std::stoi(m[1]);
+    std::cout << "  Found BLOCKAGES section with " << numBlockages << " blockages" << std::endl;
+
+    std::string line;
+    DefBlockageInfo::BlockageType currentType;
+    std::string currentLayer;
+    int currentSpacing = 0;
+    bool inBlockage = false;
+
+    while (std::getline(file, line)) {
+        // Check for end of blockages section
+        if (line.find("END BLOCKAGES") != std::string::npos) {
+            std::cout << "  End of BLOCKAGES section" << std::endl;
+            break;
+        }
+
+        // Check for placement blockage
+        if (std::regex_search(line, m, blockagePlacementRegex_)) {
+            currentType = DefBlockageInfo::PLACEMENT;
+            currentLayer.clear();
+            currentSpacing = 0;
+            inBlockage = true;
+            continue;
+        }
+
+        // Check for layer blockage
+        if (std::regex_search(line, m, blockageLayerRegex_)) {
+            currentType = DefBlockageInfo::LAYER;
+            currentLayer = m[1];
+            currentSpacing = std::stoi(m[2]);
+            inBlockage = true;
+            continue;
+        }
+
+        // Check for rectangle
+        if (inBlockage && std::regex_search(line, m, blockageRectRegex_)) {
+            int x1 = std::stoi(m[1]);
+            int y1 = std::stoi(m[2]);
+            int x2 = std::stoi(m[3]);
+            int y2 = std::stoi(m[4]);
+
+            if (currentType == DefBlockageInfo::PLACEMENT) {
+                defData_.blockages.emplace_back(currentType, x1, y1, x2, y2);
+            }
+            else {
+                defData_.blockages.emplace_back(currentType, currentLayer, currentSpacing, x1, y1, x2, y2);
+            }
+
+            if (defData_.blockages.size() <= 5) {
+                const auto& blk = defData_.blockages.back();
+                std::cout << "    Blockage " << defData_.blockages.size() << ": "
+                    << (blk.type == DefBlockageInfo::PLACEMENT ? "PLACEMENT" : "LAYER " + blk.layer)
+                    << " RECT (" << blk.x1 << " " << blk.y1 << ") ("
+                    << blk.x2 << " " << blk.y2 << ")" << std::endl;
+            }
+        }
+    }
+
+    std::cout << "  Total blockages parsed: " << defData_.blockages.size() << std::endl;
+    return true;
+}
 bool DefParser::parseFile(const string& filename) {
     ifstream in(filename);
     if (!in) {
@@ -408,7 +479,7 @@ void DefParser::analyzeFlipFlops() {
         }
 
         if (isFF) {
-            totalFlipFlops++;   
+            totalFlipFlops++;
 
             FlipFlopInfo ff;
             ff.instName = comp.name;
@@ -416,10 +487,10 @@ void DefParser::analyzeFlipFlops() {
             ff.x = comp.x;
             ff.y = comp.y;
             ff.orient = comp.orient;
-            ff.bitWidth =DefUtils::getBitWidth(comp.cellType);
+            ff.bitWidth = DefUtils::getBitWidth(comp.cellType);
             ff.isMultiBit = (ff.bitWidth > 1);
 
-            
+
 
             // Find pin connections from InstPinNets
             int pinConnectionsFound = 0;
@@ -551,7 +622,7 @@ void DefParser::analyzeFlipFlops() {
             cout << "  Clock '" << domain.first << "': " << domain.second.size() << " flip-flops" << endl;
         }
     }
-   
+
     // Final verification
     cout << "\n=== Final Verification ===" << endl;
     cout << "defData_.flipFlops.size() = " << defData_.flipFlops.size() << endl;
@@ -654,57 +725,7 @@ void DefParser::printSummary() const {
 
 // Utility functions
 namespace DefUtils {
-    bool isFlipFlopCell(const string& cellType) {
-        // Add debug output to see what's being checked
-        static int debugCount = 0;
-        debugCount++;
 
-        bool result = false;
-        string reason = "No match";
-
-        // Check for your specific flip-flop types: FSDNQ and FSDN
-        if (cellType.find("FSDNQ") != string::npos) {
-            result = true;
-            reason = "Found FSDNQ";
-        }
-        else if (cellType.find("FSDN") != string::npos) {
-            result = true;
-            reason = "Found FSDN";
-        }
-        // Keep original checks as backup
-        else if (cellType.find("FF") != string::npos) {
-            result = true;
-            reason = "Found FF";
-        }
-        else if (cellType.find("DFF") != string::npos) {
-            result = true;
-            reason = "Found DFF";
-        }
-        else if (cellType.find("SDFF") != string::npos) {
-            result = true;
-            reason = "Found SDFF";
-        }
-        else if (cellType.find("LATCH") != string::npos) {
-            result = true;
-            reason = "Found LATCH";
-        }
-        else if (cellType.find("_FF_") != string::npos) {
-            result = true;
-            reason = "Found _FF_";
-        }
-        else if (cellType.find("FLIP") != string::npos) {
-            result = true;
-            reason = "Found FLIP";
-        }
-
-        // Debug output for first 20 calls or all flip-flops found
-        if (debugCount <= 20 || result) {
-            cout << "DEBUG: isFlipFlopCell(\"" << cellType << "\") -> "
-                << (result ? "TRUE" : "FALSE") << " (" << reason << ")" << endl;
-        }
-
-        return result;
-    }
 
     int getBitWidth(const string& cellType) {
         // First try to extract number from end (your naming convention)
