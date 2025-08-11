@@ -94,9 +94,6 @@
     <ClCompile Include="Parser.cpp">
       <Filter>Parser</Filter>
     </ClCompile>
-    <ClCompile Include="CrossReferenceManager.cpp">
-      <Filter>Mapping%28verilog，Lib%29</Filter>
-    </ClCompile>
     <ClCompile Include="WriteOutput.cpp">
       <Filter>WriteOutput</Filter>
     </ClCompile>
@@ -140,9 +137,6 @@
     </ClInclude>
     <ClInclude Include="LibParser.h">
       <Filter>Parser\Lib</Filter>
-    </ClInclude>
-    <ClInclude Include="CrossReferenceManager.h">
-      <Filter>Mapping%28verilog，Lib%29</Filter>
     </ClInclude>
     <ClInclude Include="WriteOutput.h">
       <Filter>WriteOutput</Filter>

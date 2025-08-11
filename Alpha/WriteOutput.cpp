@@ -424,7 +424,8 @@ bool WriteOutput::writeVerilog() {
         for (const auto& wire : module.wires) {
             declaredWires.insert(wire);
         }
-
+        for (const auto& s : module.supplies0) declaredWires.insert(s);
+        for (const auto& s : module.supplies1) declaredWires.insert(s);
         // 收集所有 instance 使用的 nets（包含模組實例化和 cell instances）
         for (const auto& inst : module.instances) {
             for (const auto& conn : inst.connections) {
@@ -525,7 +526,22 @@ bool WriteOutput::writeVerilog() {
             fout << "output " << outputName << " ;\n";
         }
         if (!module.outputs.empty()) fout << "\n";
+        auto escapeIfBus = [](std::string name) {
+            if (!name.empty() && name[0] != '\\' && name.find('[') != std::string::npos)
+                return std::string("\\") + name + " ";
+            return name;
+            };
 
+        // === NEW: 輸出 supply0 / supply1 原宣告 ===
+        for (const auto& n : module.supplies0) {
+            std::string id = escapeIfBus(n);
+            fout << "supply0 " << id << " ;\n";
+        }
+        for (const auto& n : module.supplies1) {
+            std::string id = escapeIfBus(n);
+            fout << "supply1 " << id << " ;\n";
+        }
+        if (!module.supplies0.empty() || !module.supplies1.empty()) fout << "\n";
         // === 寫入原有的 wire declarations ===
         for (const auto& wire : module.wires) {
             string wireName = wire;
@@ -567,53 +583,97 @@ bool WriteOutput::writeVerilog() {
 
         // === 處理 instances ===
         for (const auto& inst : module.instances) {
-            if (inst.isModuleInstance) {
-                cout << "[Debug] Found module instance: " << inst.instName
-                    << " (module: " << inst.referencedModule << ")" << endl;
+            // 特別處理 hier 開頭的實例
+            if (inst.instName.find("hier") != string::npos) {
+                cout << "[Debug] Processing hier instance: " << inst.instName
+                    << " (type: " << inst.cellType
+                    << ", isModuleInstance: " << inst.isModuleInstance << ")" << endl;
             }
-            // === 處理子模組實例化 ===
+
             if (inst.isModuleInstance) {
-                // 處理模組實例化名稱
+                // === 處理模組實例化 ===
                 string instNameOutput = inst.instName;
+
+                // 檢查是否需要加逃逸字元
+                bool needsEscape = false;
+
+                // 檢查各種需要逃逸的情況
                 if (instNameOutput.find("__") != string::npos ||
                     instNameOutput.find('[') != string::npos ||
-                    instNameOutput.find("hier") != string::npos) {
-                    instNameOutput = "\\" + instNameOutput + " ";
+                    instNameOutput.find(']') != string::npos ||
+                    // 檢查是否已經是逃逸格式
+                    instNameOutput[0] == '\\') {
+
+                    if (instNameOutput[0] == '\\') {
+                        // 已經是逃逸格式，確保有結尾空格
+                        if (instNameOutput.back() != ' ') {
+                            instNameOutput += " ";
+                        }
+                    }
+                    else {
+                        // 需要加逃逸
+                        instNameOutput = "\\" + instNameOutput + " ";
+                    }
                 }
 
                 // 輸出模組實例化
-                fout << inst.referencedModule << " " << instNameOutput << " ( ";
+                fout << inst.cellType << " " << instNameOutput << " ( ";
 
-                // 輸出連接（格式化以便於閱讀）
-                for (size_t i = 0; i < inst.connections.size(); ++i) {
-                    if (i > 0) fout << " , ";
+                // 輸出連接
+                bool firstPin = true;
+                int pinCount = 0;
 
-                    // 每3個連接換行，或當連接很長時換行
-                    if (i > 0 && (i % 3 == 0 || inst.connections[i].second.length() > 20)) {
-                        fout << "\n    ";
+                for (const auto& conn : inst.connections) {
+                    if (!firstPin) {
+                        fout << " , ";
+                        // 每 3 個連接換行
+                        if (++pinCount % 3 == 0) {
+                            fout << "\n    ";
+                        }
+                    }
+                    else {
+                        firstPin = false;
                     }
 
-                    string pinName = inst.connections[i].first;
-                    string netName = inst.connections[i].second;
+                    string pinName = conn.first;
+                    string netName = conn.second;
 
-                    // 處理 pin 名稱的反斜線
-                    if (pinName[0] != '\\' && pinName.find('[') != string::npos) {
+                    // 處理 pin 名稱
+                    if (pinName[0] == '\\') {
+                        // 已經是逃逸格式，確保格式正確
+                        size_t spacePos = pinName.find(' ');
+                        if (spacePos == string::npos) {
+                            pinName += " ";
+                        }
+                    }
+                    else if (pinName.find('[') != string::npos ||
+                        pinName.find(']') != string::npos) {
+                        // 需要逃逸
                         pinName = "\\" + pinName + " ";
                     }
 
-                    // 處理 net 名稱的反斜線
-                    if (netName != "VDD" && netName != "VSS" &&
-                        netName[0] != '\\' && netName.find('[') != string::npos) {
-                        netName = "\\" + netName + " ";
+                    // 處理 net 名稱
+                    if (netName != "VDD" && netName != "VSS" && netName != "UNCONNECTED") {
+                        if (netName[0] == '\\') {
+                            // 已經是逃逸格式
+                            size_t spacePos = netName.find(' ');
+                            if (spacePos == string::npos) {
+                                netName += " ";
+                            }
+                        }
+                        else if (netName.find('[') != string::npos ||
+                            netName.find(']') != string::npos) {
+                            // 需要逃逸
+                            netName = "\\" + netName + " ";
+                        }
                     }
 
                     fout << "." << pinName << " ( " << netName << " )";
                 }
 
                 fout << " ) ;\n";
-                continue;  // 處理下一個 instance
+                continue;
             }
-
             // === 以下處理 cell instances (FF 和邏輯閘) ===
 
             // 查找完整名稱

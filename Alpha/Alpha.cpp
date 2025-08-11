@@ -179,12 +179,26 @@ bool executeContestWorkflow(Parser& parser, const ContestArgs& args) {
     }
 
    if (!args.verilogFiles.empty()) {
-        cout << "  Parsing Verilog file..." << endl;
-        if (!parser.parseVerilog(args.verilogFiles[0])) {
-            cerr << "Warning: Failed to parse Verilog file" << endl;
+    cout << "  Parsing Verilog file..." << endl;
+    if (!parser.parseVerilog(args.verilogFiles[0])) {
+        cerr << "ERROR: Failed to parse Verilog file!" << endl;
+        
+        // 顯示詳細錯誤資訊
+       
+        
+        // 決定是否繼續
+        cerr << "Continue without Verilog? (y/n): ";
+        char response;
+        cin >> response;
+        if (response != 'y' && response != 'Y') {
+            return false;
         }
+    } else {
+        // 解析成功，顯示統計
+        const VerilogParser* vParser = parser.getVerilogParser();
+        
     }
-
+}
     // Parse other files
    /* if (!args.sdcFiles.empty()) {
         parser.parseSDC(args.sdcFiles[0]);
@@ -466,20 +480,8 @@ void verifyHierarchicalMapping(const Parser& parser) {
     }
 
     // 取得所有 FF 的階層路徑
-    auto ffPaths = vParser->getFFInstancesWithPaths();
-    cout << "Total FF instances with paths: " << ffPaths.size() << endl;
 
-    // 顯示前幾個映射
-    int count = 0;
-    for (const auto& pair : ffPaths) {
-        if (count++ >= 10) break;
-        cout << "  Local: " << pair.second
-            << " -> Full: " << pair.first << endl;
-    }
-
-    if (ffPaths.size() > 10) {
-        cout << "  ... and " << (ffPaths.size() - 10) << " more" << endl;
-    }
+  
 }
 
 // 驗證合併映射
