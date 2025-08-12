@@ -42,6 +42,7 @@ struct VerilogModule {
     std::vector<std::string> supplies0; // names declared by 'supply0'
     std::vector<std::string> supplies1; // names declared by 'supply1'
     std::vector<VerilogInstance> instances;
+    std::vector<std::string> inouts;
 };
 
 class VerilogParser {

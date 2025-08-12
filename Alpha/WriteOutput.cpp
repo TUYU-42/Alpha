@@ -380,526 +380,309 @@ bool WriteOutput::writeVerilog() {
         cerr << "[WriteOutput] Error: Cannot create output file: " << outputFilename << endl;
         return false;
     }
-
     if (!verilogParser_) {
         cerr << "[WriteOutput] Error: VerilogParser not set" << endl;
         return false;
     }
 
-    // 建立名稱映射
-    buildSimpleToFullNameMapping();
+    // 小工具
+    auto escapeIfBus = [](std::string name) {
+        if (!name.empty() && name[0] != '\\' && name.find('[') != std::string::npos)
+            return std::string("\\") + name + " ";
+        return name;
+        };
+    auto keepEscaped = [](std::string id) {
+        if (!id.empty() && id[0] == '\\' && id.back() != ' ') id.push_back(' ');
+        return id;
+        };
+    auto norm = [](std::string s) { // 去掉 leading '\' 與 trailing ' '（僅對 escaped）
+        if (!s.empty() && s[0] == '\\' && !s.empty() && s.back() == ' ')
+            return s.substr(1, s.size() - 2);
+        return s;
+        };
+    auto looksLikeOutput = [](std::string n) {
+        if (!n.empty() && n[0] == '\\' && n.back() == ' ') n = n.substr(1, n.size() - 2);
+        return n.rfind("qo_", 0) == 0;
+        };
 
-    // 建立 merged FF lookup
+    // 名稱映射與被合併 FF 快取
+    buildSimpleToFullNameMapping();
     unordered_map<string, const MergedFF*> mergedFFLookup;
     for (const auto& mergedFF : mergedFFResults_) {
-        for (const auto& singleFF : mergedFF.mergedFFs) {
+        for (const auto& singleFF : mergedFF.mergedFFs)
             mergedFFLookup[singleFF] = &mergedFF;
-        }
     }
+    set<string> outputtedMBFFs, skippedInstances;
 
-    // 已輸出的 MBFF
-    set<string> outputtedMBFFs;
-    set<string> skippedInstances;
-
-    // 取得所有模組
     const auto& modules = verilogParser_->getModules();
 
-    // 處理每個模組
     for (const auto& module : modules) {
-        // === 收集所有使用到的 nets ===
-        set<string> declaredPorts;
-        set<string> declaredWires;
-        set<string> usedNets;
-        set<string> qnNets;  // 追蹤 QN nets
+        // ====== 收集 nets 與宣告集合 ======
+        // header ports（原樣 token，含 escaped）
+        unordered_set<string> headerPorts(module.ports.begin(), module.ports.end());
 
-        // 收集已宣告的 ports
-        for (const auto& input : module.inputs) {
-            declaredPorts.insert(input);
-        }
-        for (const auto& output : module.outputs) {
-            declaredPorts.insert(output);
+        // dirMap：已知 input/output/inout 先放進來
+        unordered_map<string, string> dirMap;
+        for (auto& p : module.inputs)  dirMap[p] = "input";
+        for (auto& p : module.outputs) dirMap[p] = "output";
+        for (auto& p : module.inouts)  dirMap[p] = "inout";
+
+        // header 有但三類未涵蓋 → 用 heuristic 補方向
+        for (auto& hp : headerPorts) {
+            if (!dirMap.count(hp)) dirMap[hp] = looksLikeOutput(hp) ? "output" : "input";
         }
 
-        // 收集已宣告的 wires
-        for (const auto& wire : module.wires) {
-            declaredWires.insert(wire);
-        }
-        for (const auto& s : module.supplies0) declaredWires.insert(s);
-        for (const auto& s : module.supplies1) declaredWires.insert(s);
-        // 收集所有 instance 使用的 nets（包含模組實例化和 cell instances）
+        // 宣告的 ports（原樣 token）
+        unordered_set<string> declaredPorts_raw;
+        auto addSet = [&](const vector<string>& v) { for (auto& x : v) declaredPorts_raw.insert(x); };
+        addSet(module.inputs);
+        addSet(module.outputs);
+        addSet(module.inouts);
+        for (auto& hp : headerPorts) declaredPorts_raw.insert(hp);
+
+        // 正規化版本（拿來跟 usedNets 比較）
+        unordered_set<string> declaredPorts_norm;
+        for (auto& s : declaredPorts_raw) declaredPorts_norm.insert(norm(s));
+
+        // 已宣告 wires（原樣）
+        unordered_set<string> declaredWires_raw;
+        for (const auto& w : module.wires) declaredWires_raw.insert(w);
+        for (const auto& s : module.supplies0) declaredWires_raw.insert(s);
+        for (const auto& s : module.supplies1) declaredWires_raw.insert(s);
+
+        // 正規化 wires
+        unordered_set<string> declaredWires_norm;
+        for (auto& s : declaredWires_raw) declaredWires_norm.insert(norm(s));
+
+        // usedNets：從所有 instances 掃描
+        std::set<std::string> usedNets; // 都是 normalized 名稱
         for (const auto& inst : module.instances) {
             for (const auto& conn : inst.connections) {
-                string netName = conn.second;
-                // 移除反斜線和空格
-                if (netName[0] == '\\' && netName[netName.size() - 1] == ' ') {
-                    netName = netName.substr(1, netName.size() - 2);
-                }
-                if (netName != "UNCONNECTED" && netName != "VSS" && netName != "VDD") {
-                    usedNets.insert(netName);
-
-                    // 追蹤 QN nets
-                    if (conn.first.find("QN") != string::npos) {
-                        qnNets.insert(netName);
-                    }
-                }
+                std::string netName = conn.second;
+                if (netName == "UNCONNECTED" || netName == "VSS" || netName == "VDD") continue;
+                std::string netNorm = norm(netName);
+                if (netNorm.empty()) continue;    // 重要：不要把空名丟進集合
+                usedNets.insert(netNorm);
             }
         }
-
-        // 預先檢查所有將要產生的 MBFF 的 QN nets
-        for (const auto& mergedFF : mergedFFResults_) {
-            if (libParser_) {
-                const LibCell* mbffCell = libParser_->getCell(mergedFF.mbffType);
-                if (mbffCell && mbffCell->hasBundle("QN")) {
-                    auto qnMembers = mbffCell->getBundleMembers("QN");
-                    for (size_t i = 0; i < qnMembers.size() && i < mergedFF.mergedFFs.size(); ++i) {
-                        const string& singleFF = mergedFF.mergedFFs[i];
-
-                        // 查找原始 FF 的 QN 連接
-                        bool foundQN = false;
-                        for (const auto& inst : module.instances) {
-                            string simpleName = singleFF;
-                            size_t slash = simpleName.find_last_of('/');
-                            if (slash != string::npos) {
-                                simpleName = simpleName.substr(slash + 1);
-                            }
-
-                            if (inst.instName == simpleName) {
-                                for (const auto& conn : inst.connections) {
-                                    if (conn.first == "QN" && conn.second != "UNCONNECTED") {
-                                        string netName = conn.second;
-                                        if (netName[0] == '\\' && netName[netName.size() - 1] == ' ') {
-                                            netName = netName.substr(1, netName.size() - 2);
-                                        }
-                                        usedNets.insert(netName);
-                                        qnNets.insert(netName);
-                                        foundQN = true;
-                                        break;
-                                    }
-                                }
-                                break;
-                            }
-                        }
-
-                        // 如果原始 FF 沒有 QN，但 MBFF 需要 QN，產生新的 net
-                        if (!foundQN) {
-                            string qnNetName = "qn_" + mergedFF.newInstanceName + "_" + to_string(i);
-                            usedNets.insert(qnNetName);
-                            qnNets.insert(qnNetName);
-                        }
-                    }
-                }
-            }
-        }
-
-        // === 寫入 module header ===
+        // ====== module header ======
         fout << "module " << module.name << " ( ";
-
-        // 輸出 ports (保持原始格式)
         for (size_t i = 0; i < module.ports.size(); ++i) {
-            if (i > 0) fout << " , ";
-            if (i > 0 && i % 4 == 0) fout << "\n    ";  // 每4個port換行
-
-            string portName = module.ports[i];
-            if (portName[0] != '\\' && portName.find('[') != string::npos) {
-                portName = "\\" + portName + " ";
-            }
-            fout << portName;
+            if (i) fout << " , ";
+            if (i && i % 4 == 0) fout << "\n    ";
+            string p = module.ports[i];
+            if (p[0] != '\\' && p.find('[') != string::npos) p = "\\" + p + " ";
+            fout << p;
         }
         fout << " ) ;\n\n";
 
-        // === 寫入 input declarations ===
-        for (const auto& input : module.inputs) {
-            string inputName = input;
-            if (inputName[0] != '\\' && inputName.find('[') != string::npos) {
-                inputName = "\\" + inputName + " ";
-            }
-            fout << "input " << inputName << " ;\n";
+        // ====== 方向宣告（覆蓋 headerPorts 全部） ======
+        // 依 header 順序印，保持可讀性
+        for (auto& hp : module.ports) {
+            string id = keepEscaped(hp);
+            fout << dirMap[hp] << " " << id << " ;\n";
         }
-        if (!module.inputs.empty()) fout << "\n";
+        fout << "\n";
 
-        // === 寫入 output declarations ===
-        for (const auto& output : module.outputs) {
-            string outputName = output;
-            if (outputName[0] != '\\' && outputName.find('[') != string::npos) {
-                outputName = "\\" + outputName + " ";
-            }
-            fout << "output " << outputName << " ;\n";
-        }
-        if (!module.outputs.empty()) fout << "\n";
-        auto escapeIfBus = [](std::string name) {
-            if (!name.empty() && name[0] != '\\' && name.find('[') != std::string::npos)
-                return std::string("\\") + name + " ";
-            return name;
-            };
-
-        // === NEW: 輸出 supply0 / supply1 原宣告 ===
-        for (const auto& n : module.supplies0) {
-            std::string id = escapeIfBus(n);
-            fout << "supply0 " << id << " ;\n";
-        }
-        for (const auto& n : module.supplies1) {
-            std::string id = escapeIfBus(n);
-            fout << "supply1 " << id << " ;\n";
-        }
+        // ====== supply0/supply1：放在方向宣告後、wire 前 ======
+        for (const auto& n : module.supplies0) fout << "supply0 " << keepEscaped(escapeIfBus(n)) << " ;\n";
+        for (const auto& n : module.supplies1) fout << "supply1 " << keepEscaped(escapeIfBus(n)) << " ;\n";
         if (!module.supplies0.empty() || !module.supplies1.empty()) fout << "\n";
-        // === 寫入原有的 wire declarations ===
-        for (const auto& wire : module.wires) {
-            string wireName = wire;
-            if (wireName[0] != '\\' && wireName.find('[') != string::npos) {
-                wireName = "\\" + wireName + " ";
-            }
-            fout << "wire " << wireName << " ;\n";
+
+        // ====== 原有 wires：先過濾掉 ports 與 supplies ======
+        vector<string> filteredWires;
+        filteredWires.reserve(module.wires.size());
+        for (auto& w : module.wires) {
+            if (declaredPorts_raw.count(w)) continue;          // 不把 port 印成 wire
+            if (!module.supplies0.empty() && module.supplies0.end() != find(module.supplies0.begin(), module.supplies0.end(), w)) continue;
+            if (!module.supplies1.empty() && module.supplies1.end() != find(module.supplies1.begin(), module.supplies1.end(), w)) continue;
+            filteredWires.push_back(w);
+        }
+        for (const auto& w : filteredWires) {
+            string wn = w;
+            if (wn[0] != '\\' && wn.find('[') != string::npos) wn = "\\" + wn + " ";
+            fout << "wire " << wn << " ;\n";
         }
 
-        // === 補充未宣告的 wires ===
-        vector<string> additionalWires;
+        // ====== 需要補充的 wires（用 normalized 比對） ======
+      // ====== 需要補充的 wires（用 normalized 比對 + 再次防空） ======
+        std::vector<std::string> additionalWires;
         for (const auto& net : usedNets) {
-            if (declaredPorts.find(net) == declaredPorts.end() &&
-                declaredWires.find(net) == declaredWires.end()) {
+            if (net.empty()) continue;                    // 保護：避免空名
+            if (net == "VDD" || net == "VSS") continue;  // 跳過電源
+            if (!declaredPorts_norm.count(net) && !declaredWires_norm.count(net)) {
                 additionalWires.push_back(net);
+                declaredWires_norm.insert(net);
             }
         }
-
-        // 輸出補充的 wires
         if (!additionalWires.empty()) {
-            if (!module.wires.empty()) fout << "\n";
+            if (!filteredWires.empty()) fout << "\n";
             fout << "// Additional wires for connections\n";
-            for (const auto& wire : additionalWires) {
-                string wireName = wire;
-                if (wireName[0] != '\\' && wireName.find('[') != string::npos) {
-                    wireName = "\\" + wireName + " ";
-                }
-                fout << "wire " << wireName << " ;\n";
+            for (const auto& w : additionalWires) {
+                std::string wn = (w.find('[') != std::string::npos && (w.empty() || w[0] != '\\'))
+                    ? ("\\" + w + " ")
+                    : w;
+                fout << "wire " << wn << " ;\n";
             }
+            fout << "\n";
         }
 
-        if (!module.wires.empty() || !additionalWires.empty()) fout << "\n";
 
-        // === 輸出 parser 解析到的 assign 語句 ===
-        for (const auto& stmt : module.assignStatements) {
-            fout << stmt << "\n";
-        }
+        // ====== assign 語句（保持原樣） ======
+        for (const auto& stmt : module.assignStatements) fout << stmt << "\n";
         if (!module.assignStatements.empty()) fout << "\n";
 
-        // === 處理 instances ===
+        // ====== instances（沿用你原本的處理：module instance / cell / MBFF） ======
         for (const auto& inst : module.instances) {
-            // 特別處理 hier 開頭的實例
-            if (inst.instName.find("hier") != string::npos) {
-                cout << "[Debug] Processing hier instance: " << inst.instName
-                    << " (type: " << inst.cellType
-                    << ", isModuleInstance: " << inst.isModuleInstance << ")" << endl;
-            }
-
             if (inst.isModuleInstance) {
-                // === 處理模組實例化 ===
+                // 模組實例化：名稱與 pin/net 的 escaped 保持一致
                 string instNameOutput = inst.instName;
+                bool needEscape = (instNameOutput.find('[') != string::npos || instNameOutput.find(']') != string::npos || instNameOutput.find("__") != string::npos);
+                if (instNameOutput.size() && instNameOutput[0] == '\\') instNameOutput = keepEscaped(instNameOutput);
+                else if (needEscape) instNameOutput = "\\" + instNameOutput + " ";
 
-                // 檢查是否需要加逃逸字元
-                bool needsEscape = false;
-
-                // 檢查各種需要逃逸的情況
-                if (instNameOutput.find("__") != string::npos ||
-                    instNameOutput.find('[') != string::npos ||
-                    instNameOutput.find(']') != string::npos ||
-                    // 檢查是否已經是逃逸格式
-                    instNameOutput[0] == '\\') {
-
-                    if (instNameOutput[0] == '\\') {
-                        // 已經是逃逸格式，確保有結尾空格
-                        if (instNameOutput.back() != ' ') {
-                            instNameOutput += " ";
-                        }
-                    }
-                    else {
-                        // 需要加逃逸
-                        instNameOutput = "\\" + instNameOutput + " ";
-                    }
-                }
-
-                // 輸出模組實例化
                 fout << inst.cellType << " " << instNameOutput << " ( ";
-
-                // 輸出連接
-                bool firstPin = true;
-                int pinCount = 0;
-
-                for (const auto& conn : inst.connections) {
-                    if (!firstPin) {
-                        fout << " , ";
-                        // 每 3 個連接換行
-                        if (++pinCount % 3 == 0) {
-                            fout << "\n    ";
-                        }
+                bool first = true; int cnt = 0;
+                for (auto& kv : inst.connections) {
+                    if (!first) { fout << " , "; if (++cnt % 3 == 0) fout << "\n    "; }
+                    first = false;
+                    string pin = kv.first;
+                    if (pin.size() && pin[0] == '\\') pin = keepEscaped(pin);
+                    else if (pin.find('[') != string::npos || pin.find(']') != string::npos) pin = "\\" + pin + " ";
+                    string net = kv.second;
+                    if (net != "VDD" && net != "VSS" && net != "UNCONNECTED") {
+                        if (net.size() && net[0] == '\\') net = keepEscaped(net);
+                        else if (net.find('[') != string::npos || net.find(']') != string::npos) net = "\\" + net + " ";
                     }
-                    else {
-                        firstPin = false;
-                    }
-
-                    string pinName = conn.first;
-                    string netName = conn.second;
-
-                    // 處理 pin 名稱
-                    if (pinName[0] == '\\') {
-                        // 已經是逃逸格式，確保格式正確
-                        size_t spacePos = pinName.find(' ');
-                        if (spacePos == string::npos) {
-                            pinName += " ";
-                        }
-                    }
-                    else if (pinName.find('[') != string::npos ||
-                        pinName.find(']') != string::npos) {
-                        // 需要逃逸
-                        pinName = "\\" + pinName + " ";
-                    }
-
-                    // 處理 net 名稱
-                    if (netName != "VDD" && netName != "VSS" && netName != "UNCONNECTED") {
-                        if (netName[0] == '\\') {
-                            // 已經是逃逸格式
-                            size_t spacePos = netName.find(' ');
-                            if (spacePos == string::npos) {
-                                netName += " ";
-                            }
-                        }
-                        else if (netName.find('[') != string::npos ||
-                            netName.find(']') != string::npos) {
-                            // 需要逃逸
-                            netName = "\\" + netName + " ";
-                        }
-                    }
-
-                    fout << "." << pinName << " ( " << netName << " )";
+                    fout << "." << pin << " ( " << net << " )";
                 }
-
                 fout << " ) ;\n";
                 continue;
             }
-            // === 以下處理 cell instances (FF 和邏輯閘) ===
 
-            // 查找完整名稱
+            // 以下沿用你原本邏輯：FF 合併略過舊 inst，輸出 MBFF；其他 cell 直接原樣輸出
             string fullName = inst.instName;
-            auto mapIt = simpleToFullNameMap_.find(inst.instName);
-            if (mapIt != simpleToFullNameMap_.end()) {
-                fullName = mapIt->second;
-            }
+            auto itmap = simpleToFullNameMap_.find(inst.instName);
+            if (itmap != simpleToFullNameMap_.end()) fullName = itmap->second;
 
-            // 檢查是否為被合併的 FF
             bool shouldSkip = false;
             string mbffName;
             const MergedFF* mergedFFPtr = nullptr;
 
-            if (isFlipFlopInstance(inst.cellType)) {
-                if (mergeMap_.isMerged(fullName)) {
-                    shouldSkip = true;
-                    mbffName = mergeMap_.getMergedName(fullName);
-                    auto it = mergedFFLookup.find(fullName);
-                    if (it != mergedFFLookup.end()) {
-                        mergedFFPtr = it->second;
-                    }
-                }
+            if (isFlipFlopInstance(inst.cellType) && mergeMap_.isMerged(fullName)) {
+                shouldSkip = true;
+                mbffName = mergeMap_.getMergedName(fullName);
+                auto it = mergedFFLookup.find(fullName);
+                if (it != mergedFFLookup.end()) mergedFFPtr = it->second;
             }
 
             if (shouldSkip) {
-                // 被合併的 FF，記錄但不輸出
                 skippedInstances.insert(inst.instName);
+                if (mergedFFPtr && !outputtedMBFFs.count(mbffName)) {
+                    // 取簡名 + 逃逸
+                    string mbffSimple = mbffName;
+                    size_t slash = mbffSimple.find_last_of('/');
+                    if (slash != string::npos) mbffSimple = mbffSimple.substr(slash + 1);
+                    if (mbffSimple.find('[') != string::npos || mbffSimple.find("__") != string::npos) mbffSimple = "\\" + mbffSimple + " ";
 
-                // 檢查是否需要輸出對應的 MBFF
-                if (mergedFFPtr && outputtedMBFFs.find(mbffName) == outputtedMBFFs.end()) {
-                    // 提取簡單名稱
-                    string mbffSimpleName = mbffName;
-                    size_t lastSlash = mbffSimpleName.find_last_of('/');
-                    if (lastSlash != string::npos) {
-                        mbffSimpleName = mbffSimpleName.substr(lastSlash + 1);
-                    }
+                    fout << mergedFFPtr->mbffType << " " << mbffSimple << " ( ";
 
-                    // 處理 instance 名稱的反斜線
-                    if (mbffSimpleName.find("__") != string::npos || mbffSimpleName.find('[') != string::npos) {
-                        mbffSimpleName = "\\" + mbffSimpleName + " ";
-                    }
+                    // 收 pin 連接（維持你原本的規則，含 D/Q/QN/CLK/SI/SE/VDD/VSS）
+                    vector<pair<string, string>> conns;
+                    const LibCell* mbffCell = (libParser_ ? libParser_->getCell(mergedFFPtr->mbffType) : nullptr);
 
-                    // === 輸出 MBFF ===
-                    fout << mergedFFPtr->mbffType << " " << mbffSimpleName << " ( ";
-
-                    // [原有的 MBFF 處理程式碼保持不變...]
-                    // 收集 MBFF 的連接
-                    vector<pair<string, string>> connections;
-
-                    // 取得 MBFF cell 資訊
-                    const LibCell* mbffCell = nullptr;
-                    if (libParser_) {
-                        mbffCell = libParser_->getCell(mergedFFPtr->mbffType);
-                    }
-
-                    // 從被合併的 FF 收集連接
+                    // D/Q/QN bundles
                     for (size_t bitIdx = 0; bitIdx < mergedFFPtr->mergedFFs.size(); ++bitIdx) {
-                        const string& singleFFName = mergedFFPtr->mergedFFs[bitIdx];
+                        string singleFF = mergedFFPtr->mergedFFs[bitIdx];
+                        string simple = singleFF; size_t s = simple.find_last_of('/'); if (s != string::npos) simple = simple.substr(s + 1);
 
-                        // 找簡單名稱
-                        string simpleSingleName = singleFFName;
-                        size_t slash = simpleSingleName.find_last_of('/');
-                        if (slash != string::npos) {
-                            simpleSingleName = simpleSingleName.substr(slash + 1);
-                        }
-
-                        // 從原始 instances 找連接
-                        for (const auto& origInst : module.instances) {
-                            if (origInst.instName == simpleSingleName) {
-                                // 處理 D pin
-                                for (const auto& conn : origInst.connections) {
-                                    if (conn.first == "D") {
-                                        string dPinName = "D" + to_string(bitIdx);
-                                        if (mbffCell && mbffCell->hasBundle("D")) {
-                                            auto members = mbffCell->getBundleMembers("D");
-                                            if (bitIdx < members.size()) {
-                                                dPinName = members[bitIdx];
-                                            }
-                                        }
-                                        connections.push_back({ "." + dPinName, conn.second });
+                        // 在本 module.instances 找原 FF 連接
+                        for (const auto& o : module.instances) if (o.instName == simple) {
+                            for (const auto& k : o.connections) {
+                                auto pushBundle = [&](const char* bname, const char* pinPrefix) {
+                                    string pin = string(pinPrefix) + to_string(bitIdx);
+                                    if (mbffCell && mbffCell->hasBundle(bname)) {
+                                        auto m = mbffCell->getBundleMembers(bname);
+                                        if (bitIdx < m.size()) pin = m[bitIdx];
                                     }
-                                    // 處理 Q pin
-                                    else if (conn.first == "Q") {
-                                        string qPinName = "Q" + to_string(bitIdx);
-                                        if (mbffCell && mbffCell->hasBundle("Q")) {
-                                            auto members = mbffCell->getBundleMembers("Q");
-                                            if (bitIdx < members.size()) {
-                                                qPinName = members[bitIdx];
-                                            }
-                                        }
-                                        connections.push_back({ "." + qPinName, conn.second });
-                                    }
-                                    // 處理 QN pin
-                                    else if (conn.first == "QN") {
-                                        string qnPinName = "QN" + to_string(bitIdx);
-                                        if (mbffCell && mbffCell->hasBundle("QN")) {
-                                            auto members = mbffCell->getBundleMembers("QN");
-                                            if (bitIdx < members.size()) {
-                                                qnPinName = members[bitIdx];
-                                            }
-                                        }
-                                        connections.push_back({ "." + qnPinName, conn.second });
-                                    }
-                                }
-                                break;
+                                    conns.push_back({ "." + pin, k.second });
+                                    };
+                                if (k.first == "D")  pushBundle("D", "D");
+                                if (k.first == "Q")  pushBundle("Q", "Q");
+                                if (k.first == "QN") pushBundle("QN", "QN");
                             }
+                            break;
                         }
                     }
 
-                    // 加入共用 pins (與原程式碼相同)
+                    // 共用 pins（CLK/CK, SI/SE from first, SO from last）
                     if (!mergedFFPtr->mergedFFs.empty()) {
-                        string firstFFSimple = mergedFFPtr->mergedFFs[0];
-                        size_t slash = firstFFSimple.find_last_of('/');
-                        if (slash != string::npos) {
-                            firstFFSimple = firstFFSimple.substr(slash + 1);
-                        }
+                        auto firstFF = mergedFFPtr->mergedFFs.front();
+                        auto lastFF = mergedFFPtr->mergedFFs.back();
+                        auto simpleFirst = firstFF; size_t s1 = simpleFirst.find_last_of('/'); if (s1 != string::npos) simpleFirst = simpleFirst.substr(s1 + 1);
+                        auto simpleLast = lastFF;  size_t s2 = simpleLast.find_last_of('/');  if (s2 != string::npos)  simpleLast = simpleLast.substr(s2 + 1);
 
-                        for (const auto& origInst : module.instances) {
-                            if (origInst.instName == firstFFSimple) {
-                                // Clock
-                                for (const auto& conn : origInst.connections) {
-                                    if (conn.first == "CK" || conn.first == "CLK") {
-                                        string ckPinName = "CK";
-                                        if (mbffCell) {
-                                            if (mbffCell->pins.find("CLK") != mbffCell->pins.end()) {
-                                                ckPinName = "CLK";
-                                            }
-                                        }
-                                        connections.push_back({ "." + ckPinName, conn.second });
-                                    }
-                                    // SI
-                                    else if (conn.first == "SI") {
-                                        connections.push_back({ ".SI", conn.second });
-                                    }
-                                    // SE
-                                    else if (conn.first == "SE") {
-                                        connections.push_back({ ".SE", conn.second });
-                                    }
+                        for (const auto& o : module.instances) if (o.instName == simpleFirst) {
+                            for (const auto& k : o.connections) {
+                                if (k.first == "CK" || k.first == "CLK") {
+                                    string ck = "CK";
+                                    if (mbffCell && mbffCell->pins.find("CLK") != mbffCell->pins.end()) ck = "CLK";
+                                    conns.push_back({ "." + ck, k.second });
                                 }
-                                break;
+                                else if (k.first == "SI") conns.push_back({ ".SI", k.second });
+                                else if (k.first == "SE")  conns.push_back({ ".SE", k.second });
                             }
+                            break;
                         }
-
-                        // 處理最後一個 FF 的 SO
-                        string lastFFSimple = mergedFFPtr->mergedFFs.back();
-                        slash = lastFFSimple.find_last_of('/');
-                        if (slash != string::npos) {
-                            lastFFSimple = lastFFSimple.substr(slash + 1);
-                        }
-
-                        for (const auto& origInst : module.instances) {
-                            if (origInst.instName == lastFFSimple) {
-                                for (const auto& conn : origInst.connections) {
-                                    if (conn.first == "SO") {
-                                        connections.push_back({ ".SO", conn.second });
-                                        break;
-                                    }
-                                }
-                                break;
-                            }
+                        for (const auto& o : module.instances) if (o.instName == simpleLast) {
+                            for (const auto& k : o.connections) if (k.first == "SO") { conns.push_back({ ".SO", k.second }); break; }
+                            break;
                         }
                     }
+                    conns.push_back({ ".VDD","VDD" });
+                    conns.push_back({ ".VSS","VSS" });
 
-                    // 加入 VDD/VSS
-                    connections.push_back({ ".VDD", "VDD" });
-                    connections.push_back({ ".VSS", "VSS" });
-
-                    // 輸出連接 (單行格式，適當換行)
-                    for (size_t i = 0; i < connections.size(); ++i) {
-                        if (i > 0) fout << " , ";
-                        if (i > 0 && i % 3 == 0) fout << "\n    ";  // 每3個連接換行
-
-                        // 處理 net 名稱的反斜線
-                        string netName = connections[i].second;
-                        if (netName != "VDD" && netName != "VSS" &&
-                            netName[0] != '\\' && netName.find('[') != string::npos) {
-                            netName = "\\" + netName + " ";
-                        }
-
-                        fout << connections[i].first << " ( " << netName << " )";
+                    // 輸出連接（每3個換行、net 需要時 escaped）
+                    for (size_t i = 0;i < conns.size();++i) {
+                        if (i) fout << " , ";
+                        if (i && i % 3 == 0) fout << "\n    ";
+                        string net = conns[i].second;
+                        if (net != "VDD" && net != "VSS" &&
+                            net.size() && net[0] != '\\' && net.find('[') != string::npos) net = "\\" + net + " ";
+                        fout << conns[i].first << " ( " << net << " )";
                     }
-
                     fout << " ) ;\n";
                     outputtedMBFFs.insert(mbffName);
                 }
+                continue;
             }
-            else {
-                // === 原樣輸出未合併的 instance (cell instances) ===
-                string instNameOutput = inst.instName;
-                if (instNameOutput.find("__") != string::npos || instNameOutput.find('[') != string::npos) {
-                    instNameOutput = "\\" + instNameOutput + " ";
-                }
 
-                fout << inst.cellType << " " << instNameOutput << " ( ";
-
-                // 輸出連接
-                for (size_t i = 0; i < inst.connections.size(); ++i) {
-                    if (i > 0) fout << " , ";
-                    if (i > 0 && i % 3 == 0) fout << "\n    ";
-
-                    string netName = inst.connections[i].second;
-                    if (netName != "VDD" && netName != "VSS" &&
-                        netName[0] != '\\' && netName.find('[') != string::npos) {
-                        netName = "\\" + netName + " ";
-                    }
-
-                    fout << "." << inst.connections[i].first
-                        << " ( " << netName << " )";
-                }
-
-                fout << " ) ;\n";
+            // 非合併 cell：原樣輸出（處理 escaped）
+            string instNameOutput = inst.instName;
+            if (instNameOutput.find('[') != string::npos || instNameOutput.find("__") != string::npos)
+                instNameOutput = "\\" + instNameOutput + " ";
+            fout << inst.cellType << " " << instNameOutput << " ( ";
+            for (size_t i = 0;i < inst.connections.size();++i) {
+                if (i) fout << " , ";
+                if (i && i % 3 == 0) fout << "\n    ";
+                string net = inst.connections[i].second;
+                if (net != "VDD" && net != "VSS" &&
+                    net.size() && net[0] != '\\' && net.find('[') != string::npos) net = "\\" + net + " ";
+                fout << "." << inst.connections[i].first << " ( " << net << " )";
             }
+            fout << " ) ;\n";
         }
 
         fout << "\nendmodule\n\n";
     }
 
     fout.close();
-
     cout << "  ✓ Verilog netlist written successfully" << endl;
     cout << "    - Skipped instances: " << skippedInstances.size() << endl;
     cout << "    - Generated MBFFs: " << outputtedMBFFs.size() << endl;
-
     return true;
 }
+
 // 產生 instance 字串
 string WriteOutput::generateInstanceString(const VerilogInstance& inst) const {
     stringstream ss;

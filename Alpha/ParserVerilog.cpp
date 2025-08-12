@@ -43,12 +43,11 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
             continue;
         }
         if (startsWith("inout")) {
-            // inout 當 wire 用，WriteOutput 目前沒用到；可放到 wires
             i += 5;
-            std::vector<std::string> tmp; collectDeclList(text, i, bodyEnd, tmp);
-            out.wires.insert(out.wires.end(), tmp.begin(), tmp.end());
+            collectDeclList(text, i, bodyEnd, out.inouts); // ← 正確放進 inouts
             continue;
         }
+
         if (startsWith("wire") || startsWith("logic") || startsWith("reg")) {
             // 一律視為 wires
             size_t kwlen = startsWith("wire") ? 4 : (startsWith("logic") ? 5 : 3);
