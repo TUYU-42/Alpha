@@ -43,6 +43,7 @@ struct VerilogModule {
     std::vector<std::string> supplies1; // names declared by 'supply1'
     std::vector<VerilogInstance> instances;
     std::vector<std::string> inouts;
+    std::unordered_map<std::string, std::string> portDeclWidth;
 };
 
 class VerilogParser {

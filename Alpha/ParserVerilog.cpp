@@ -3,9 +3,46 @@
 #include <sstream>
 #include <cctype>
 #include <iostream>
+static std::string readBracketSuffixes(const std::string& s, size_t& i) {
+    std::string suf;
+    size_t n = s.size();
+    for (;;) {
+        // 允許中間有空白
+        while (i < n && std::isspace((unsigned char)s[i])) ++i;
+        if (i >= n || s[i] != '[') break;
 
+        int depth = 0;
+        do {
+            char c = s[i++];
+            suf.push_back(c);
+            if (c == '[') ++depth;
+            else if (c == ']') --depth;
+        } while (i < n && depth > 0);
+    }
+    return suf;
+}
 VerilogParser::VerilogParser() = default;
+static inline std::string normalizeId(const std::string& s) {
+    if (!s.empty() && s.front() == '\\' && !s.empty() && s.back() == ' ')
+        return s.substr(1, s.size() - 2);
+    return s;
+}
 
+// NEW: 讀 packed range，例如 [99:0]（允許內部空白）
+static std::string readPackedRange(const std::string& s, size_t& i, size_t end) {
+    VerilogParser::skipSpaces(s, i);
+    if (i >= end || s[i] != '[') return {};
+    size_t j = i, depth = 0;
+    std::string r;
+    while (j < end) {
+        char c = s[j++];
+        r.push_back(c);
+        if (c == '[') ++depth;
+        else if (c == ']') { if (--depth == 0) break; }
+    }
+    i = j;
+    return r; // 直接保留原樣，如 "[99:0]"
+}
 static std::string readFileAll(const std::string& path) {
     std::ifstream ifs(path, std::ios::in | std::ios::binary);
     if (!ifs) return {};
@@ -34,17 +71,99 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
 
         if (startsWith("input")) {
             i += 5; // skip 'input'
+            // NEW: 跳過可能出現的型別/修飾詞
+            skipSpaces(text, i);
+            while (i < bodyEnd) {
+                // 支援 wire/logic/reg/signed/unsigned
+                size_t tmp = i;
+                std::string kw;
+                if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
+                if (kw == "wire" || kw == "logic" || kw == "reg" ||
+                    kw == "signed" || kw == "unsigned") {
+                    i = tmp;
+                    skipSpaces(text, i);
+                }
+                else break;
+            }
+            // NEW: 讀可選的 [msb:lsb]
+            std::string range = readPackedRange(text, i, bodyEnd);
+            skipSpaces(text, i);
+
+            // 記下本次 collect 前的大小
+            size_t base = out.inputs.size();
             collectDeclList(text, i, bodyEnd, out.inputs);
+
+            // NEW: 把這行所有識別字都套上剛剛的 range
+            if (!range.empty()) {
+                for (size_t k = base; k < out.inputs.size(); ++k) {
+                    out.portDeclWidth[normalizeId(out.inputs[k])] = range;
+                }
+            }
             continue;
         }
+
         if (startsWith("output")) {
-            i += 6;
+            i += 6; // skip 'input' 
+            // NEW: 跳過可能出現的型別/修飾詞
+            skipSpaces(text, i);
+            while (i < bodyEnd) {
+                // 支援 wire/logic/reg/signed/unsigned
+                size_t tmp = i;
+                std::string kw;
+                if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
+                if (kw == "wire" || kw == "logic" || kw == "reg" ||
+                    kw == "signed" || kw == "unsigned") {
+                    i = tmp;
+                    skipSpaces(text, i);
+                }
+                else break;
+            }
+            // NEW: 讀可選的 [msb:lsb]
+            std::string range = readPackedRange(text, i, bodyEnd);
+            skipSpaces(text, i);
+
+            // 記下本次 collect 前的大小
+            size_t base = out.outputs.size();
             collectDeclList(text, i, bodyEnd, out.outputs);
+
+            // NEW: 把這行所有識別字都套上剛剛的 range
+            if (!range.empty()) {
+                for (size_t k = base; k < out.outputs.size(); ++k) {
+                    out.portDeclWidth[normalizeId(out.outputs[k])] = range;
+                }
+            }
             continue;
         }
         if (startsWith("inout")) {
-            i += 5;
-            collectDeclList(text, i, bodyEnd, out.inouts); // ← 正確放進 inouts
+            i += 5; // skip 'input' 
+            // NEW: 跳過可能出現的型別/修飾詞
+            skipSpaces(text, i);
+            while (i < bodyEnd) {
+                // 支援 wire/logic/reg/signed/unsigned
+                size_t tmp = i;
+                std::string kw;
+                if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
+                if (kw == "wire" || kw == "logic" || kw == "reg" ||
+                    kw == "signed" || kw == "unsigned") {
+                    i = tmp;
+                    skipSpaces(text, i);
+                }
+                else break;
+            }
+            // NEW: 讀可選的 [msb:lsb]
+            std::string range = readPackedRange(text, i, bodyEnd);
+            skipSpaces(text, i);
+
+            // 記下本次 collect 前的大小
+            size_t base = out.inouts.size();
+            collectDeclList(text, i, bodyEnd, out.inouts);
+
+            // NEW: 把這行所有識別字都套上剛剛的 range
+            if (!range.empty()) {
+                for (size_t k = base; k < out.inouts.size(); ++k) {
+                    out.portDeclWidth[normalizeId(out.inouts[k])] = range;
+                }
+            }
             continue;
         }
 
@@ -399,41 +518,73 @@ bool VerilogParser::extractNextInstanceBlock(const std::string& s, size_t bodyEn
     return false;
 }
 
-void VerilogParser::parseInstanceConnections(const std::string& args, std::vector<PinConnection>& outPins) {
+void VerilogParser::parseInstanceConnections(const std::string& args,
+    std::vector<PinConnection>& outPins) {
     size_t i = 0, n = args.size();
     while (i < n) {
         skipSpaces(args, i);
         if (i >= n) break;
 
+        // ===== A) positional 連接：.PIN(...) 以外的情況 =====
         if (args[i] != '.') {
-            // unnamed/positional：當作 net 記錄，pin 置空
             std::string net;
-            if (i < n && args[i] == '\\') net = readEscapedIdentifier(args, i);
-            else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) net = readIdentifier(args, i);
-            // 跳到逗點
+            bool isEsc = false;
+
+            if (i < n && args[i] == '\\') {
+                isEsc = true;
+                net = readEscapedIdentifier(args, i);   // 例如 "\in1[72] "
+            }
+            else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) {
+                // 識別字或常數開頭
+                size_t idBeg = i;
+                net = readIdentifier(args, i);          // 先拿到 "in1"
+                // NEW: 把緊跟的 [..] 後綴補上 -> "in1[72]" / "in1[99:0]"
+                net += readBracketSuffixes(args, i);
+            }
+
+            // 跳到逗號
             while (i < n && args[i] != ',') ++i;
             if (i < n && args[i] == ',') ++i;
+
             if (!net.empty()) outPins.push_back({ "", net });
             continue;
         }
 
-        ++i; // dot
+        // ===== B) named 連接：.PIN ( NET ) =====
+        ++i; // skip '.'
+
+        // 讀 pin 名
         std::string pin;
-        if (i < n && args[i] == '\\') pin = readEscapedIdentifier(args, i);
-        else pin = readIdentifier(args, i);
+        if (i < n && args[i] == '\\') {
+            pin = readEscapedIdentifier(args, i);       // 例如 "\D[3] "
+        }
+        else {
+            pin = readIdentifier(args, i);              // 例如 "D"
+            // NEW: pin 也可能有 [k]，補上
+            pin += readBracketSuffixes(args, i);        // -> "D[3]"
+        }
 
         skipSpaces(args, i);
         if (i >= n || args[i] != '(') {
+            // 同你原本的 fallback...
             while (i < n && args[i] != ',') ++i;
             if (i < n) ++i;
             continue;
         }
         ++i; skipSpaces(args, i);
 
+        // 讀 net
         std::string net;
-        if (i < n && args[i] == '\\') net = readEscapedIdentifier(args, i);
-        else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) net = readIdentifier(args, i);
+        if (i < n && args[i] == '\\') {
+            net = readEscapedIdentifier(args, i);       // "\in1[72] "
+        }
+        else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) {
+            net = readIdentifier(args, i);              // "in1"
+            // NEW: 把 [..] 後綴補上 -> "in1[72]"
+            net += readBracketSuffixes(args, i);
+        }
 
+        // 收掉 ')', 跳過空白與逗號（保留你原本的邏輯）
         while (i < n && args[i] != ')') ++i;
         if (i < n && args[i] == ')') ++i;
         skipSpaces(args, i);
@@ -442,6 +593,7 @@ void VerilogParser::parseInstanceConnections(const std::string& args, std::vecto
         outPins.push_back({ pin, net });
     }
 }
+
 void VerilogParser::rebuildLinearViewsAndLookups() {
     modulesLinear_.clear();
     flatInstances_.clear();

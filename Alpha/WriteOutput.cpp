@@ -480,7 +480,15 @@ bool WriteOutput::writeVerilog() {
         // 依 header 順序印，保持可讀性
         for (auto& hp : module.ports) {
             string id = keepEscaped(hp);
+            std::string dir = dirMap[hp];
             fout << dirMap[hp] << " " << id << " ;\n";
+            std::string rng;
+            auto itW = module.portDeclWidth.find(norm(hp));
+            if (itW != module.portDeclWidth.end() && !itW->second.empty())
+                rng = itW->second + " ";
+
+            // 輸出時把寬度插在方向與名稱之間
+            fout << dir << " " << rng << id << " ;\n";
         }
         fout << "\n";
 
