@@ -91,7 +91,7 @@ private:
     std::set<std::string> flipFlopCellTypes_;
 
     // 新增：LibParser 的參考
-    const LibParser* libParser_;
+    const LibParser* libParser_= nullptr;
     double siteWidth_;
     double rowHeight_;
     int defUnits_;
@@ -132,7 +132,7 @@ public:
 
     // Main legalization method
     bool legalizeAll();
-
+    void setLibParser(const LibParser* p) { libParser_ = p; }
     // Update DEF data with legalized positions
     void updateDefComponents(DefData& defData);
 

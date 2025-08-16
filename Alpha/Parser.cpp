@@ -931,7 +931,7 @@ bool Parser::performLegalization() {
         addError("DEF and LEF must be loaded before legalization");
         return false;
     }
-
+    
     // Get reference to DEF data
     DefData& defData = getDefData();
 
@@ -940,6 +940,7 @@ bool Parser::performLegalization() {
 
     // Create legalizer
     Legalizer legalizer(defData, getMacroMap(), getLefSites());
+	legalizer.setLibParser(getLibParser());
     legalizer.setBankingList(bankingList_);
     // Run legalization
     if (legalizer.legalizeAll()) {

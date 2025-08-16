@@ -1501,38 +1501,46 @@ bool WriteOutput::writeDef() {
         // --------------------------
         // 8) COMPONENTS：新增 MBFF、移除被消耗 leaf FF
         // --------------------------
-        std::unordered_set<std::string> consumed;
-        for (const auto& mbff : mergedFFResults_) {
-            for (const auto& ff : mbff.mergedFFs) {
-                consumed.insert(trim(ff));
-                consumed.insert(toSimple(ff));
-                consumed.insert(toFull(toSimple(ff)));
-            }
-        }
+
+      // ===========================
+// STEP 2: 處理 COMPONENTS（帶覆寫）
+// ===========================
+
+// 2.0 先為 components 建索引
+        std::unordered_map<std::string, const ComponentInfo*> compIdx;
+        compIdx.reserve(defDataCopy.components.size());
+        for (const auto& c : defDataCopy.components) compIdx.emplace(c.name, &c);
 
         std::vector<ComponentInfo> newComponents;
         std::unordered_set<std::string> seenNames;
 
-        // 先加 MBFF
+        // 2.1 先 emit MBFF：若 components 有同名，就用其座標（已被 legalizer 更新）
         for (const auto& mbff : mergedFFResults_) {
-            if (!seenNames.insert(mbff.newInstanceName).second) {
-                std::cerr << "[Warn] Duplicate MBFF name, skip: " << mbff.newInstanceName << "\n";
-                continue;
+            if (!seenNames.insert(mbff.newInstanceName).second) continue;
+
+            ComponentInfo out;
+            auto it = compIdx.find(mbff.newInstanceName);
+            if (it != compIdx.end()) {
+                out = *(it->second);                // 用 legalize 後的 x/y/orient
+                out.isFF = true;
+                out.isMergedFF = true;
             }
-            ComponentInfo c;
-            c.name = mbff.newInstanceName;
-            c.cellType = mbff.mbffType;
-            c.x = mbff.newX;
-            c.y = mbff.newY;
-            c.orient = mbff.orientation.empty() ? "N" : mbff.orientation;
-            c.isFF = true;
-            c.isMergedFF = true;
-            newComponents.push_back(std::move(c));
+            else {
+                // 找不到，就退回用 mergedFFResults_ 的座標
+                out.name = mbff.newInstanceName;
+                out.cellType = mbff.mbffType;
+                out.x = mbff.newX;
+                out.y = mbff.newY;
+                out.orient = mbff.orientation.empty() ? "N" : mbff.orientation;
+                out.isFF = true;
+                out.isMergedFF = true;
+            }
+            newComponents.push_back(std::move(out));
         }
-        // 再補上其餘未被消耗的元件
+
+        // 2.2 再把其餘未重複的元件補上（非 merged / 其他元件）
         for (const auto& comp : defDataCopy.components) {
-            if (consumed.count(comp.name)) continue;
-            if (!seenNames.insert(comp.name).second) continue;
+            if (!seenNames.insert(comp.name).second) continue; // 已有（MBFF同名）就跳過
             newComponents.push_back(comp);
         }
 

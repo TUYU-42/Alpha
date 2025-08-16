@@ -377,7 +377,7 @@ int main(int argc, char* argv[]) {
         // 進行 legalize
         parser.performLegalization();
 
-
+        DefData& defDataFin= parser.getDefParser()->getDefData();
 
 
 
@@ -385,7 +385,7 @@ int main(int argc, char* argv[]) {
         // Step 1: 創建 WriteOutput 物件
         WriteOutput writer(args.outputName,
             map,           // 合併映射
-            defDataNEW,                 // 最終 DEF 資料
+            defDataFin,                 // 最終 DEF 資料
             dpc.getMergedFFResults(),     // 合併結果
             parser.getVerilogParser());   // Verilog Parser
 
@@ -411,16 +411,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         cout << "✓ Generated " << args.outputName << ".def" << endl;
-        // Step 4: 產生 DEF 檔案（使用 DefParser）
-        //cout << "\n--- Generating DEF file ---" << endl;
-       // string outputDef = args.outputName + ".def";
-       // if (!parser.getDefParser()->writeDefFile(outputDef)) {
-        //    cerr << "Error: Failed to generate DEF file" << endl;
-         //   return 1;
-      //  }
-       // cout << "✓ Generated " << outputDef << endl;
-
-        // Step 5: 驗證輸出檔案
+      
         cout << "\n--- Verifying output files ---" << endl;
 
         // 檢查檔案是否存在
