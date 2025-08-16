@@ -17,6 +17,7 @@
 
 class WriteOutput {
 private:
+
     const std::string outputName_;
     const MergeMapping& mergeMap_;
     const DefData& originalDefData_;

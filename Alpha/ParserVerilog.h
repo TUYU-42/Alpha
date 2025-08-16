@@ -51,7 +51,7 @@ public:
     VerilogParser();
  
 
-    // 新增：設置（可選）LibParser 指標（目前不強依賴）
+    // 新增：設置（可選）LibParser 指標（目前不?依?）
     
     // High-level APIs
     bool parseFile(const std::string& filepath);
@@ -90,9 +90,9 @@ public:
     static std::string readIdentifier(const std::string& s, size_t& i);
     static std::string readEscapedIdentifier(const std::string& s, size_t& i);
     static bool isIdentifierStart(char c);
-    void analyzeHierarchy();        // 輸出簡單的統計
+    void analyzeHierarchy();        // ?出?單的統?
     void findClockNets();           // 掃 CK/CLK/CP 等 pin 的 net
-    void printScanChainSummary();   // 列出 FF 與其 SI/SO 連線概況
+    void printScanChainSummary();   // 列出 FF 與其 SI/SO 連?概況
 
 private:
     // ===== 琂Τ helper玂痙 =====

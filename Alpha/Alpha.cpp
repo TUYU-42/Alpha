@@ -300,7 +300,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-           
+
         }
 
         // Perform clustering
@@ -350,9 +350,9 @@ int main(int argc, char* argv[]) {
         auto cleanFFs = dpc.generatePlacementFFsNew(defData, lefData);
         dpc.dumpNewFFsToTxt(cleanFFs, "cleaned_newFFs.txt");
         dpc.dumpPlacedComponentsToTxt(cleanComponents, "placed_components.txt");
-
+        DefData& defDataNEW = parser.getDefParser()->getDefData(); // 用 -> 而不是 .
         // 重建 defData.components 內容（完全替換）
-        defData.components.clear();
+        defDataNEW.components.clear();
 
         for (const auto& comp : cleanComponents) {
             ComponentInfo info;
@@ -361,28 +361,31 @@ int main(int argc, char* argv[]) {
             info.x = comp.x;
             info.y = comp.y;
             info.orient = !comp.orientation.empty() ? comp.orientation : comp.orientation;
+            info.isFF = comp.isFF;
+            info.isMergedFF = comp.isMergedFF;
             info.rowName = "";
             info.status = "";
-            defData.components.push_back(info);
+            defDataNEW.components.push_back(info);
         }
+
 
         // optional: show mapping
         MergeMapping map = dpc.getMergeMap();
         map.printMappings();
         cout << "\n=== Updating Parser State with DPC Results ===" << endl;
-        parser.getDefParser()->setDefData(defData);
+
         // 進行 legalize
         parser.performLegalization();
 
 
-     
 
-        const DefData& finalDefData = parser.getDefParser()->getDefData();
+
+
 
         // Step 1: 創建 WriteOutput 物件
         WriteOutput writer(args.outputName,
-            dpc.getMergeMap(),           // 合併映射
-            finalDefData,                 // 最終 DEF 資料
+            map,           // 合併映射
+            defDataNEW,                 // 最終 DEF 資料
             dpc.getMergedFFResults(),     // 合併結果
             parser.getVerilogParser());   // Verilog Parser
 

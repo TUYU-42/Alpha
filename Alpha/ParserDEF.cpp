@@ -10,7 +10,7 @@
 
 using namespace std;
 
-DefParser::DefParser() : isLoaded_(false), libParser_(nullptr) {
+DefParser::DefParser() : isLoaded_(false), lib_(nullptr) {
     // Initialize regex patterns
     dieAreaRegex_ = std::regex(R"(^\s*DIEAREA\s*((\(\s*\d+\s+\d+\s*\)\s*)+);)");
     unitsRegex_ = std::regex(R"(^\s*UNITS\s+DISTANCE\s+MICRONS\s+(\d+)\s*;)");
@@ -687,7 +687,7 @@ void DefParser::clear() {
 }
 bool DefParser::isFlipFlopCell(const string& cellType) {
     // Add debug output to see what's being checked
-    if (!libParser_) {
+    if (!lib_) {
         // fallback: 用 cell name 硬判斷，最保守
         return (cellType.find("FF") != std::string::npos ||
             cellType.find("FSDN") != std::string::npos ||
@@ -696,7 +696,7 @@ bool DefParser::isFlipFlopCell(const string& cellType) {
     }
 
     // 用 libParser 正式判斷
-    const LibCell* cell = libParser_->getCell(cellType);
+    const LibCell* cell = lib_->getCell(cellType);
     if (!cell) return false;
 
     // 嚴格按照 .lib 構造來看，推薦這樣：

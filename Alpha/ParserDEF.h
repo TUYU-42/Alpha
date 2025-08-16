@@ -19,7 +19,7 @@ private:
     std::vector<std::string> warnings_;
     std::map<std::string, std::vector<ComponentInfo*>> rowToComponentsMap_;
     std::map<std::string, int> rowComponentCount_;
-    LibParser* libParser_;
+    const LibParser* lib_ = nullptr;
     // Regex patterns
     std::regex rowRegex_;
     std::regex trackRegex_;
@@ -59,7 +59,7 @@ public:
     DefParser& operator=(const DefParser&) = delete;
     DefParser(DefParser&&) = default;
     DefParser& operator=(DefParser&&) = default;
-
+    void setLibParser(const LibParser* p) { lib_ = p; }
     // Main interface methods
     bool parseFile(const std::string& filename);
     bool parseFromString(const std::string& content);

@@ -541,6 +541,7 @@ bool Parser::parseDEF(const string& filename) {
         addError("DEF parser not initialized");
         return false;
     }
+    defParser_->setLibParser(getLibParser());
     {
         std::ifstream fin(defFile);
         std::string line;

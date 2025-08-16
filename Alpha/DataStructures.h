@@ -62,6 +62,8 @@ struct ComponentInfo {
     std::string orient;
     std::string rowName;
     std::string status;
+    bool isFF = false;
+    bool isMergedFF = false;
 };
 struct DefBlockageInfo {
     enum BlockageType {
