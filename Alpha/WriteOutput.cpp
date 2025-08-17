@@ -1230,7 +1230,6 @@ bool WriteOutput::writeDef() {
         // 0) Helpers / name utils
         // --------------------------
         if (simpleToFullNameMap_.empty()) {
-            // 你專案裡已經有的函式：建立 simple->full 的查表
             buildSimpleToFullNameMapping();
         }
 
@@ -1254,7 +1253,6 @@ bool WriteOutput::writeDef() {
             for (char c : s) if (c != '[' && c != ']') t.push_back(c);
             return t;
             };
-        // for查表：把 pin 名歸一成 D/Q/QN/CK/SI/SE/SO 基底
         auto basePin = [&](std::string p)->std::string {
             std::string t; t.reserve(p.size());
             for (char c : p) if (c != '[' && c != ']') t.push_back(c);
@@ -1262,7 +1260,6 @@ bool WriteOutput::writeDef() {
             if (t == "CLK" || t == "CP" || t == "C") t = "CK";
             return t;
             };
-        // 新端 formal pin：優先用 .lib pins，支援 D[0]↔D0
         auto pickFormalPin = [&](const LibCell* cell, const std::string& cand)->std::string {
             if (!cell) return cand;
             if (cell->pins.find(cand) != cell->pins.end()) return cand;
@@ -1278,23 +1275,38 @@ bool WriteOutput::writeDef() {
         std::unordered_set<std::string> componentNameSet;
 
         // --------------------------
-        // 2) 先從「原始 NETS」反推 leaf FF -> net（以 pin 基底）
+        // 2) 建立 leaf FF -> net 的映射（包含 QN）
         // --------------------------
         std::unordered_map<std::string, std::unordered_map<std::string, std::string>> leafPin2Net;
         leafPin2Net.reserve(defDataCopy.nets.size() * 2);
+
+        // 加入 QN 追蹤的除錯資訊
+        std::cout << "[DEBUG] Building leaf FF to net mapping..." << std::endl;
+        int qnConnectionCount = 0;
 
         for (const auto& net : defDataCopy.nets) {
             const std::string& netName = net.name;
             for (const auto& np : net.connections) {
                 std::string pBase = basePin(np.pin);
-                if (pBase == "D" || pBase == "Q" || pBase == "QN" || pBase == "CK" || pBase == "SI" || pBase == "SE" || pBase == "SO") {
+                if (pBase == "D" || pBase == "Q" || pBase == "QN" || pBase == "CK" ||
+                    pBase == "SI" || pBase == "SE" || pBase == "SO") {
                     leafPin2Net[np.instance][pBase] = netName;
+
+                    // 除錯：追蹤 QN 連線
+                    if (pBase == "QN") {
+                        qnConnectionCount++;
+                        if (qnConnectionCount <= 5) { // 只印前5個
+                            std::cout << "[DEBUG] Found QN connection: " << np.instance
+                                << "/QN -> " << netName << std::endl;
+                        }
+                    }
                 }
             }
         }
+        std::cout << "[DEBUG] Total QN connections found in original nets: " << qnConnectionCount << std::endl;
 
         // --------------------------
-        // 3) 收集被併掉的 leaf FF 名（full/simple/映射 full 全部放入）
+        // 3) 收集被併掉的 leaf FF 名
         // --------------------------
         std::unordered_set<std::string> mergedFFSet;
         mergedFFSet.reserve(2048);
@@ -1310,24 +1322,41 @@ bool WriteOutput::writeDef() {
         }
 
         // --------------------------
-        // 4) 建 old(leaf, pinBase) -> new(MBFF, formalPin) 的映射
+        // 4) 建立映射表（加強 QN 處理）
         // --------------------------
         std::map<std::pair<std::string, std::string>,
             std::pair<std::string, std::string>> ffPinMap;
+
+        std::cout << "[DEBUG] Building FF pin mappings for merged FFs..." << std::endl;
 
         for (const auto& mbff : mergedFFResults_) {
             const LibCell* mbffCell = (libParser_ ? libParser_->getCell(mbff.mbffType) : nullptr);
             const size_t BW = mbff.mergedFFs.size();
 
+            // 除錯：印出 MBFF 資訊
+            std::cout << "[DEBUG] Processing MBFF: " << mbff.newInstanceName
+                << " (type: " << mbff.mbffType << ", bits: " << BW << ")" << std::endl;
+
             for (size_t i = 0; i < BW; ++i) {
                 std::string dPin = "D" + std::to_string(i);
                 std::string qPin = "Q" + std::to_string(i);
                 std::string qnPin = "QN" + std::to_string(i);
+
                 if (mbffCell) {
-                    if (mbffCell->hasBundle("D")) { auto v = mbffCell->getBundleMembers("D");  if (i < v.size()) dPin = v[i]; }
-                    if (mbffCell->hasBundle("Q")) { auto v = mbffCell->getBundleMembers("Q");  if (i < v.size()) qPin = v[i]; }
-                    if (mbffCell->hasBundle("QN")) { auto v = mbffCell->getBundleMembers("QN"); if (i < v.size()) qnPin = v[i]; }
+                    if (mbffCell->hasBundle("D")) {
+                        auto v = mbffCell->getBundleMembers("D");
+                        if (i < v.size()) dPin = v[i];
+                    }
+                    if (mbffCell->hasBundle("Q")) {
+                        auto v = mbffCell->getBundleMembers("Q");
+                        if (i < v.size()) qPin = v[i];
+                    }
+                    if (mbffCell->hasBundle("QN")) {
+                        auto v = mbffCell->getBundleMembers("QN");
+                        if (i < v.size()) qnPin = v[i];
+                    }
                 }
+
                 dPin = pickFormalPin(mbffCell, dPin);
                 qPin = pickFormalPin(mbffCell, qPin);
                 qnPin = pickFormalPin(mbffCell, qnPin);
@@ -1337,13 +1366,15 @@ bool WriteOutput::writeDef() {
                 const std::string keys[2] = { oldFull, oldSimple };
 
                 for (const auto& k : keys) {
-                    // 舊端一律用「基底 pin」當 key
                     ffPinMap[{k, "D"}] = { mbff.newInstanceName, dPin };
                     ffPinMap[{k, "Q"}] = { mbff.newInstanceName, qPin };
-                    if (!mbffCell || mbffCell->pins.find(qnPin) != mbffCell->pins.end())
-                        ffPinMap[{k, "QN"}] = { mbff.newInstanceName, qnPin };
+
+                    // 重要：總是加入 QN 映射（即使原始 FF 沒有 QN 連線）
+                    ffPinMap[{k, "QN"}] = { mbff.newInstanceName, qnPin };
+
                     ffPinMap[{k, "CK"}] = { mbff.newInstanceName, "CK" };
-                    ffPinMap[{k, "CLK"}] = { mbff.newInstanceName, "CK" }; // 冗餘
+                    ffPinMap[{k, "CLK"}] = { mbff.newInstanceName, "CK" };
+
                     if (i == 0) {
                         ffPinMap[{k, "SI"}] = { mbff.newInstanceName, "SI" };
                         ffPinMap[{k, "SE"}] = { mbff.newInstanceName, "SE" };
@@ -1356,16 +1387,19 @@ bool WriteOutput::writeDef() {
         }
 
         // --------------------------
-        // 5) 第一階段：替換 NETS（命中 map 就改；舊 leaf 但沒命中就丟）
+        // 5) 第一階段：替換 NETS
         // --------------------------
         std::vector<NetInfo> newNets;
         newNets.reserve(defDataCopy.nets.size());
         int warnCnt = 0;
+        int qnReplacedCount = 0;
+
+        std::cout << "[DEBUG] Processing and replacing nets..." << std::endl;
 
         for (auto net : defDataCopy.nets) {
             NetInfo n = net;
             n.connections.clear();
-            std::set<std::pair<std::string, std::string>> seen; // (inst,pin) 去重
+            std::set<std::pair<std::string, std::string>> seen;
 
             for (const auto& np : net.connections) {
                 const std::string pinBase = basePin(np.pin);
@@ -1378,8 +1412,18 @@ bool WriteOutput::writeDef() {
                     if (it != ffPinMap.end()) {
                         const auto& newInst = it->second.first;
                         const auto& newPin = it->second.second;
-                        if (seen.emplace(newInst, newPin).second)
+                        if (seen.emplace(newInst, newPin).second) {
                             n.connections.push_back(NetPin{ newInst, newPin });
+
+                            // 除錯：追蹤 QN 替換
+                            if (pinBase == "QN") {
+                                qnReplacedCount++;
+                                if (qnReplacedCount <= 5) {
+                                    std::cout << "[DEBUG] Replaced QN: " << np.instance << "/QN -> "
+                                        << newInst << "/" << newPin << " on net " << net.name << std::endl;
+                                }
+                            }
+                        }
                         replaced = true;
                         break;
                     }
@@ -1396,10 +1440,10 @@ bool WriteOutput::writeDef() {
                                 << " on net " << net.name
                                 << " (base=" << pinBase << " not mapped)\n";
                         }
-                        continue; // 丟掉舊 leaf 連線
+                        continue;
                     }
                     if (seen.emplace(np.instance, np.pin).second)
-                        n.connections.push_back(np); // 非 FF 或未合併：保留
+                        n.connections.push_back(np);
                 }
             }
 
@@ -1408,21 +1452,27 @@ bool WriteOutput::writeDef() {
         }
         defDataCopy.nets.swap(newNets);
 
+        std::cout << "[DEBUG] Total QN replacements: " << qnReplacedCount << std::endl;
+
         // --------------------------
-        // 6) 第二階段：建立 net -> set(inst,pin) 查找（供回填）
+        // 6) 建立 net -> connections 查找表
         // --------------------------
         std::unordered_map<std::string, std::set<std::pair<std::string, std::string>>> netConnSet;
         netConnSet.reserve(defDataCopy.nets.size());
+
         for (const auto& net : defDataCopy.nets) {
             auto& S = netConnSet[net.name];
-            for (const auto& np : net.connections) S.emplace(np.instance, np.pin);
+            for (const auto& np : net.connections) {
+                S.emplace(np.instance, np.pin);
+            }
         }
+
         auto ensureConnected = [&](const std::string& netName,
             const std::string& inst, const std::string& pin) {
                 if (netName.empty() || inst.empty() || pin.empty()) return;
+
                 auto& S = netConnSet[netName];
                 if (S.emplace(inst, pin).second) {
-                    // push back 到 defDataCopy.nets
                     for (auto& n : defDataCopy.nets) {
                         if (n.name == netName) {
                             n.connections.push_back({ inst, pin });
@@ -1433,8 +1483,11 @@ bool WriteOutput::writeDef() {
             };
 
         // --------------------------
-        // 7) 第三階段：回填任何漏網的 MBFF 連線（依據 leafPin2Net）
+        // 7) 第三階段：回填漏掉的連線（特別注意 QN）
         // --------------------------
+        std::cout << "[DEBUG] Backfilling missing connections..." << std::endl;
+        int qnBackfillCount = 0;
+
         for (const auto& mbff : mergedFFResults_) {
             const size_t BW = mbff.mergedFFs.size();
             const LibCell* mbffCell = (libParser_ ? libParser_->getCell(mbff.mbffType) : nullptr);
@@ -1453,7 +1506,7 @@ bool WriteOutput::writeDef() {
                 return p;
                 };
 
-            // 共有腳：bit0 / last 的 leaf 找 net
+            // 處理共用腳位
             std::string ckNet, siNet, seNet, soNet;
             {
                 auto it0 = leafPin2Net.find(mbff.mergedFFs.front());
@@ -1467,20 +1520,28 @@ bool WriteOutput::writeDef() {
                     if (itL->second.count("SO")) soNet = itL->second.at("SO");
                 }
             }
+
             if (!ckNet.empty()) ensureConnected(ckNet, mbff.newInstanceName, "CK");
             if (!siNet.empty()) ensureConnected(siNet, mbff.newInstanceName, "SI");
             if (!seNet.empty()) ensureConnected(seNet, mbff.newInstanceName, "SE");
             if (!soNet.empty()) ensureConnected(soNet, mbff.newInstanceName, "SO");
 
-            // 逐 bit：D/Q/(QN)
+            // 處理每個 bit 的 D/Q/QN
             for (size_t i = 0; i < BW; ++i) {
                 const std::string& leaf = mbff.mergedFFs[i];
                 auto it = leafPin2Net.find(leaf);
+
+                // 如果找不到，嘗試用完整路徑
+                if (it == leafPin2Net.end()) {
+                    std::string fullLeaf = toFull(toSimple(leaf));
+                    it = leafPin2Net.find(fullLeaf);
+                }
+
                 if (it == leafPin2Net.end()) continue;
 
                 const std::string dNet = (it->second.count("D") ? it->second.at("D") : "");
                 const std::string qNet = (it->second.count("Q") ? it->second.at("Q") : "");
-                const std::string nNet = (it->second.count("QN") ? it->second.at("QN") : "");
+                const std::string qnNet = (it->second.count("QN") ? it->second.at("QN") : "");
 
                 if (!dNet.empty()) {
                     std::string dPin = formalName("D", i, "D" + std::to_string(i));
@@ -1490,23 +1551,36 @@ bool WriteOutput::writeDef() {
                     std::string qPin = formalName("Q", i, "Q" + std::to_string(i));
                     ensureConnected(qNet, mbff.newInstanceName, qPin);
                 }
-                if (!nNet.empty()) {
-                    std::string nPin = formalName("QN", i, "QN" + std::to_string(i));
-                    if (!mbffCell || mbffCell->pins.find(nPin) != mbffCell->pins.end())
-                        ensureConnected(nNet, mbff.newInstanceName, nPin);
+
+                // 特別處理 QN：即使原始 net 是 UNCONNECTED，也要確保連線存在
+                if (!qnNet.empty()) {
+                    std::string qnPin = formalName("QN", i, "QN" + std::to_string(i));
+
+                    // 檢查 MBFF 是否真的有這個 QN pin
+                    bool hasQnPin = true;
+                    if (mbffCell) {
+                        hasQnPin = (mbffCell->pins.find(qnPin) != mbffCell->pins.end());
+                    }
+
+                    if (hasQnPin) {
+                        ensureConnected(qnNet, mbff.newInstanceName, qnPin);
+                        qnBackfillCount++;
+
+                        // 除錯資訊
+                        if (qnBackfillCount <= 5 || qnNet.find("UNCONNECTED") != std::string::npos) {
+                            std::cout << "[DEBUG] Backfilling QN: " << mbff.newInstanceName
+                                << "/" << qnPin << " -> " << qnNet << std::endl;
+                        }
+                    }
                 }
             }
         }
 
-        // --------------------------
-        // 8) COMPONENTS：新增 MBFF、移除被消耗 leaf FF
-        // --------------------------
+        std::cout << "[DEBUG] Total QN backfills: " << qnBackfillCount << std::endl;
 
-      // ===========================
-// STEP 2: 處理 COMPONENTS（帶覆寫）
-// ===========================
-
-// 2.0 先為 components 建索引
+        // --------------------------
+        // 8) 處理 COMPONENTS
+        // --------------------------
         std::unordered_map<std::string, const ComponentInfo*> compIdx;
         compIdx.reserve(defDataCopy.components.size());
         for (const auto& c : defDataCopy.components) compIdx.emplace(c.name, &c);
@@ -1514,19 +1588,17 @@ bool WriteOutput::writeDef() {
         std::vector<ComponentInfo> newComponents;
         std::unordered_set<std::string> seenNames;
 
-        // 2.1 先 emit MBFF：若 components 有同名，就用其座標（已被 legalizer 更新）
         for (const auto& mbff : mergedFFResults_) {
             if (!seenNames.insert(mbff.newInstanceName).second) continue;
 
             ComponentInfo out;
             auto it = compIdx.find(mbff.newInstanceName);
             if (it != compIdx.end()) {
-                out = *(it->second);                // 用 legalize 後的 x/y/orient
+                out = *(it->second);
                 out.isFF = true;
                 out.isMergedFF = true;
             }
             else {
-                // 找不到，就退回用 mergedFFResults_ 的座標
                 out.name = mbff.newInstanceName;
                 out.cellType = mbff.mbffType;
                 out.x = mbff.newX;
@@ -1538,9 +1610,8 @@ bool WriteOutput::writeDef() {
             newComponents.push_back(std::move(out));
         }
 
-        // 2.2 再把其餘未重複的元件補上（非 merged / 其他元件）
         for (const auto& comp : defDataCopy.components) {
-            if (!seenNames.insert(comp.name).second) continue; // 已有（MBFF同名）就跳過
+            if (!seenNames.insert(comp.name).second) continue;
             newComponents.push_back(comp);
         }
 
@@ -1591,8 +1662,24 @@ bool WriteOutput::writeDef() {
         }
         defFile << "END COMPONENTS\n\n";
 
+        // 除錯：統計 UNCONNECTED nets
+        int unconnectedCount = 0;
+        int unconnectedWithQN = 0;
+
         defFile << "NETS " << defDataCopy.nets.size() << " ;\n";
         for (const auto& net : defDataCopy.nets) {
+            if (net.name.find("UNCONNECTED") != std::string::npos) {
+                unconnectedCount++;
+
+                // 檢查是否有 QN 連線
+                for (const auto& conn : net.connections) {
+                    if (conn.pin.find("QN") != std::string::npos) {
+                        unconnectedWithQN++;
+                        break;
+                    }
+                }
+            }
+
             defFile << "- " << net.name << "\n";
             for (size_t i = 0; i < net.connections.size(); ++i) {
                 defFile << "  ( " << net.connections[i].instance
@@ -1610,6 +1697,8 @@ bool WriteOutput::writeDef() {
         std::cout << "  ✓ DEF file written successfully\n"
             << "    - Components: " << newComponents.size() << "\n"
             << "    - Nets: " << defDataCopy.nets.size() << "\n"
+            << "    - UNCONNECTED nets: " << unconnectedCount << "\n"
+            << "    - UNCONNECTED nets with QN: " << unconnectedWithQN << "\n"
             << "    - New MBFFs: " << mergedFFResults_.size() << std::endl;
         return true;
     }
