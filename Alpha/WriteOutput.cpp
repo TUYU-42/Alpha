@@ -8,10 +8,6 @@
 #include <array>
 using namespace std;
 
-
-
-
-
 // 是否為 escaped 標識（Verilog 以 '\' 開頭，並常以空白結尾）
 inline bool WO_isEscaped(const std::string& s) {
     return !s.empty() && s[0] == '\\';
@@ -44,6 +40,78 @@ inline std::string WO_normPath(const std::string& path) {
     }
     return out;
 }
+
+static std::vector<std::string> makeNameVariants(const std::string& name) {
+    std::vector<std::string> out;
+    if (name.empty()) return out;
+    auto push = [&](const std::string& s) {
+        if (!s.empty() && std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
+        };
+
+    // raw
+    push(name);
+
+    // unescaped if starts with '\' and ends with ' '
+    if (name.size() >= 2 && name.front() == '\\' && name.back() == ' ') {
+        push(name.substr(1, name.size() - 2));
+    }
+    else {
+        // also try escaped form
+        push(std::string("\\") + name + " ");
+    }
+
+    // WO_normPath (if you have that function available in this translation unit)
+    push(WO_normPath(name));
+
+    // basename (after last '/')
+    size_t p = name.find_last_of('/');
+    if (p != std::string::npos) push(name.substr(p + 1));
+
+    // br2dunder and br2under on unescaped variant
+    auto unesc = (name.front() == '\\' && name.back() == ' ') ? name.substr(1, name.size() - 2) : name;
+    // br2dunder
+    {
+        std::string r; r.reserve(unesc.size() + 4);
+        for (size_t i = 0; i < unesc.size(); ++i) {
+            if (unesc[i] == '[') {
+                size_t j = i + 1, k = j;
+                while (k < unesc.size() && isdigit((unsigned char)unesc[k])) ++k;
+                if (k<unesc.size() && unesc[k] == ']' && k>j) {
+                    r += "__";
+                    r.append(unesc.begin() + j, unesc.begin() + k);
+                    r += "__";
+                    i = k; continue;
+                }
+            }
+            r.push_back(unesc[i]);
+        }
+        push(r);
+    }
+    // br2under
+    {
+        std::string r; r.reserve(unesc.size() + 2);
+        for (size_t i = 0; i < unesc.size(); ++i) {
+            if (unesc[i] == '[') {
+                size_t j = i + 1, k = j;
+                while (k < unesc.size() && isdigit((unsigned char)unesc[k])) ++k;
+                if (k<unesc.size() && unesc[k] == ']' && k>j) {
+                    r.push_back('_');
+                    r.append(unesc.begin() + j, unesc.begin() + k);
+                    r.push_back('_');
+                    i = k; continue;
+                }
+            }
+            r.push_back(unesc[i]);
+        }
+        push(r);
+    }
+
+    return out;
+}
+
+
+
+
 
 // 取得 basename（最後一段）
 inline std::string WO_basename(const std::string& path) {
@@ -602,11 +670,6 @@ bool WriteOutput::writeVerilog() {
         if (!id.empty() && id[0] == '\\' && id.back() != ' ') id.push_back(' ');
         return id;
         };
-    auto escapeIfBus = [](const string& name) {
-        if (!name.empty() && name[0] != '\\' && (name.find('[') != string::npos || name.find(']') != string::npos))
-            return string("\\") + name + " ";
-        return name;
-        };
     auto unescapeIfEscaped = [](string s) {
         if (!s.empty() && s[0] == '\\' && s.back() == ' ') return s.substr(1, s.size() - 2);
         return s;
@@ -619,43 +682,37 @@ bool WriteOutput::writeVerilog() {
         size_t s = p.find_last_of('/');
         return (s == string::npos) ? p : p.substr(s + 1);
         };
-    auto br2dunder = [](string s) { // a[3] -> a__3__
-        string out; out.reserve(s.size() + 4);
-        for (size_t i = 0; i < s.size(); ++i) {
-            if (s[i] == '[') {
-                size_t j = i + 1, k = j;
-                while (k < s.size() && isdigit((unsigned char)s[k])) ++k;
-                if (k < s.size() && s[k] == ']' && k > j) {
-                    out += "__";
-                    out.append(s.begin() + j, s.begin() + k);
-                    out += "__";
-                    i = k;
-                    continue;
+    auto nameKeys = [&](string s) {
+        auto br2dunder = [](string t) {
+            string out; out.reserve(t.size() + 4);
+            for (size_t i = 0; i < t.size(); ++i) {
+                if (t[i] == '[') {
+                    size_t j = i + 1, k = j;
+                    while (k < t.size() && isdigit((unsigned char)t[k])) ++k;
+                    if (k<t.size() && t[k] == ']' && k>j) {
+                        out += "__"; out.append(t.begin() + j, t.begin() + k); out += "__";
+                        i = k; continue;
+                    }
                 }
+                out.push_back(t[i]);
             }
-            out.push_back(s[i]);
-        }
-        return out;
-        };
-    auto br2under = [](string s) { // a[3] -> a_3_
-        string out; out.reserve(s.size() + 2);
-        for (size_t i = 0; i < s.size(); ++i) {
-            if (s[i] == '[') {
-                size_t j = i + 1, k = j;
-                while (k < s.size() && isdigit((unsigned char)s[k])) ++k;
-                if (k < s.size() && s[k] == ']' && k > j) {
-                    out.push_back('_');
-                    out.append(s.begin() + j, s.begin() + k);
-                    out.push_back('_');
-                    i = k;
-                    continue;
+            return out;
+            };
+        auto br2under = [](string t) {
+            string out; out.reserve(t.size() + 2);
+            for (size_t i = 0; i < t.size(); ++i) {
+                if (t[i] == '[') {
+                    size_t j = i + 1, k = j;
+                    while (k < t.size() && isdigit((unsigned char)t[k])) ++k;
+                    if (k<t.size() && t[k] == ']' && k>j) {
+                        out.push_back('_'); out.append(t.begin() + j, t.begin() + k); out.push_back('_');
+                        i = k; continue;
+                    }
                 }
+                out.push_back(t[i]);
             }
-            out.push_back(s[i]);
-        }
-        return out;
-        };
-    auto nameKeys = [&](string s) { // 允許 \a[3] , a[3] , a__3__ , a_3_
+            return out;
+            };
         vector<string> ks;
         ks.push_back(s);
         string t = unescapeIfEscaped(s);
@@ -672,14 +729,13 @@ bool WriteOutput::writeVerilog() {
         return std::string(fallbackPrefix) + std::to_string(bitIdx);
         };
     auto escapeFormalPinIfNeeded = [&](string pin) {
-        // formal port 若含 [] 需用 escaped identifier
         if (!pin.empty() && pin[0] == '\\') return keepEscaped(pin);
         if (pin.find('[') != string::npos || pin.find(']') != string::npos) return string("\\") + pin + " ";
         return pin;
         };
     auto ensureUniqueName = [&](unordered_set<string>& used, string n) {
-        string base = n;
-        if (!base.empty() && base[0] == '\\') base = unescapeIfEscaped(base);
+        auto unesc = [&](string s) { return (!s.empty() && s[0] == '\\' && s.back() == ' ') ? s.substr(1, s.size() - 2) : s; };
+        string base = unesc(n);
         string cand = base;
         int suf = 0;
         while (used.count(cand)) cand = base + "_mbff" + std::to_string(++suf);
@@ -688,18 +744,69 @@ bool WriteOutput::writeVerilog() {
             cand = "\\" + cand + " ";
         return cand;
         };
+    auto isConstNet = [](const string& s)->bool {
+        return s.find('\'') != string::npos;
+        };
+    auto isBitSelect = [](const string& s)->bool {
+        if (s.empty()) return false;
+        if (s[0] == '\\') return false;
+        size_t lb = s.find('[');
+        if (lb == string::npos) return false;
+        size_t rb = s.find(']', lb + 1);
+        if (rb == string::npos) return false;
+        string inside = s.substr(lb + 1, rb - lb - 1);
+        if (inside.empty()) return false;
+        size_t colon = inside.find(':');
+        auto allDigits = [](const string& t) { return !t.empty() && std::all_of(t.begin(), t.end(), [](unsigned char c) {return std::isdigit(c); }); };
+        if (colon == string::npos) return allDigits(inside);
+        string a = inside.substr(0, colon), b = inside.substr(colon + 1);
+        return allDigits(a) && allDigits(b);
+        };
+    auto parseBitSelect = [&](const string& s, string& base, int& lo, int& hi)->bool {
+        if (!isBitSelect(s)) return false;
+        size_t lb = s.find('['), rb = s.find(']', lb + 1);
+        base = s.substr(0, lb);
+        string inside = s.substr(lb + 1, rb - lb - 1);
+        size_t colon = inside.find(':');
+        if (colon == string::npos) {
+            int idx = std::stoi(inside);
+            lo = idx; hi = idx;
+        }
+        else {
+            int a = std::stoi(inside.substr(0, colon));
+            int b = std::stoi(inside.substr(colon + 1));
+            lo = std::min(a, b);
+            hi = std::max(a, b);
+        }
+        return true;
+        };
+    auto needsEscapeActual = [&](const string& s)->bool {
+        if (s.empty()) return false;
+        if (s == "VDD" || s == "VSS" || s == "UNCONNECTED") return false;
+        if (isConstNet(s)) return false;
+        if (!s.empty() && s[0] == '\\') return false;
+        if (isBitSelect(s)) return false;
+        for (char c : s) {
+            if (!(std::isalnum((unsigned char)c) || c == '_' || c == '$')) return true;
+        }
+        return false;
+        };
+    auto fmtActualNet = [&](string net)->string {
+        return needsEscapeActual(net) ? (string("\\") + net + " ") : net;
+        };
+    auto fmtDeclName = [&](string net)->string {
+        // 宣告用名稱（不含 []），必要時變 escaped identifier
+        return needsEscapeActual(net) ? (string("\\") + net + " ") : net;
+        };
 
-    // 供應 merged group（同一份定義，用於所有 module）
-    // 建立：merged 名稱 & 每顆 leaf 都可 lookup
-    unordered_map<string, const MergedFF*> grpByMergedName;   // key: WO_normPath(newInstanceName)
-    unordered_map<string, const MergedFF*> grpByLeafFullpath; // key: WO_normPath(leaf full path)
+    // 供應 merged group
+    unordered_map<string, const MergedFF*> grpByMergedName;
+    unordered_map<string, const MergedFF*> grpByLeafFullpath;
     for (const auto& g : mergedFFResults_) {
         grpByMergedName[WO_normPath(g.newInstanceName)] = &g;
         for (const auto& lf : g.mergedFFs) grpByLeafFullpath[WO_normPath(lf)] = &g;
     }
-
-    // 跨 module 去重：避免同一個 group 在多個 module 重複輸出
-    unordered_set<string> emittedGroups; // key = WO_normPath(newInstanceName)
+    unordered_set<string> emittedGroups;
 
     const auto& modules = verilogParser_->getModules();
 
@@ -729,13 +836,57 @@ bool WriteOutput::writeVerilog() {
         unordered_set<string> declaredWires_norm;
         for (auto& s : declaredWires_raw) declaredWires_norm.insert(unescapeIfEscaped(s));
 
+        // 也建 base 名集合
+        unordered_set<string> declaredPortBases;
+        for (auto& s : declaredPorts_norm) declaredPortBases.insert(s);
+        unordered_set<string> declaredWireBases;
+        for (auto& s : declaredWires_norm) declaredWireBases.insert(s);
+
+        // 收集用到的 nets + 統計匯流排範圍
         std::set<string> usedNets;
+        std::unordered_map<string, std::pair<int, int>> busRange; // base -> {min,max}
+
+        auto touchBitUse = [&](const string& net) {
+            string base; int lo = 0, hi = 0;
+            if (parseBitSelect(net, base, lo, hi)) {
+                auto it = busRange.find(base);
+                if (it == busRange.end()) busRange[base] = { lo, hi };
+                else {
+                    it->second.first = std::min(it->second.first, lo);
+                    it->second.second = std::max(it->second.second, hi);
+                }
+            }
+            };
+
         for (const auto& inst : module.instances) {
             for (const auto& conn : inst.connections) {
                 string netName = conn.second;
                 if (netName == "UNCONNECTED" || netName == "VSS" || netName == "VDD") continue;
                 string netNorm = unescapeIfEscaped(netName);
-                if (!netNorm.empty()) usedNets.insert(netNorm);
+                if (!netNorm.empty()) {
+                    usedNets.insert(netNorm);
+                    touchBitUse(netNorm);
+                }
+            }
+        }
+
+        // 從 assign 掃描 bit-select（粗略，用 regex）
+        std::regex bsre(R"(([A-Za-z_\$][A-Za-z0-9_\$]*)\[(\d+)(?::(\d+))?\])");
+        for (const auto& stmt : module.assignStatements) {
+            for (std::sregex_iterator it(stmt.begin(), stmt.end(), bsre), e; it != e; ++it) {
+                string base = (*it)[1].str();
+                int a = std::stoi((*it)[2].str());
+                int b = (*it)[3].matched ? std::stoi((*it)[3].str()) : a;
+                int lo = std::min(a, b), hi = std::max(a, b);
+                auto& pr = busRange[base];
+                if (pr.first == 0 && pr.second == 0 && !declaredWireBases.count(base) && !declaredPortBases.count(base))
+                    pr = { lo,hi };
+                else {
+                    if (pr.first == 0 && pr.second == 0) pr = { lo,hi };
+                    pr.first = std::min(pr.first, lo);
+                    pr.second = std::max(pr.second, hi);
+                }
+                usedNets.insert(base); // 也把 base 視為使用
             }
         }
 
@@ -761,13 +912,14 @@ bool WriteOutput::writeVerilog() {
         }
         fout << "\n";
 
-        for (const auto& n : module.supplies0) fout << "supply0 " << keepEscaped(escapeIfBus(n)) << " ;\n";
-        for (const auto& n : module.supplies1) fout << "supply1 " << keepEscaped(escapeIfBus(n)) << " ;\n";
+        for (const auto& n : module.supplies0) fout << "supply0 " << keepEscaped(n) << " ;\n";
+        for (const auto& n : module.supplies1) fout << "supply1 " << keepEscaped(n) << " ;\n";
         if (!module.supplies0.empty() || !module.supplies1.empty()) fout << "\n";
 
         unordered_set<string> s0(module.supplies0.begin(), module.supplies0.end());
         unordered_set<string> s1(module.supplies1.begin(), module.supplies1.end());
 
+        // 先印原始 wires
         vector<string> filteredWires;
         filteredWires.reserve(module.wires.size());
         for (auto& w : module.wires) {
@@ -781,32 +933,70 @@ bool WriteOutput::writeVerilog() {
             fout << "wire " << wn << " ;\n";
         }
 
-        vector<string> additionalWires;
-        for (const auto& net : usedNets) {
-            if (net.empty()) continue;
-            if (net == "VDD" || net == "VSS") continue;
-            if (!declaredPorts_norm.count(net) && !declaredWires_norm.count(net)) {
-                additionalWires.push_back(net);
-                declaredWires_norm.insert(net);
-            }
+        // 先補「bus 宣告」
+        vector<std::tuple<string, int, int>> busDecls;
+        for (const auto& kv : busRange) {
+            const string& base = kv.first;
+            int lo = kv.second.first, hi = kv.second.second;
+            if (base.empty()) continue;
+            // 已宣告過就略過
+            bool declared = declaredPorts_norm.count(base) ||
+                declaredWires_norm.count(base) ||
+                declaredPortBases.count(base) ||
+                declaredWireBases.count(base);
+            if (declared) continue;
+            busDecls.emplace_back(base, lo, hi);
+            declaredWireBases.insert(base);
+            declaredWires_norm.insert(base);
         }
-        if (!additionalWires.empty()) {
+        if (!busDecls.empty()) {
             if (!filteredWires.empty()) fout << "\n";
-            fout << "// Additional wires for connections\n";
-            for (const auto& w : additionalWires) {
-                string wn = (w.find('[') != string::npos && (w.empty() || w[0] != '\\'))
-                    ? ("\\" + w + " ") : w;
-                fout << "wire " << wn << " ;\n";
+            fout << "// Additional bus wires for connections\n";
+            for (const auto& t : busDecls) {
+                string base; int lo, hi;
+                std::tie(base, lo, hi) = t;
+                int msb = std::max(lo, hi), lsb = std::min(lo, hi);
+                fout << "wire [" << msb << ":" << lsb << "] " << fmtDeclName(base) << " ;\n";
             }
             fout << "\n";
         }
 
+        // 再補「純 scalar nets」（非 bit-select）
+        vector<string> additionalWires;
+        auto baseOfNet = [&](const string& s)->string {
+            size_t lb = s.find('[');
+            return (lb == string::npos) ? s : s.substr(0, lb);
+            };
+        for (const auto& net : usedNets) {
+            if (net.empty()) continue;
+            if (net == "VDD" || net == "VSS") continue;
+            if (isConstNet(net)) continue;
+            if (isBitSelect(net)) continue; // 不宣告單一 bit
+            string base = baseOfNet(net);
+            bool declared = declaredPorts_norm.count(net) ||
+                declaredWires_norm.count(net) ||
+                declaredPortBases.count(base) ||
+                declaredWireBases.count(base);
+            if (!declared) {
+                additionalWires.push_back(net);
+                declaredWires_norm.insert(net);
+                declaredWireBases.insert(base);
+            }
+        }
+        if (!additionalWires.empty()) {
+            fout << "// Additional wires for connections\n";
+            for (const auto& w : additionalWires) {
+                fout << "wire " << fmtDeclName(w) << " ;\n";
+            }
+            fout << "\n";
+        }
+
+        // assign
         for (const auto& stmt : module.assignStatements) fout << stmt << "\n";
         if (!module.assignStatements.empty()) fout << "\n";
 
-        // ---------- per-module preparation ----------
-        // 建立實例快速索引（僅 leaf cell）
-        unordered_map<string, size_t> idxByKey; // name variant -> index
+        // ---------- per-module prep ----------
+        unordered_map<string, size_t> idxByKey;
         for (size_t i = 0; i < module.instances.size(); ++i) {
             const auto& o = module.instances[i];
             if (o.isModuleInstance) continue;
@@ -820,16 +1010,15 @@ bool WriteOutput::writeVerilog() {
             return size_t(-1);
             };
 
-        // 先嘗試在本 module 內「一次性」emit MBFF
-        unordered_set<size_t> consumedIdx;             // 被合併掉的單顆 FF 索引
-        unordered_set<string> localInstNames;          // 本 module 內避免重名（for MBFF）
+        unordered_set<size_t> consumedIdx;
+        unordered_set<string> localInstNames;
         for (const auto& o : module.instances) if (!o.isModuleInstance) localInstNames.insert(unescapeIfEscaped(o.instName));
 
+        // emit MBFFs（全 leaf 都在本 module 才一次輸出）
         for (const auto& g : mergedFFResults_) {
             const string gKey = WO_normPath(g.newInstanceName);
-            if (emittedGroups.count(gKey)) continue;   // 已在其他 module 輸出過
+            if (emittedGroups.count(gKey)) continue;
 
-            // 這個 group 的 leaf 是否全都在本 module？
             bool allHere = true;
             vector<size_t> leafIdx(g.mergedFFs.size(), size_t(-1));
             for (size_t b = 0; b < g.mergedFFs.size(); ++b) {
@@ -840,7 +1029,6 @@ bool WriteOutput::writeVerilog() {
             }
             if (!allHere) continue;
 
-            // 收集連線
             const LibCell* mbffCell = (libParser_ ? libParser_->getCell(g.mbffType) : nullptr);
             std::vector<std::pair<string, string>> conns;
 
@@ -864,13 +1052,10 @@ bool WriteOutput::writeVerilog() {
                     }
                 }
             }
-
-            // 共用腳：first 的 CK/CLK, SI, SE；last 的 SO
+            // 共用腳
             if (!g.mergedFFs.empty()) {
                 const auto& firstFF = module.instances[leafIdx.front()];
                 const auto& lastFF = module.instances[leafIdx.back()];
-
-                // CK/CLK, SI, SE from first
                 for (const auto& k : firstFF.connections) {
                     if (k.first == "CK" || k.first == "CLK") {
                         string ck = "CK";
@@ -884,17 +1069,14 @@ bool WriteOutput::writeVerilog() {
                         conns.push_back({ ".SE", k.second });
                     }
                 }
-                // SO from last
                 for (const auto& k : lastFF.connections) {
                     if (k.first == "SO") { conns.push_back({ ".SO", k.second }); break; }
                 }
             }
-
             // 電源
             conns.push_back({ ".VDD","VDD" });
             conns.push_back({ ".VSS","VSS" });
 
-            // emit MBFF instance
             string instName = g.newInstanceName;
             size_t slash = instName.find_last_of('/');
             if (slash != string::npos) instName = instName.substr(slash + 1);
@@ -904,28 +1086,20 @@ bool WriteOutput::writeVerilog() {
             for (size_t i = 0; i < conns.size(); ++i) {
                 if (i) fout << " , ";
                 if (i && i % 3 == 0) fout << "\n    ";
-                string net = conns[i].second;
-                if (net != "VDD" && net != "VSS" && net != "UNCONNECTED")
-                    net = escapeIfBus(net);
+                string net = fmtActualNet(conns[i].second);
                 fout << conns[i].first << " ( " << net << " )";
             }
             fout << " ) ;\n";
 
-            // 標記這個 group 已輸出、並把 leaf 單顆吃掉
             emittedGroups.insert(gKey);
             for (auto idx : leafIdx) consumedIdx.insert(idx);
         }
 
-        // ---------- 再輸出剩餘 instances ----------
+        // 其餘 instances
         for (size_t i = 0; i < module.instances.size(); ++i) {
             const auto& inst = module.instances[i];
+            if (!inst.isModuleInstance && consumedIdx.count(i)) continue;
 
-            if (!inst.isModuleInstance && consumedIdx.count(i)) {
-                // 被合併掉的單顆 FF：跳過
-                continue;
-            }
-
-            // 原樣輸出
             string instNameOutput = inst.instName;
             if (instNameOutput.find('[') != string::npos ||
                 instNameOutput.find(']') != string::npos ||
@@ -941,9 +1115,7 @@ bool WriteOutput::writeVerilog() {
                 if (!pin.empty() && pin[0] == '\\') pin = keepEscaped(pin);
                 else if (pin.find('[') != string::npos || pin.find(']') != string::npos) pin = "\\" + pin + " ";
 
-                string net = inst.connections[k].second;
-                if (net != "VDD" && net != "VSS" && net != "UNCONNECTED")
-                    net = escapeIfBus(net);
+                string net = fmtActualNet(inst.connections[k].second);
 
                 fout << "." << pin << " ( " << net << " )";
             }
@@ -956,7 +1128,6 @@ bool WriteOutput::writeVerilog() {
     fout.close();
     return true;
 }
-
 
 
 
@@ -1175,44 +1346,76 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
 
 // 找到 pin 的 net 連接
 string WriteOutput::findNetForPin(const string& ffName, const string& pinName) const {
-    // 從 VerilogParser 查找
+    // cache key
+    std::string key = ffName + "\t" + pinName;
+    auto itc = netLookupCache_.find(key);
+    if (itc != netLookupCache_.end()) return itc->second;
+
+    // generate variants once
+    auto variants = makeNameVariants(ffName);
+
+    // 1) try VerilogParser (most authoritative if available)
     if (verilogParser_) {
-        // 取得完整路徑
-        string fullPath = getFullPath(ffName);
-
-        // 查找 instance
-        const VerilogInstance* inst = verilogParser_->findInstanceByHierarchicalPath(fullPath);
-        if (!inst) {
-            inst = verilogParser_->findInstance(ffName);
-        }
-
-        if (inst) {
-            for (const auto& conn : inst->connections) {
-                if (conn.first == pinName) {
-                    return conn.second;
+        for (const auto& v : variants) {
+            // try hierarchical full path first
+            const VerilogInstance* inst = verilogParser_->findInstanceByHierarchicalPath(v);
+            if (!inst) inst = verilogParser_->findInstance(v);
+            if (inst) {
+                for (const auto& conn : inst->connections) {
+                    if (conn.first == pinName) {
+                        netLookupCache_[key] = conn.second;
+                        return conn.second;
+                    }
                 }
             }
         }
     }
 
-    // 從 DefData 查找
+    // 2) try instPinNets (DEF-side quick table)
+    for (const auto& v : variants) {
+        for (const auto& ipn : originalDefData_.instPinNets) {
+            if (ipn.inst == v && ipn.pin == pinName) {
+                netLookupCache_[key] = ipn.net;
+                return ipn.net;
+            }
+        }
+    }
+
+    // 3) try original nets list (fall back)
+    for (const auto& v : variants) {
+        for (const auto& net : originalDefData_.nets) {
+            for (const auto& c : net.connections) {
+                if (c.instance == v && c.pin == pinName) {
+                    netLookupCache_[key] = net.name;
+                    return net.name;
+                }
+            }
+        }
+    }
+
+    // 4) last-resort: fuzzy match on unescaped basename
+    auto norm = [](const std::string& s)->std::string {
+        if (s.size() >= 2 && s.front() == '\\' && s.back() == ' ') return s.substr(1, s.size() - 2);
+        return s;
+        };
+    std::string un = norm(ffName);
     for (const auto& net : originalDefData_.nets) {
-        for (const auto& conn : net.connections) {
-            if (conn.instance == ffName && conn.pin == pinName) {
+        for (const auto& c : net.connections) {
+            if (norm(c.instance) == un && c.pin == pinName) {
+                netLookupCache_[key] = net.name;
                 return net.name;
             }
         }
     }
 
-    // 從 instPinNets 查找
-    for (const auto& ipn : originalDefData_.instPinNets) {
-        if (ipn.inst == ffName && ipn.pin == pinName) {
-            return ipn.net;
-        }
-    }
-
-    return "UNCONNECTED";
+    netLookupCache_[key] = string("UNCONNECTED");
+    return string("UNCONNECTED");
 }
+
+
+
+
+
 
 // WriteOutput.cpp
 
@@ -1268,6 +1471,64 @@ bool WriteOutput::writeDef() {
             return cand;
             };
 
+        // variants helper (escaped/unescaped, basename, br conversions, norm path)
+        auto makeVariants = [&](const std::string& name)->std::vector<std::string> {
+            std::vector<std::string> out;
+            if (name.empty()) return out;
+            auto push = [&](const std::string& s) {
+                if (!s.empty() && std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
+                };
+            push(name);
+            if (name.size() >= 2 && name.front() == '\\' && name.back() == ' ') {
+                push(name.substr(1, name.size() - 2));
+            }
+            push(WO_normPath(name));
+            push(WO_basename(name));
+            push(toSimple(name));
+            push(toFull(toSimple(name)));
+
+            auto br2dunder = [](const std::string& s)->std::string {
+                std::string r; r.reserve(s.size() + 4);
+                for (size_t i = 0; i < s.size(); ++i) {
+                    if (s[i] == '[') {
+                        size_t j = i + 1, k = j;
+                        while (k < s.size() && isdigit((unsigned char)s[k])) ++k;
+                        if (k<s.size() && s[k] == ']' && k>j) {
+                            r += "__";
+                            r.append(s.begin() + j, s.begin() + k);
+                            r += "__";
+                            i = k; continue;
+                        }
+                    }
+                    r.push_back(s[i]);
+                }
+                return r;
+                };
+            auto br2under = [](const std::string& s)->std::string {
+                std::string r; r.reserve(s.size() + 2);
+                for (size_t i = 0; i < s.size(); ++i) {
+                    if (s[i] == '[') {
+                        size_t j = i + 1, k = j;
+                        while (k < s.size() && isdigit((unsigned char)s[k])) ++k;
+                        if (k<s.size() && s[k] == ']' && k>j) {
+                            r.push_back('_');
+                            r.append(s.begin() + j, s.begin() + k);
+                            r.push_back('_');
+                            i = k; continue;
+                        }
+                    }
+                    r.push_back(s[i]);
+                }
+                return r;
+                };
+            auto snapshot = out;
+            for (const auto& v : snapshot) {
+                push(br2dunder(v));
+                push(br2under(v));
+            }
+            return out;
+            };
+
         // --------------------------
         // 1) 可修改拷貝
         // --------------------------
@@ -1280,7 +1541,6 @@ bool WriteOutput::writeDef() {
         std::unordered_map<std::string, std::unordered_map<std::string, std::string>> leafPin2Net;
         leafPin2Net.reserve(defDataCopy.nets.size() * 2);
 
-        // 加入 QN 追蹤的除錯資訊
         std::cout << "[DEBUG] Building leaf FF to net mapping..." << std::endl;
         int qnConnectionCount = 0;
 
@@ -1291,11 +1551,9 @@ bool WriteOutput::writeDef() {
                 if (pBase == "D" || pBase == "Q" || pBase == "QN" || pBase == "CK" ||
                     pBase == "SI" || pBase == "SE" || pBase == "SO") {
                     leafPin2Net[np.instance][pBase] = netName;
-
-                    // 除錯：追蹤 QN 連線
                     if (pBase == "QN") {
                         qnConnectionCount++;
-                        if (qnConnectionCount <= 5) { // 只印前5個
+                        if (qnConnectionCount <= 5) {
                             std::cout << "[DEBUG] Found QN connection: " << np.instance
                                 << "/QN -> " << netName << std::endl;
                         }
@@ -1322,21 +1580,49 @@ bool WriteOutput::writeDef() {
         }
 
         // --------------------------
-        // 4) 建立映射表（加強 QN 處理）
+        // 4) 建立映射表（使用 mbffPinToOrigPin 為主，並做 fallback）
         // --------------------------
-        std::map<std::pair<std::string, std::string>,
-            std::pair<std::string, std::string>> ffPinMap;
-
-        std::cout << "[DEBUG] Building FF pin mappings for merged FFs..." << std::endl;
+        std::map<std::pair<std::string, std::string>, std::pair<std::string, std::string>> ffPinMap;
+        std::cout << "[DEBUG] Building FF pin mappings for merged FFs (using mbffPinToOrigPin)..." << std::endl;
 
         for (const auto& mbff : mergedFFResults_) {
             const LibCell* mbffCell = (libParser_ ? libParser_->getCell(mbff.mbffType) : nullptr);
+            const std::string mbffName = mbff.newInstanceName;
             const size_t BW = mbff.mergedFFs.size();
 
-            // 除錯：印出 MBFF 資訊
-            std::cout << "[DEBUG] Processing MBFF: " << mbff.newInstanceName
-                << " (type: " << mbff.mbffType << ", bits: " << BW << ")" << std::endl;
+            // Primary: explicit mappings from mbffPinToOrigPin
+            for (const auto& kv : mbff.mbffPinToOrigPin) {
+                const std::string& mbffPin = kv.first; // e.g. "D0", "QN1", "SI"
+                const std::string& orig = kv.second;   // e.g. "foo/D" or "top/foo/D"
 
+                std::string origInst, origPin;
+                size_t p = orig.rfind('/');
+                if (p != std::string::npos) {
+                    origInst = orig.substr(0, p);
+                    origPin = orig.substr(p + 1);
+                }
+                else {
+                    auto it = mbff.mbffPinToOrigFF.find(mbffPin);
+                    if (it != mbff.mbffPinToOrigFF.end()) {
+                        origInst = it->second;
+                        origPin = mbffPin;
+                    }
+                    else {
+                        std::cerr << "[WARN] mbffPinToOrigPin value format unexpected: " << orig
+                            << " for " << mbffName << "/" << mbffPin << std::endl;
+                        continue;
+                    }
+                }
+
+                std::string pinBase = basePin(origPin);
+                auto instVars = makeVariants(origInst);
+                for (const auto& iv : instVars) {
+                    ffPinMap[{iv, pinBase}] = { mbffName, mbffPin };
+                }
+                ffPinMap[{origInst, pinBase}] = { mbffName, mbffPin };
+            }
+
+            // Secondary: fallback mapping from mergedFFs list (D/Q/QN per bit)
             for (size_t i = 0; i < BW; ++i) {
                 std::string dPin = "D" + std::to_string(i);
                 std::string qPin = "Q" + std::to_string(i);
@@ -1356,38 +1642,35 @@ bool WriteOutput::writeDef() {
                         if (i < v.size()) qnPin = v[i];
                     }
                 }
-
                 dPin = pickFormalPin(mbffCell, dPin);
                 qPin = pickFormalPin(mbffCell, qPin);
                 qnPin = pickFormalPin(mbffCell, qnPin);
 
                 const std::string oldFull = trim(mbff.mergedFFs[i]);
                 const std::string oldSimple = toSimple(oldFull);
-                const std::string keys[2] = { oldFull, oldSimple };
+                std::vector<std::string> leafVars = makeVariants(oldFull);
+                leafVars.push_back(oldSimple);
+                leafVars.push_back(toFull(oldSimple));
 
-                for (const auto& k : keys) {
-                    ffPinMap[{k, "D"}] = { mbff.newInstanceName, dPin };
-                    ffPinMap[{k, "Q"}] = { mbff.newInstanceName, qPin };
-
-                    // 重要：總是加入 QN 映射（即使原始 FF 沒有 QN 連線）
-                    ffPinMap[{k, "QN"}] = { mbff.newInstanceName, qnPin };
-
-                    ffPinMap[{k, "CK"}] = { mbff.newInstanceName, "CK" };
-                    ffPinMap[{k, "CLK"}] = { mbff.newInstanceName, "CK" };
-
+                for (const auto& k : leafVars) {
+                    ffPinMap[{k, "D"}] = { mbffName, dPin };
+                    ffPinMap[{k, "Q"}] = { mbffName, qPin };
+                    ffPinMap[{k, "QN"}] = { mbffName, qnPin };
+                    ffPinMap[{k, "CK"}] = { mbffName, "CK" };
+                    ffPinMap[{k, "CLK"}] = { mbffName, "CK" };
                     if (i == 0) {
-                        ffPinMap[{k, "SI"}] = { mbff.newInstanceName, "SI" };
-                        ffPinMap[{k, "SE"}] = { mbff.newInstanceName, "SE" };
+                        ffPinMap[{k, "SI"}] = { mbffName, "SI" };
+                        ffPinMap[{k, "SE"}] = { mbffName, "SE" };
                     }
                     if (i + 1 == BW) {
-                        ffPinMap[{k, "SO"}] = { mbff.newInstanceName, "SO" };
+                        ffPinMap[{k, "SO"}] = { mbffName, "SO" };
                     }
                 }
             }
         }
 
         // --------------------------
-        // 5) 第一階段：替換 NETS
+        // 5) 第一階段：替換 NETS (use ffPinMap with variants)
         // --------------------------
         std::vector<NetInfo> newNets;
         newNets.reserve(defDataCopy.nets.size());
@@ -1403,11 +1686,15 @@ bool WriteOutput::writeDef() {
 
             for (const auto& np : net.connections) {
                 const std::string pinBase = basePin(np.pin);
+
+                // instance candidate variants
+                std::vector<std::string> instCandidates = makeVariants(trim(np.instance));
                 const std::string fullByTable = toFull(toSimple(np.instance));
-                const std::string instCands[3] = { trim(np.instance), fullByTable, toSimple(np.instance) };
+                instCandidates.push_back(fullByTable);
+                instCandidates.push_back(toSimple(np.instance));
 
                 bool replaced = false;
-                for (const auto& ic : instCands) {
+                for (const auto& ic : instCandidates) {
                     auto it = ffPinMap.find({ ic, pinBase });
                     if (it != ffPinMap.end()) {
                         const auto& newInst = it->second.first;
@@ -1415,12 +1702,11 @@ bool WriteOutput::writeDef() {
                         if (seen.emplace(newInst, newPin).second) {
                             n.connections.push_back(NetPin{ newInst, newPin });
 
-                            // 除錯：追蹤 QN 替換
                             if (pinBase == "QN") {
                                 qnReplacedCount++;
-                                if (qnReplacedCount <= 5) {
-                                    std::cout << "[DEBUG] Replaced QN: " << np.instance << "/QN -> "
-                                        << newInst << "/" << newPin << " on net " << net.name << std::endl;
+                                if (qnReplacedCount <= 20) {
+                                    std::cout << "[DEBUG] Replaced QN: " << np.instance << "/" << np.pin
+                                        << " -> " << newInst << "/" << newPin << " on net " << net.name << std::endl;
                                 }
                             }
                         }
@@ -1432,9 +1718,10 @@ bool WriteOutput::writeDef() {
                 if (!replaced) {
                     bool isMerged = mergedFFSet.count(trim(np.instance)) ||
                         mergedFFSet.count(toSimple(np.instance)) ||
-                        mergedFFSet.count(fullByTable);
+                        mergedFFSet.count(fullByTable) ||
+                        ffPinMap.find({ trim(np.instance), pinBase }) != ffPinMap.end();
                     if (isMerged) {
-                        if (warnCnt++ < 20) {
+                        if (warnCnt++ < 50) {
                             std::cerr << "[DEF][WARN] drop old FF conn: "
                                 << np.instance << "/" << np.pin
                                 << " on net " << net.name
@@ -1455,11 +1742,10 @@ bool WriteOutput::writeDef() {
         std::cout << "[DEBUG] Total QN replacements: " << qnReplacedCount << std::endl;
 
         // --------------------------
-        // 6) 建立 net -> connections 查找表
+        // 6) 建立 net -> connections 查找表 & netIndex
         // --------------------------
         std::unordered_map<std::string, std::set<std::pair<std::string, std::string>>> netConnSet;
         netConnSet.reserve(defDataCopy.nets.size());
-
         for (const auto& net : defDataCopy.nets) {
             auto& S = netConnSet[net.name];
             for (const auto& np : net.connections) {
@@ -1467,17 +1753,27 @@ bool WriteOutput::writeDef() {
             }
         }
 
-        auto ensureConnected = [&](const std::string& netName,
+        std::unordered_map<std::string, size_t> netIndex;
+        netIndex.reserve(defDataCopy.nets.size());
+        for (size_t i = 0; i < defDataCopy.nets.size(); ++i) netIndex[defDataCopy.nets[i].name] = i;
+
+        auto ensureConnectedFast = [&](const std::string& netName,
             const std::string& inst, const std::string& pin) {
                 if (netName.empty() || inst.empty() || pin.empty()) return;
-
-                auto& S = netConnSet[netName];
+                auto& S = netConnSet[netName]; // this will create an empty set if key not present
                 if (S.emplace(inst, pin).second) {
-                    for (auto& n : defDataCopy.nets) {
-                        if (n.name == netName) {
-                            n.connections.push_back({ inst, pin });
-                            break;
-                        }
+                    auto itIdx = netIndex.find(netName);
+                    if (itIdx != netIndex.end()) {
+                        auto& n = defDataCopy.nets[itIdx->second];
+                        n.connections.push_back({ inst, pin });
+                    }
+                    else {
+                        NetInfo ni;
+                        ni.name = netName;
+                        ni.connections.push_back({ inst, pin });
+                        defDataCopy.nets.push_back(ni);
+                        size_t idx = defDataCopy.nets.size() - 1;
+                        netIndex[netName] = idx;
                     }
                 }
             };
@@ -1506,7 +1802,7 @@ bool WriteOutput::writeDef() {
                 return p;
                 };
 
-            // 處理共用腳位
+            // 共用腳位 (CK/SE/SI from first, SO from last)
             std::string ckNet, siNet, seNet, soNet;
             {
                 auto it0 = leafPin2Net.find(mbff.mergedFFs.front());
@@ -1515,62 +1811,108 @@ bool WriteOutput::writeDef() {
                     if (it0->second.count("SI")) siNet = it0->second.at("SI");
                     if (it0->second.count("SE")) seNet = it0->second.at("SE");
                 }
+                if (ckNet.empty() || siNet.empty() || seNet.empty()) {
+                    auto vars0 = makeVariants(mbff.mergedFFs.front());
+                    for (const auto& v : vars0) {
+                        auto itv = leafPin2Net.find(v);
+                        if (itv != leafPin2Net.end()) {
+                            if (ckNet.empty() && itv->second.count("CK")) ckNet = itv->second.at("CK");
+                            if (siNet.empty() && itv->second.count("SI")) siNet = itv->second.at("SI");
+                            if (seNet.empty() && itv->second.count("SE")) seNet = itv->second.at("SE");
+                        }
+                    }
+                }
                 auto itL = leafPin2Net.find(mbff.mergedFFs.back());
                 if (itL != leafPin2Net.end()) {
                     if (itL->second.count("SO")) soNet = itL->second.at("SO");
                 }
+                if (soNet.empty()) {
+                    auto varsL = makeVariants(mbff.mergedFFs.back());
+                    for (const auto& v : varsL) {
+                        auto itv = leafPin2Net.find(v);
+                        if (itv != leafPin2Net.end() && itv->second.count("SO")) { soNet = itv->second.at("SO"); break; }
+                    }
+                }
             }
 
-            if (!ckNet.empty()) ensureConnected(ckNet, mbff.newInstanceName, "CK");
-            if (!siNet.empty()) ensureConnected(siNet, mbff.newInstanceName, "SI");
-            if (!seNet.empty()) ensureConnected(seNet, mbff.newInstanceName, "SE");
-            if (!soNet.empty()) ensureConnected(soNet, mbff.newInstanceName, "SO");
+            if (!ckNet.empty()) ensureConnectedFast(ckNet, mbff.newInstanceName, "CK");
+            if (!siNet.empty()) ensureConnectedFast(siNet, mbff.newInstanceName, "SI");
+            if (!seNet.empty()) ensureConnectedFast(seNet, mbff.newInstanceName, "SE");
+            if (!soNet.empty()) ensureConnectedFast(soNet, mbff.newInstanceName, "SO");
 
-            // 處理每個 bit 的 D/Q/QN
+            // per-bit D/Q/QN handling
             for (size_t i = 0; i < BW; ++i) {
                 const std::string& leaf = mbff.mergedFFs[i];
                 auto it = leafPin2Net.find(leaf);
 
-                // 如果找不到，嘗試用完整路徑
                 if (it == leafPin2Net.end()) {
                     std::string fullLeaf = toFull(toSimple(leaf));
                     it = leafPin2Net.find(fullLeaf);
                 }
+                if (it == leafPin2Net.end()) {
+                    auto vars = makeVariants(leaf);
+                    for (const auto& v : vars) {
+                        auto itv = leafPin2Net.find(v);
+                        if (itv != leafPin2Net.end()) { it = itv; break; }
+                    }
+                }
 
-                if (it == leafPin2Net.end()) continue;
-
-                const std::string dNet = (it->second.count("D") ? it->second.at("D") : "");
-                const std::string qNet = (it->second.count("Q") ? it->second.at("Q") : "");
-                const std::string qnNet = (it->second.count("QN") ? it->second.at("QN") : "");
+                std::string dNet, qNet, qnNet;
+                if (it != leafPin2Net.end()) {
+                    dNet = (it->second.count("D") ? it->second.at("D") : "");
+                    qNet = (it->second.count("Q") ? it->second.at("Q") : "");
+                    qnNet = (it->second.count("QN") ? it->second.at("QN") : "");
+                }
 
                 if (!dNet.empty()) {
                     std::string dPin = formalName("D", i, "D" + std::to_string(i));
-                    ensureConnected(dNet, mbff.newInstanceName, dPin);
+                    ensureConnectedFast(dNet, mbff.newInstanceName, dPin);
                 }
                 if (!qNet.empty()) {
                     std::string qPin = formalName("Q", i, "Q" + std::to_string(i));
-                    ensureConnected(qNet, mbff.newInstanceName, qPin);
+                    ensureConnectedFast(qNet, mbff.newInstanceName, qPin);
                 }
 
-                // 特別處理 QN：即使原始 net 是 UNCONNECTED，也要確保連線存在
-                if (!qnNet.empty()) {
-                    std::string qnPin = formalName("QN", i, "QN" + std::to_string(i));
-
-                    // 檢查 MBFF 是否真的有這個 QN pin
-                    bool hasQnPin = true;
-                    if (mbffCell) {
-                        hasQnPin = (mbffCell->pins.find(qnPin) != mbffCell->pins.end());
+                // QN handling: same flow as D/Q (use explicit mbffPinToOrigPin first, fallback to found qnNet, else create UNCONNECTED)
+                std::string mbffQnPin = formalName("QN", i, "QN" + std::to_string(i));
+                bool hasQnPin = true;
+                if (mbffCell) {
+                    hasQnPin = (mbffCell->pins.find(mbffQnPin) != mbffCell->pins.end());
+                }
+                if (hasQnPin) {
+                    std::string origQnNet;
+                    auto mapIt = mbff.mbffPinToOrigPin.find(mbffQnPin);
+                    if (mapIt != mbff.mbffPinToOrigPin.end()) {
+                        const std::string& orig = mapIt->second;
+                        size_t slash = orig.rfind('/');
+                        std::string origInst = (slash != std::string::npos) ? orig.substr(0, slash) : orig;
+                        auto itLeaf = leafPin2Net.find(origInst);
+                        if (itLeaf != leafPin2Net.end() && itLeaf->second.count("QN")) {
+                            origQnNet = itLeaf->second.at("QN");
+                        }
+                        else {
+                            auto vars = makeVariants(origInst);
+                            for (const auto& v : vars) {
+                                auto itv = leafPin2Net.find(v);
+                                if (itv != leafPin2Net.end() && itv->second.count("QN")) {
+                                    origQnNet = itv->second.at("QN"); break;
+                                }
+                            }
+                        }
                     }
 
-                    if (hasQnPin) {
-                        ensureConnected(qnNet, mbff.newInstanceName, qnPin);
-                        qnBackfillCount++;
+                    // fallback to qnNet discovered earlier from leafPin2Net
+                    if (origQnNet.empty() && !qnNet.empty()) origQnNet = qnNet;
 
-                        // 除錯資訊
-                        if (qnBackfillCount <= 5 || qnNet.find("UNCONNECTED") != std::string::npos) {
-                            std::cout << "[DEBUG] Backfilling QN: " << mbff.newInstanceName
-                                << "/" << qnPin << " -> " << qnNet << std::endl;
-                        }
+                    if (origQnNet.empty()) {
+                        origQnNet = std::string("UNCONNECTED_") + mbff.newInstanceName + "_" + mbffQnPin;
+                    }
+
+                    ensureConnectedFast(origQnNet, mbff.newInstanceName, mbffQnPin);
+                    qnBackfillCount++;
+                    if (qnBackfillCount <= 20 || origQnNet.find("UNCONNECTED") != std::string::npos) {
+                        std::cout << "[DEBUG] Backfilling QN: " << mbff.newInstanceName
+                            << "/" << mbffQnPin << " -> " << origQnNet << std::endl;
                     }
                 }
             }
@@ -1671,7 +2013,6 @@ bool WriteOutput::writeDef() {
             if (net.name.find("UNCONNECTED") != std::string::npos) {
                 unconnectedCount++;
 
-                // 檢查是否有 QN 連線
                 for (const auto& conn : net.connections) {
                     if (conn.pin.find("QN") != std::string::npos) {
                         unconnectedWithQN++;
@@ -1708,6 +2049,8 @@ bool WriteOutput::writeDef() {
         return false;
     }
 }
+
+
 
 // 寫入所有檔案
 bool WriteOutput::writeAll() {

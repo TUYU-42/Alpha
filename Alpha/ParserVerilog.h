@@ -95,6 +95,7 @@ public:
     void printScanChainSummary();   // ÁÐ³ö FF ÅcÆä SI/SO ßB?¸Å›r
 
 private:
+    static void collectDeclList(const std::string& s, size_t& i, size_t end, std::vector<std::string>& outIds);
     // ===== ¬J¦³ helper¡]«O¯d¡^ =====
     static std::string removeComments(const std::string& s);
     std::unordered_map<std::string, std::string> localToFull_;

@@ -21,6 +21,28 @@ static std::string readBracketSuffixes(const std::string& s, size_t& i) {
     }
     return suf;
 }
+
+void VerilogParser::collectDeclList(const std::string& s, size_t& i, size_t end, std::vector<std::string>& outIds) {
+    while (i < end) {
+        VerilogParser::skipSpaces(s, i);
+        if (i >= end) break;
+        if (s[i] == ';') { ++i; break; }
+
+        std::string tok;
+        if (s[i] == '\\') tok = VerilogParser::readEscapedIdentifier(s, i);
+        else if (VerilogParser::isIdentifierStart(s[i])) {
+            tok = VerilogParser::readIdentifier(s, i);
+            tok += readBracketSuffixes(s, i);
+        }
+        if (!tok.empty()) outIds.push_back(tok);
+
+        while (i < end && s[i] != ',' && s[i] != ';') ++i;
+        if (i < end && s[i] == ',') { ++i; continue; }
+        if (i < end && s[i] == ';') { ++i; break; }
+    }
+}
+
+
 VerilogParser::VerilogParser() = default;
 static inline std::string normalizeId(const std::string& s) {
     if (!s.empty() && s.front() == '\\' && !s.empty() && s.back() == ' ')
@@ -49,8 +71,7 @@ static std::string readFileAll(const std::string& path) {
     std::ostringstream oss; oss << ifs.rdbuf();
     return oss.str();
 }
-static void collectDeclList(const std::string& s, size_t& i, size_t end,
-    std::vector<std::string>& outIds);
+
 bool VerilogParser::parseFile(const std::string& filepath) {
     std::string raw = readFileAll(filepath);
     if (raw.empty()) return false;
@@ -71,29 +92,25 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
 
         if (startsWith("input")) {
             i += 5; // skip 'input'
-            // NEW: 跳過可能出現的型別/修飾詞
+            // 跳過可能的修飾詞 (wire/logic/reg/signed/unsigned)
             skipSpaces(text, i);
             while (i < bodyEnd) {
-                // 支援 wire/logic/reg/signed/unsigned
                 size_t tmp = i;
                 std::string kw;
                 if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
-                if (kw == "wire" || kw == "logic" || kw == "reg" ||
-                    kw == "signed" || kw == "unsigned") {
+                if (kw == "wire" || kw == "logic" || kw == "reg" || kw == "signed" || kw == "unsigned") {
                     i = tmp;
                     skipSpaces(text, i);
                 }
                 else break;
             }
-            // NEW: 讀可選的 [msb:lsb]
+            // optional packed range [msb:lsb]
             std::string range = readPackedRange(text, i, bodyEnd);
             skipSpaces(text, i);
 
-            // 記下本次 collect 前的大小
             size_t base = out.inputs.size();
             collectDeclList(text, i, bodyEnd, out.inputs);
 
-            // NEW: 把這行所有識別字都套上剛剛的 range
             if (!range.empty()) {
                 for (size_t k = base; k < out.inputs.size(); ++k) {
                     out.portDeclWidth[normalizeId(out.inputs[k])] = range;
@@ -103,30 +120,24 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
         }
 
         if (startsWith("output")) {
-            i += 6; // skip 'input' 
-            // NEW: 跳過可能出現的型別/修飾詞
+            i += 6; // skip 'output'
             skipSpaces(text, i);
             while (i < bodyEnd) {
-                // 支援 wire/logic/reg/signed/unsigned
                 size_t tmp = i;
                 std::string kw;
                 if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
-                if (kw == "wire" || kw == "logic" || kw == "reg" ||
-                    kw == "signed" || kw == "unsigned") {
+                if (kw == "wire" || kw == "logic" || kw == "reg" || kw == "signed" || kw == "unsigned") {
                     i = tmp;
                     skipSpaces(text, i);
                 }
                 else break;
             }
-            // NEW: 讀可選的 [msb:lsb]
             std::string range = readPackedRange(text, i, bodyEnd);
             skipSpaces(text, i);
 
-            // 記下本次 collect 前的大小
             size_t base = out.outputs.size();
             collectDeclList(text, i, bodyEnd, out.outputs);
 
-            // NEW: 把這行所有識別字都套上剛剛的 range
             if (!range.empty()) {
                 for (size_t k = base; k < out.outputs.size(); ++k) {
                     out.portDeclWidth[normalizeId(out.outputs[k])] = range;
@@ -134,31 +145,26 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
             }
             continue;
         }
+
         if (startsWith("inout")) {
-            i += 5; // skip 'input' 
-            // NEW: 跳過可能出現的型別/修飾詞
+            i += 5; // skip 'inout'
             skipSpaces(text, i);
             while (i < bodyEnd) {
-                // 支援 wire/logic/reg/signed/unsigned
                 size_t tmp = i;
                 std::string kw;
                 if (isIdentifierStart(text[tmp])) kw = readIdentifier(text, tmp);
-                if (kw == "wire" || kw == "logic" || kw == "reg" ||
-                    kw == "signed" || kw == "unsigned") {
+                if (kw == "wire" || kw == "logic" || kw == "reg" || kw == "signed" || kw == "unsigned") {
                     i = tmp;
                     skipSpaces(text, i);
                 }
                 else break;
             }
-            // NEW: 讀可選的 [msb:lsb]
             std::string range = readPackedRange(text, i, bodyEnd);
             skipSpaces(text, i);
 
-            // 記下本次 collect 前的大小
             size_t base = out.inouts.size();
             collectDeclList(text, i, bodyEnd, out.inouts);
 
-            // NEW: 把這行所有識別字都套上剛剛的 range
             if (!range.empty()) {
                 for (size_t k = base; k < out.inouts.size(); ++k) {
                     out.portDeclWidth[normalizeId(out.inouts[k])] = range;
@@ -168,21 +174,135 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
         }
 
         if (startsWith("wire") || startsWith("logic") || startsWith("reg")) {
-            // 一律視為 wires
+            // treat all as wires
             size_t kwlen = startsWith("wire") ? 4 : (startsWith("logic") ? 5 : 3);
             i += kwlen;
             collectDeclList(text, i, bodyEnd, out.wires);
             continue;
         }
+
+        // -------- 改良過的 assign 處理：只解析 LHS (左側) 並補入缺少的 wire --------
         if (startsWith("assign")) {
-            // 擷取直到 ';'
+            // capture full assign statement up to ';'
             size_t j = i;
             while (j < bodyEnd && text[j] != ';') ++j;
             if (j < bodyEnd) ++j;
-            out.assignStatements.emplace_back(std::string(text.begin() + i, text.begin() + j));
+            std::string stmt(text.begin() + i, text.begin() + j);
+            out.assignStatements.emplace_back(stmt);
+
+            // find top-level '=' (忽略 [] () {} 內的 '=')
+            size_t eqpos = std::string::npos;
+            int par = 0, brack = 0, brace = 0;
+            for (size_t k = 0; k < stmt.size(); ++k) {
+                char c = stmt[k];
+                if (c == '(') ++par;
+                else if (c == ')') --par;
+                else if (c == '[') ++brack;
+                else if (c == ']') --brack;
+                else if (c == '{') ++brace;
+                else if (c == '}') --brace;
+                else if (c == '=' && par == 0 && brack == 0 && brace == 0) { eqpos = k; break; }
+            }
+
+            if (eqpos != std::string::npos) {
+                // compute LHS substring (skip "assign" keyword)
+                const std::string assignKw = "assign";
+                size_t p = 0;
+                if (stmt.find(assignKw) == 0) p = assignKw.size();
+                while (p < eqpos && std::isspace((unsigned char)stmt[p])) ++p;
+                size_t lhsBeg = p;
+                size_t lhsEnd = eqpos;
+                while (lhsEnd > lhsBeg && std::isspace((unsigned char)stmt[lhsEnd - 1])) --lhsEnd;
+                std::string lhs = (lhsEnd > lhsBeg) ? stmt.substr(lhsBeg, lhsEnd - lhsBeg) : std::string();
+
+                // split LHS: handle concat {a, b, c} or single token
+                auto trim = [&](std::string s)->std::string {
+                    size_t a = 0, b = s.size();
+                    while (a < b && std::isspace((unsigned char)s[a])) ++a;
+                    while (b > a && std::isspace((unsigned char)s[b - 1])) --b;
+                    return s.substr(a, b - a);
+                    };
+                lhs = trim(lhs);
+                std::vector<std::string> lhsNets;
+                if (!lhs.empty() && lhs.front() == '{' && lhs.back() == '}') {
+                    std::string inner = lhs.substr(1, lhs.size() - 2);
+                    size_t q = 0, m = inner.size();
+                    while (q < m) {
+                        while (q < m && std::isspace((unsigned char)inner[q])) ++q;
+                        size_t r = q;
+                        int depth = 0;
+                        while (r < m) {
+                            char cc = inner[r];
+                            if (cc == '(' || cc == '[' || cc == '{') ++depth;
+                            else if (cc == ')' || cc == ']' || cc == '}') --depth;
+                            else if (cc == ',' && depth == 0) break;
+                            ++r;
+                        }
+                        std::string part = inner.substr(q, r - q);
+                        part = trim(part);
+                        if (!part.empty()) lhsNets.push_back(part);
+                        q = (r >= m) ? m : r + 1;
+                    }
+                }
+                else if (!lhs.empty()) {
+                    lhsNets.push_back(lhs);
+                }
+
+                // 判斷已宣告的 helper (會比對 raw 與 normalize)
+                auto alreadyDeclared = [&](const std::string& net)->bool {
+                    // raw lists
+                    if (std::find(out.wires.begin(), out.wires.end(), net) != out.wires.end()) return true;
+                    if (std::find(out.inputs.begin(), out.inputs.end(), net) != out.inputs.end()) return true;
+                    if (std::find(out.outputs.begin(), out.outputs.end(), net) != out.outputs.end()) return true;
+                    if (std::find(out.inouts.begin(), out.inouts.end(), net) != out.inouts.end()) return true;
+                    if (std::find(out.supplies0.begin(), out.supplies0.end(), net) != out.supplies0.end()) return true;
+                    if (std::find(out.supplies1.begin(), out.supplies1.end(), net) != out.supplies1.end()) return true;
+                    // normalized check (for escaped/unescaped match)
+                    std::string n = normalizeId(net);
+                    for (const auto& w : out.wires) if (normalizeId(w) == n) return true;
+                    for (const auto& p : out.inputs) if (normalizeId(p) == n) return true;
+                    for (const auto& p : out.outputs) if (normalizeId(p) == n) return true;
+                    for (const auto& p : out.inouts) if (normalizeId(p) == n) return true;
+                    return false;
+                    };
+
+                // for each candidate, extract token (escaped or id+bracket) and add to wires if missing
+                for (const auto& candidateRaw : lhsNets) {
+                    std::string t = trim(candidateRaw);
+                    if (t.empty()) continue;
+
+                    size_t tmpi = 0;
+                    std::string tok;
+                    if (t[0] == '\\') {
+                        tok = readEscapedIdentifier(t, tmpi);
+                        tok += readBracketSuffixes(t, tmpi);
+                    }
+                    else if (isIdentifierStart(t[0])) {
+                        tok = readIdentifier(t, tmpi);
+                        tok += readBracketSuffixes(t, tmpi);
+                    }
+                    else {
+                        // e.g., numeric or unexpected token -> skip
+                        continue;
+                    }
+
+                    if (tok.empty()) continue;
+
+                    // simple guard: skip pure numeric constants
+                    bool allDigit = true;
+                    for (char cc : tok) if (!std::isdigit((unsigned char)cc)) { allDigit = false; break; }
+                    if (allDigit) continue;
+
+                    if (!alreadyDeclared(tok)) {
+                        out.wires.push_back(tok);
+                    }
+                }
+            }
+
             i = j;
             continue;
         }
+
         if (startsWith("supply0")) {
             i += 7; // skip 'supply0'
             std::vector<std::string> tmp;
@@ -198,30 +318,14 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
             continue;
         }
 
-        // 其它東西跳到下一個 ';' 或換行（讓 instance parser 處理）
+        // 其它：跳到下一個 ';' 或繼續，讓 instance parser 處理
         if (text[i] == ';') { ++i; continue; }
         ++i;
     }
 }
-static void collectDeclList(const std::string& s, size_t& i, size_t end, std::vector<std::string>& outIds) {
-    // 讀到 ';' 為止，支援多個 token 以 ',' 分隔；每個 token 是 identifier 或 escaped id
-    while (i < end) {
-        VerilogParser::skipSpaces(s, i);
-        if (i >= end) break;
-        if (s[i] == ';') { ++i; break; }
 
-        std::string tok;
-        if (s[i] == '\\') tok = VerilogParser::readEscapedIdentifier(s, i);
-        else if (VerilogParser::isIdentifierStart(s[i])) tok = VerilogParser::readIdentifier(s, i);
 
-        if (!tok.empty()) outIds.push_back(tok);
 
-        // 跳過直到逗點或分號
-        while (i < end && s[i] != ',' && s[i] != ';') ++i;
-        if (i < end && s[i] == ',') { ++i; continue; }
-        if (i < end && s[i] == ';') { ++i; break; }
-    }
-}
 // ===== Helpers =====
 std::string VerilogParser::removeComments(const std::string& s) {
     std::string out; out.reserve(s.size());
@@ -262,12 +366,29 @@ std::string VerilogParser::readIdentifier(const std::string& s, size_t& i) {
 }
 
 std::string VerilogParser::readEscapedIdentifier(const std::string& s, size_t& i) {
-    // Verilog escaped id starts with '\\' and ends at the next whitespace
+    // Verilog escaped id starts with '\' and is terminated by whitespace (commonly a space).
+    // We read the escaped id and, if a terminating whitespace exists, include that whitespace
+    // in the returned string and advance 'i' past it.
     size_t n = s.size();
-    size_t b = i; // at '\\'
+    size_t b = i; // at '\'
     ++i; // skip backslash
-    while (i < n && !std::isspace((unsigned char)s[i]) && s[i] != '(' && s[i] != ')' && s[i] != ',') ++i;
-    return std::string(s.begin() + b, s.begin() + i);
+
+    // read until whitespace or punctuation that we treat as terminator
+    while (i < n && !std::isspace((unsigned char)s[i]) && s[i] != '(' && s[i] != ')' && s[i] != ',') {
+        ++i;
+    }
+
+    // build result from [b, i)
+    std::string res(s.begin() + b, s.begin() + i);
+
+    // if the next character is whitespace, include exactly that single whitespace char
+    // in the returned token and consume it (advance i).
+    if (i < n && std::isspace((unsigned char)s[i])) {
+        res.push_back(s[i]);
+        ++i;
+    }
+
+    return res;
 }
 
 void VerilogParser::skipSpaces(const std::string& s, size_t& i) {

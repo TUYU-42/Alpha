@@ -72,8 +72,11 @@ public:
     long long int getTotalPlacedComponentCount() const { return totalPlacedComponentCount_; }
     const MergeMapping& getMergeMap() const;
     std::vector<std::pair<int, std::string>> getBitIndexedPairs(const std::string& mbffName) const;
-
+    const std::vector<std::string>& getRemainingSingleBitFFs() const {
+        return remainingSingleBitFFs;
+    }
 private:
+    std::vector<std::string> remainingSingleBitFFs; // 用來收集無法合併或被跳過的 single-bit FFs
     void performClusteringOnScanChain(
         const ScanChain& chain,
         const std::map<std::string, FlipFlopInfo>& ffLookup,
@@ -82,7 +85,7 @@ private:
     void performClustering(const std::vector<FlipFlopInfo>& flipFlops, bool autoTune);
     void loadPointsFromFF(const std::vector<FlipFlopInfo>& flipFlops);
     void buildDistanceMatrix();
-    double boxManhattanDistance(const DPCPoint& a, const DPCPoint& b);
+    static double boxManhattanDistance(const DPCPoint& a, const DPCPoint& b);
     void computeRho();
     void computeDelta();
     std::vector<int> selectCenters();
@@ -102,6 +105,29 @@ private:
     std::unordered_map<std::string, int> instanceToClusterId_;
     std::unordered_map<int, DPCCluster> clusterIdToCluster_;
     std::vector<MergedFF> mergedFFResults_; // 儲存分析後的合併結果
-    long long int totalPlacedComponentCount_;
+    long long int totalPlacedComponentCount_;// === Grid-neighbor mode (big-N) ===
+    bool useGrid_ = false;
+    double gridCell_ = 0.0;        // 網格邊長
+    double rhoRadius_ = 0.0;       // 計算 rho 的截斷半徑 (約 5*dc)
+    double deltaStartRadius_ = 0.0;// 計算 delta 的起始半徑 (約 2*dc)
+
+    std::unordered_map<long long, std::vector<int>> grid_; // (ix,iy)-> indices
+
+    // helpers
+    inline long long cellKey_(int ix, int iy) const {
+        return ((long long)ix << 32) ^ (long long)(iy & 0xffffffff);
+    }
+    void buildGrid_(double cell);
+    void rebuildGridIfNeeded_();
+    std::vector<int> getCandidatesInRadius_(const DPCPoint& p, double radius) const;
+
+    // streaming / grid versions
+    void computeRhoGrid_();
+    void computeDeltaGrid_();
+
+    // sampling-based estimators (避免建 distMat_)
+    double estimateCutoffBySampling_(size_t samples = 200000) const;
+    double estimateMaxDistBySampling_(size_t samples = 200000) const;
+
 
 };

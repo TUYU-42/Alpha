@@ -8,6 +8,8 @@
 #include <tuple>
 #include <numeric>
 #include <unordered_set>
+// 放在檔案頂端（.cpp/.h），包含必要的 header
+
 
 
 
@@ -56,14 +58,39 @@ void DensityPeakClustering::performClusteringOnScanChain(
 void DensityPeakClustering::performClustering(const std::vector<FlipFlopInfo>& flipFlops, bool autoTune) {
     clusters_.clear();
     loadPointsFromFF(flipFlops);
-    buildDistanceMatrix();
-    cutoffDistance_ = estimateOptimalCutoffDistance();
-    std::cout << "[DPC] cutoffDistance auto-set to " << cutoffDistance_ << std::endl;
-    computeRho();
-    computeDelta();
+
+    const int N = (int)points_.size();
+    // 依點數切換：門檻你可調（6000~10000 都可）
+    useGrid_ = (N > 8000);
+
+    if (!useGrid_) {
+        // 小 N：維持你原本的做法（結果完全一致）
+        buildDistanceMatrix();
+        cutoffDistance_ = estimateOptimalCutoffDistance();
+        std::cout << "[DPC] cutoffDistance auto-set to " << cutoffDistance_ << std::endl;
+        computeRho();
+        computeDelta();
+    }
+    else {
+        // 大 N：改採取不建矩陣、近鄰網格
+        cutoffDistance_ = estimateCutoffBySampling_(); // 抽樣估 dc
+        std::cout << "[DPC][grid] cutoffDistance auto-set to " << cutoffDistance_ << std::endl;
+
+        // 網格與半徑設定：經驗值
+        gridCell_ = std::max(1.0, 2.0 * cutoffDistance_);
+        rhoRadius_ = std::max(1.0, 5.0 * cutoffDistance_);
+        deltaStartRadius_ = std::max(1.0, 2.0 * cutoffDistance_);
+
+        buildGrid_(gridCell_);
+        computeRhoGrid_();
+        computeDeltaGrid_();
+    }
+
     auto centerIndices = selectCenters();
     assignClusters(centerIndices);
 }
+
+
 
 void DensityPeakClustering::loadPointsFromFF(const std::vector<FlipFlopInfo>& flipFlops) {
     points_.clear();
@@ -573,21 +600,27 @@ const DPCCluster* DensityPeakClustering::getClusterById(int cid) const {
 // 統一處理 Single-Bit FF Merge with fallback width logic，包含距離優化群組選擇
 
 void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
-    int twobitFF = 0;
-    int fourbitFF = 0;
+    // local collection (不要改 header，改成 local)
+    std::vector<std::string> remainingSingleBitFFs;
 
     mergeMap_.clear();
+    mergedFFResults_.clear();
+
     if (!libParser_) {
         std::cerr << "[DPC] Error: libParser is not set!" << std::endl;
         return;
     }
 
-    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates ===" << std::endl;
-    mergedFFResults_.clear();
+    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates (4-bit priority, greedy, no-duplicate) ===" << std::endl;
 
     const auto& allCells = libParser_->getAllCells();
     int totalClustersWithMerges = 0;
     int totalMergePairs = 0;
+    int fourbitFF = 0;
+    int twobitFF = 0;
+
+    // track globally-used single-bit instances so each instance is merged at most once
+    std::unordered_set<std::string> usedInstances;
 
     auto getBitWidthFromName = [](const std::string& name) -> int {
         if (name.find("16_") != std::string::npos) return 16;
@@ -597,32 +630,96 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         return 1;
         };
 
-    auto distSq = [](int x1, int y1, int x2, int y2) {
-        return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+    auto distSq = [](double x1, double y1, double x2, double y2) -> double {
+        double dx = x1 - x2;
+        double dy = y1 - y2;
+        return dx * dx + dy * dy;
         };
 
-    auto calcGroupCenter = [&](const std::vector<std::string>& group) -> std::pair<int, int> {
-        int sumX = 0, sumY = 0;
+    auto calcGroupCenterFromCoords = [&](const std::vector<std::string>& group,
+        const std::map<std::string, std::pair<double, double>>& coords)
+        -> std::pair<int, int> {
+        double sumX = 0, sumY = 0;
+        int count = 0;
         for (const auto& name : group) {
-            for (const auto& pt : points_) {
-                if (pt.instanceName == name) {
-                    sumX += pt.x;
-                    sumY += pt.y;
-                    break;
-                }
+            auto cit = coords.find(name);
+            if (cit != coords.end()) {
+                sumX += cit->second.first;
+                sumY += cit->second.second;
+                ++count;
+            }
+            else {
+                std::cerr << "[DPC] Warning: coord not found for " << name << "\n";
             }
         }
-        return { sumX / static_cast<int>(group.size()), sumY / static_cast<int>(group.size()) };
+        if (count == 0) return { 0, 0 };
+        return { static_cast<int>(sumX / count), static_cast<int>(sumY / count) };
         };
 
-    std::vector<std::string> remainingSingleBitFFs;
+    // GREEDY grouping: pick best seed (min sum of nearest neighbors), then take nearest (bitSize-1) neighbors
+    auto findGroupsRemoveUsedGreedy = [&](std::vector<std::string>& tmpList, int bitSize,
+        const std::map<std::string, std::pair<double, double>>& coords)
+        -> std::vector<std::vector<std::string>> {
+        std::vector<std::vector<std::string>> groups;
+        // filter tmpList to those with coords
+        std::vector<std::string> filtered;
+        for (auto& s : tmpList) if (coords.find(s) != coords.end()) filtered.push_back(s);
+        tmpList = filtered;
 
+        while (tmpList.size() >= static_cast<size_t>(bitSize)) {
+            int n = static_cast<int>(tmpList.size());
+            // find best seed: compute sum of nearest (bitSize-1) distances for each candidate
+            double bestSeedScore = std::numeric_limits<double>::infinity();
+            int bestSeedIdx = 0;
+            for (int i = 0; i < n; ++i) {
+                std::vector<double> dists; dists.reserve(n - 1);
+                for (int j = 0; j < n; ++j) if (i != j) {
+                    const auto& A = coords.at(tmpList[i]);
+                    const auto& B = coords.at(tmpList[j]);
+                    dists.push_back(distSq(A.first, A.second, B.first, B.second));
+                }
+                if (dists.empty()) continue;
+                std::nth_element(dists.begin(), dists.begin() + std::min((int)dists.size(), bitSize - 1), dists.end());
+                double s = 0;
+                int take = std::min((int)dists.size(), bitSize - 1);
+                for (int k = 0; k < take; ++k) s += dists[k];
+                if (s < bestSeedScore) { bestSeedScore = s; bestSeedIdx = i; }
+            }
+
+            // build group from seed + its nearest neighbors
+            std::vector<std::pair<double, int>> neigh; neigh.reserve(n - 1);
+            for (int j = 0; j < n; ++j) if (j != bestSeedIdx) {
+                const auto& A = coords.at(tmpList[bestSeedIdx]);
+                const auto& B = coords.at(tmpList[j]);
+                neigh.emplace_back(distSq(A.first, A.second, B.first, B.second), j);
+            }
+            std::sort(neigh.begin(), neigh.end());
+            std::vector<std::string> group;
+            group.push_back(tmpList[bestSeedIdx]);
+            int need = bitSize - 1;
+            for (int k = 0; k < need && k < (int)neigh.size(); ++k)
+                group.push_back(tmpList[neigh[k].second]);
+
+            // if we couldn't gather enough neighbors (shouldn't happen due to while condition), break
+            if (group.size() < static_cast<size_t>(bitSize)) break;
+
+            // push group and remove used
+            groups.push_back(group);
+            for (const auto& s : group) tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), s), tmpList.end());
+        }
+        return groups;
+        };
+
+    // iterate clusters_
     for (const auto& cluster : clusters_) {
-        // collect by "single-bit degenerate" type
+        // build sbffToInstances and coords, but skip instances already used
         std::map<std::string, std::vector<std::string>> sbffToInstances;
-        std::map<std::string, std::pair<int, int>> coords;
+        std::map<std::string, std::pair<double, double>> coords;
         for (int idx : cluster.members) {
             const auto& pt = points_[idx];
+            // skip if already merged elsewhere
+            if (usedInstances.find(pt.instanceName) != usedInstances.end()) continue;
+
             std::string sbff = libParser_->getSingleBitDegenerate(pt.cellType);
             if (sbff.empty()) sbff = pt.cellType;
             sbffToInstances[sbff].push_back(pt.instanceName);
@@ -633,32 +730,47 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
 
         for (auto& kv : sbffToInstances) {
             const std::string& sbff = kv.first;
-            const auto& instListRaw = kv.second;
+            const auto& instListRawAll = kv.second;
+
+            // filter out any that became used since grouping (conservative)
+            std::vector<std::string> instListRaw;
+            instListRaw.reserve(instListRawAll.size());
+            for (const auto& nm : instListRawAll) if (usedInstances.find(nm) == usedInstances.end()) instListRaw.push_back(nm);
+
             if (instListRaw.size() < 2) {
-                remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instListRaw.begin(), instListRaw.end());
+                // add remaining that are not used
+                for (const auto& nm : instListRaw) remainingSingleBitFFs.push_back(nm);
                 continue;
             }
-            // extra: group by path prefix
+
+            // group by path prefix
             std::map<std::string, std::vector<std::string>> prefixGroups;
             for (const auto& inst : instListRaw) {
                 auto pos = inst.find_last_of('/');
                 std::string prefix = (pos != std::string::npos ? inst.substr(0, pos) : "");
                 prefixGroups[prefix].push_back(inst);
             }
+
             for (auto& pg : prefixGroups) {
-                auto& instList = pg.second;
+                // filter out used in this prefix group too (defensive)
+                std::vector<std::string> instList;
+                instList.reserve(pg.second.size());
+                for (const auto& nm : pg.second) if (usedInstances.find(nm) == usedInstances.end()) instList.push_back(nm);
+
                 if (instList.size() < 2) {
-                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instList.begin(), instList.end());
+                    for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm);
                     continue;
                 }
+
                 if (!clusterPrinted) {
                     std::cout << "\nCluster #" << cluster.clusterId << ":\n";
                     clusterPrinted = true;
                     totalClustersWithMerges++;
                 }
 
+                // find MBFF candidates
                 std::vector<std::string> mbffCandidates;
-                for (auto& cellIt : allCells) {
+                for (const auto& cellIt : allCells) {
                     if (cellIt.second.singleBitDegenerate == sbff)
                         mbffCandidates.push_back(cellIt.first);
                 }
@@ -667,43 +779,102 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                     continue;
                 }
 
-                // find best 4-bit groups
-                auto findGroups = [&](int bitSize) {
-                    std::vector<std::vector<std::string>> groups;
-                    auto tmpList = instList;
-                    while (tmpList.size() >= bitSize) {
-                        std::vector<std::string> bestGroup;
-                        int bestD = INT_MAX;
-                        std::vector<int> idx(tmpList.size()); std::iota(idx.begin(), idx.end(), 0);
-                        std::vector<bool> sel(tmpList.size(), false); std::fill(sel.begin(), sel.begin() + bitSize, true);
-                        do {
-                            std::vector<std::string> cand;
-                            for (int i = 0; i < sel.size(); ++i) if (sel[i]) cand.push_back(tmpList[i]);
-                            int dsum = 0;
-                            for (int a = 0; a < bitSize; ++a) for (int b = a + 1; b < bitSize; ++b)
-                                dsum += distSq(coords[cand[a]].first, coords[cand[a]].second,
-                                    coords[cand[b]].first, coords[cand[b]].second);
-                            if (dsum < bestD) { bestD = dsum; bestGroup = cand; }
-                        } while (std::prev_permutation(sel.begin(), sel.end()));
-                        if (bestGroup.empty()) break;
-                        groups.push_back(bestGroup);
-                        for (auto& n : bestGroup) tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), n), tmpList.end());
-                    }
-                    return groups;
-                    };
-                auto groups4 = findGroups(4);
-                auto groups2 = findGroups(2);
+                // before grouping, ensure tmpList excludes globally-used instances (defensive)
+                std::vector<std::string> tmpList;
+                tmpList.reserve(instList.size());
+                for (const auto& nm : instList) if (usedInstances.find(nm) == usedInstances.end()) tmpList.push_back(nm);
 
-                auto handle = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
-                    for (auto& group : groups) {
-                        // pick best MBFF cell
+                // prioritize 4-bit then 2-bit using greedy grouping that removes used instances from tmpList
+                auto groups4 = findGroupsRemoveUsedGreedy(tmpList, 4, coords);
+                // ensure groups do not contain already-used instances (shouldn't, but double-check)
+                for (auto& g : groups4) {
+                    bool ok = true;
+                    for (const auto& mbr : g) if (usedInstances.find(mbr) != usedInstances.end()) { ok = false; break; }
+                    if (!ok) continue;
+                }
+                auto groups2 = findGroupsRemoveUsedGreedy(tmpList, 2, coords);
+
+                auto handleGroups = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
+                    for (const auto& group : groups) {
+                        // skip any group if any member already used (defensive)
+                        bool anyUsed = false;
+                        for (const auto& mbr : group) if (usedInstances.find(mbr) != usedInstances.end()) { anyUsed = true; break; }
+                        if (anyUsed) continue;
+
                         std::string bestFF;
-                        double bestM = 1e9;
-                        for (auto& mbff : mbffCandidates) if (getBitWidthFromName(mbff) == bit) {
-                            const auto& cell = allCells.at(mbff);
-                            double metric = (weights_.Beta / weights_.Gamma > 3000) ? cell.cellLeakagePower : cell.area;
-                            if (metric < bestM) { bestM = metric; bestFF = mbff; }
+                        //double bestScore = std::numeric_limits<double>::infinity(); // 不再使用原加權分數
+
+                        // 替換後的選擇邏輯：按你要求的規則（beta/gamma 比較與 tie-breaker）
+                        double alpha = weights_.Alpha;
+                        double beta = weights_.Beta;
+                        double gamma = weights_.Gamma;
+
+                        auto chooseByAreaThenPower = [&](const std::vector<std::string>& cands) -> std::string {
+                            std::string best;
+                            double bestArea = std::numeric_limits<double>::infinity();
+                            double bestPower = std::numeric_limits<double>::infinity();
+                            for (const auto& mbff : cands) {
+                                if (getBitWidthFromName(mbff) != bit) continue;
+                                auto cit = allCells.find(mbff);
+                                if (cit == allCells.end()) continue;
+                                const auto& cell = cit->second;
+                                if (cell.area < bestArea || (cell.area == bestArea && cell.cellLeakagePower < bestPower)) {
+                                    bestArea = cell.area;
+                                    bestPower = cell.cellLeakagePower;
+                                    best = mbff;
+                                }
+                            }
+                            return best;
+                            };
+
+                        auto chooseByPowerThenArea = [&](const std::vector<std::string>& cands) -> std::string {
+                            std::string best;
+                            double bestPower = std::numeric_limits<double>::infinity();
+                            double bestArea = std::numeric_limits<double>::infinity();
+                            for (const auto& mbff : cands) {
+                                if (getBitWidthFromName(mbff) != bit) continue;
+                                auto cit = allCells.find(mbff);
+                                if (cit == allCells.end()) continue;
+                                const auto& cell = cit->second;
+                                if (cell.cellLeakagePower < bestPower || (cell.cellLeakagePower == bestPower && cell.area < bestArea)) {
+                                    bestPower = cell.cellLeakagePower;
+                                    bestArea = cell.area;
+                                    best = mbff;
+                                }
+                            }
+                            return best;
+                            };
+
+                        // Decide strategy according to weights
+                        std::string bestFF_cand;
+                        if (beta == 0.0) {
+                            // Beta = 0 -> choose area smallest (tie-breaker power)
+                            bestFF_cand = chooseByAreaThenPower(mbffCandidates);
                         }
+                        else if (gamma == 0.0) {
+                            // Gamma = 0 -> choose power smallest (tie-breaker area)
+                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
+                        }
+                        else if (alpha > 10000*beta) {
+                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
+                        }
+                        else if (gamma >= 30000.0 * beta) {
+                            // Gamma >> Beta (>= 3000x) -> prioritize area
+                            bestFF_cand = chooseByAreaThenPower(mbffCandidates);
+                        }
+                        else if (beta >= 30000.0 * gamma) {
+                            // Beta >> Gamma (>= 3000x) -> prioritize power
+                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
+                        }
+                        else {
+                            // Default (weights comparable) -> 遵從 "不然一律選 power 小"
+                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
+                        }
+
+                        if (!bestFF_cand.empty()) {
+                            bestFF = bestFF_cand;
+                        }
+
                         if (bestFF.empty()) continue;
 
                         totalMergePairs++;
@@ -711,16 +882,24 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                         merged.mbffType = bestFF;
                         merged.bitwidth = bit;
                         merged.mergedFFs = group;
-                        // newInstanceName = same prefix + "/merged_x"
                         std::string base = "merged_" + std::to_string(totalMergePairs);
                         merged.newInstanceName = (pg.first.empty() ? base : pg.first + "/" + base);
-                        auto cen = calcGroupCenter(group);
-                        merged.newX = cen.first; merged.newY = cen.second;
-                        auto& cellInfo = allCells.at(bestFF);
-                        merged.power = cellInfo.cellLeakagePower;
-                        merged.area = cellInfo.area;
-                        const auto& mbffMacro = macroMap_->at(merged.mbffType).pins;
-                        for (int i = 0; i < merged.mergedFFs.size(); ++i) {
+
+                        auto cen = calcGroupCenterFromCoords(group, coords);
+                        merged.newX = cen.first;
+                        merged.newY = cen.second;
+
+                        auto cellIt = allCells.find(bestFF);
+                        if (cellIt != allCells.end()) {
+                            merged.power = cellIt->second.cellLeakagePower;
+                            merged.area = cellIt->second.area;
+                        }
+                        else {
+                            merged.power = 0.0; merged.area = 0.0;
+                        }
+
+                        // simple D/Q mapping
+                        for (int i = 0; i < (int)merged.mergedFFs.size(); ++i) {
                             std::string d_pin = "D" + std::to_string(i);
                             std::string q_pin = "Q" + std::to_string(i);
                             merged.mbffPinToOrigPin[d_pin] = merged.mergedFFs[i] + "/D";
@@ -728,20 +907,32 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                             merged.mbffPinToOrigFF[d_pin] = merged.mergedFFs[i];
                             merged.mbffPinToOrigFF[q_pin] = merged.mergedFFs[i];
                         }
+
+                        // record merged and mark members as used (prevent duplicates globally)
                         mergedFFResults_.push_back(merged);
+                        for (const auto& mbr : merged.mergedFFs) usedInstances.insert(mbr);
+
+                        if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
                     }
                     };
-                handle(groups4, 4);
-                handle(groups2, 2);
+
+                handleGroups(groups4, 4);
+                handleGroups(groups2, 2);
             }
         }
     }
-    // build mergeMap
-    for (auto& m : mergedFFResults_) for (auto& s : m.mergedFFs)
-        mergeMap_.addMapping(s, m.newInstanceName);
 
-    std::cout << "\n[DPC] Found " << mergedFFResults_.size() << " merged instances.\n";
+    // build mergeMap
+    for (const auto& m : mergedFFResults_) {
+        for (const auto& s : m.mergedFFs) {
+            mergeMap_.addMapping(s, m.newInstanceName);
+        }
+    }
+
+    std::cout << "\n[DPC] Found " << mergedFFResults_.size()
+        << " merged instances. (4-bit: " << fourbitFF << ", 2-bit: " << twobitFF << ")\n";
 }
+
 
 
 
@@ -1062,5 +1253,189 @@ std::vector<std::pair<int, std::string>> MergeMapping::getBitIndexedPairs(const 
     return result;
 }
 
+void DensityPeakClustering::buildGrid_(double cell) {
+    grid_.clear();
+    for (int i = 0; i < (int)points_.size(); ++i) {
+        int ix = (int)std::floor(points_[i].x / cell);
+        int iy = (int)std::floor(points_[i].y / cell);
+        grid_[cellKey_(ix, iy)].push_back(i);
+    }
+}
 
+void DensityPeakClustering::rebuildGridIfNeeded_() {
+    // 若座標不會在此階段變動，可不做事
+}
+
+std::vector<int> DensityPeakClustering::getCandidatesInRadius_(const DPCPoint& p, double radius) const {
+    std::vector<int> cand;
+    if (gridCell_ <= 0) return cand;
+
+    int ix0 = (int)std::floor((p.x - radius) / gridCell_);
+    int ix1 = (int)std::floor((p.x + radius) / gridCell_);
+    int iy0 = (int)std::floor((p.y - radius) / gridCell_);
+    int iy1 = (int)std::floor((p.y + radius) / gridCell_);
+
+    cand.reserve((ix1 - ix0 + 1) * (iy1 - iy0 + 1) * 8); // 粗估
+    for (int ix = ix0; ix <= ix1; ++ix) {
+        for (int iy = iy0; iy <= iy1; ++iy) {
+            auto it = grid_.find(cellKey_(ix, iy));
+            if (it == grid_.end()) continue;
+            const auto& bucket = it->second;
+            cand.insert(cand.end(), bucket.begin(), bucket.end());
+        }
+    }
+    return cand;
+}
+
+
+void DensityPeakClustering::computeRhoGrid_() {
+    const int N = (int)points_.size();
+    if (N == 0) return;
+
+    const double dc = cutoffDistance_;
+    const double inv2dc2 = 1.0 / (dc * dc);
+
+    for (int i = 0; i < N; ++i) points_[i].rho = 0.0;
+
+    // 可加 OpenMP
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < N; ++i) {
+        const auto& pi = points_[i];
+        double sum = 0.0;
+        auto cand = getCandidatesInRadius_(pi, rhoRadius_);
+        for (int j : cand) {
+            if (j == i) continue;
+            double d = boxManhattanDistance(pi, points_[j]);
+            if (d <= rhoRadius_) {
+                sum += std::exp(-(d * d) * inv2dc2);
+            }
+        }
+        points_[i].rho = sum;
+    }
+
+    double minRho = std::numeric_limits<double>::max();
+    double maxRho = std::numeric_limits<double>::lowest();
+    for (const auto& pt : points_) {
+        minRho = std::min(minRho, pt.rho);
+        maxRho = std::max(maxRho, pt.rho);
+    }
+    std::cout << "[DPC][grid] rho range: " << minRho << " ~ " << maxRho << std::endl;
+}
+
+double DensityPeakClustering::estimateMaxDistBySampling_(size_t samples) const {
+    const int N = (int)points_.size();
+    if (N < 2) return 10.0;
+    samples = std::min(samples, (size_t)N * 20);
+
+    unsigned seed = 987654321u;
+    auto rnd = [&]() { seed = 1664525u * seed + 1013904223u; return seed; };
+
+    double best = 0.0;
+    for (size_t k = 0; k < samples; ++k) {
+        int i = (int)(rnd() % N);
+        int j = (int)(rnd() % N);
+        if (i == j) continue;
+        best = std::max(best, boxManhattanDistance(points_[i], points_[j]));
+    }
+    return best;
+}
+
+void DensityPeakClustering::computeDeltaGrid_() {
+    const int N = (int)points_.size();
+    if (N == 0) return;
+
+    std::vector<int> sortedIdx(N);
+    for (int i = 0; i < N; ++i) sortedIdx[i] = i;
+    std::sort(sortedIdx.begin(), sortedIdx.end(),
+        [this](int a, int b) { return points_[a].rho > points_[b].rho; });
+
+    // 估全域最大距離（抽樣）
+    const double approxMaxDist = estimateMaxDistBySampling_();
+
+    // rank 0（最高 rho）
+    int top = sortedIdx[0];
+    points_[top].delta = approxMaxDist;
+    points_[top].nearestHigher = -1;
+
+    // 為了加速判斷「誰是更高密度」，建立布林表
+    std::vector<char> isHigher(N, 0);
+
+    for (int rank = 1; rank < N; ++rank) {
+        int idx = sortedIdx[rank];
+        const double myRho = points_[idx].rho;
+
+        // 標記前面的都是更高密度
+        isHigher.assign(N, 0);
+        for (int r = 0; r < rank; ++r) isHigher[sortedIdx[r]] = 1;
+
+        double bestD = std::numeric_limits<double>::max();
+        int    bestJ = -1;
+
+        // 從較小半徑開始，逐步加大直到找到
+        double radius = deltaStartRadius_;
+        const double maxRadius = std::max(approxMaxDist, rhoRadius_ * 2.0);
+
+        while (radius <= maxRadius && bestJ == -1) {
+            auto cand = getCandidatesInRadius_(points_[idx], radius);
+            for (int j : cand) {
+                if (j == idx || !isHigher[j]) continue;
+                double d = boxManhattanDistance(points_[idx], points_[j]);
+                if (d <= radius && d < bestD) {
+                    bestD = d; bestJ = j;
+                }
+            }
+            if (bestJ == -1) radius *= 2.0; // 擴半徑
+        }
+
+        // 還是沒找到 → 退回全域掃描（只掃更高密度者，O(rank)）
+        if (bestJ == -1) {
+            for (int r = 0; r < rank; ++r) {
+                int j = sortedIdx[r];
+                double d = boxManhattanDistance(points_[idx], points_[j]);
+                if (d < bestD) { bestD = d; bestJ = j; }
+            }
+        }
+
+        points_[idx].delta = (bestJ == -1) ? approxMaxDist : bestD;
+        points_[idx].nearestHigher = bestJ;
+    }
+
+    double minD = std::numeric_limits<double>::max(), maxD = -1;
+    for (const auto& pt : points_) { minD = std::min(minD, pt.delta); maxD = std::max(maxD, pt.delta); }
+    std::cout << "[DPC][grid] delta range: " << minD << " ~ " << maxD << std::endl;
+}
+
+
+double DensityPeakClustering::estimateCutoffBySampling_(size_t samples) const {
+    const int N = (int)points_.size();
+    if (N < 2) return 10.0;
+    samples = std::min(samples, (size_t)N * 20);
+
+    std::vector<double> ds;
+    ds.reserve(samples);
+
+    unsigned seed = 1234567u;
+    auto rnd = [&]() { seed = 1664525u * seed + 1013904223u; return seed; };
+
+    size_t cnt = 0;
+    while (cnt < samples) {
+        int i = (int)(rnd() % N);
+        int j = (int)(rnd() % N);
+        if (i == j) continue;
+        ds.push_back(boxManhattanDistance(points_[i], points_[j]));
+        ++cnt;
+    }
+
+    std::sort(ds.begin(), ds.end());
+
+    int targetNeighbor = N / 100;
+    if (targetNeighbor < 10) targetNeighbor = 10;
+    if (targetNeighbor > 50) targetNeighbor = 50;
+
+    // 以分位數近似原本 cutoff 索引
+    size_t approxIdx = std::min((size_t)targetNeighbor * (size_t)N * ds.size()
+        / (size_t)((long long)N * (N - 1) / 2),
+        ds.size() - 1);
+    return ds[approxIdx];
+}
 
