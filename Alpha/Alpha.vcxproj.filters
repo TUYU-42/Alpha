@@ -144,8 +144,5 @@
     <ClInclude Include="WriteOutput.h">
       <Filter>WriteOutput</Filter>
     </ClInclude>
-    <ClInclude Include="CompatibleList.h">
-      <Filter>CompatibleList</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

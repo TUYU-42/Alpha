@@ -146,7 +146,6 @@
     <ClCompile Include="WriteOutput.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CompatibleList.h" />
     <ClInclude Include="DataStructures.h" />
     <ClInclude Include="DPC.h" />
     <ClInclude Include="HierarchicalClustering.h" />
