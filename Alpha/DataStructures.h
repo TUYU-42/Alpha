@@ -1,15 +1,15 @@
 ﻿#ifndef DATASTRUCTURES_H
 #define DATASTRUCTURES_H
 
+#include"CompatibleList.h"
 #include <vector>
 #include <string>
 #include <map>
 #include <unordered_map>
 #include <memory>
 #include<set>
-
-// === »щµAЩYБПЅY? ===
-
+extern std::unordered_map<std::string, std::vector<std::string>> bankingCompatibleTable;
+extern std::unordered_map<std::string, std::vector<std::string>> debankingCompatibleTable;
 // ™аЦШ…ў"µЅY?
 struct Weights {
     double Alpha = 0.0;

@@ -53,6 +53,9 @@
     <Filter Include="WriteOutput">
       <UniqueIdentifier>{b1d45faf-8672-44c5-a2d4-7f66c1c82c05}</UniqueIdentifier>
     </Filter>
+    <Filter Include="CompatibleList">
+      <UniqueIdentifier>{f70992c7-02a4-4aa6-bf9d-483b5209ea52}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -140,6 +143,9 @@
     </ClInclude>
     <ClInclude Include="WriteOutput.h">
       <Filter>WriteOutput</Filter>
+    </ClInclude>
+    <ClInclude Include="CompatibleList.h">
+      <Filter>CompatibleList</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

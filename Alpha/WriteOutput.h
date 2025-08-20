@@ -18,7 +18,7 @@
 class WriteOutput {
 private:
 
-
+    void writeOperationSection(std::ofstream& fout) const;
     mutable std::unordered_map<std::string, std::string> netLookupCache_;
     const std::string outputName_;
     const MergeMapping& mergeMap_;

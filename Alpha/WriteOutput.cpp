@@ -551,11 +551,36 @@ bool WriteOutput::writeMapList() {
             }
         }
     }
-
+    writeOperationSection(mapFile);
     mapFile.close();
     cout << "  ✓ Generated " << mappingFile << endl;
     return true;
 }
+// WriteOutput.cpp
+void WriteOutput::writeOperationSection(std::ofstream& fout) const {
+    // 先把 input 的 SBFF -> lib 型別建索引
+    std::unordered_map<std::string, std::string> inst2lib;
+    inst2lib.reserve(originalDefData_.flipFlops.size());
+    for (const auto& ff : originalDefData_.flipFlops) {
+        inst2lib[ff.instName] = ff.cellType; // ff.cellType 即該 instance 的 library cell
+    }
+
+    // 目前只做 banking（SB -> MB），因此每個 mergedFF 產生一個 create_multibit
+    const size_t opCount = mergedFFResults_.size();
+    fout << "\nOPERATION " << opCount << "\n\n";
+
+    for (const auto& m : mergedFFResults_) {
+        fout << "create_multibit { ";
+        // 輸入端：各個單 bit flop（bit_width 一律 1）
+        for (const auto& sb : m.mergedFFs) {
+            const std::string lib = (inst2lib.count(sb) ? inst2lib.at(sb) : std::string("UNKNOWN"));
+            fout << "{" << sb << " " << lib << " 1} ";
+        }
+        // 輸出端：新產生的 MBFF（型別用 m.mbffType，寬度用 m.bitwidth）
+        fout << "{" << m.newInstanceName << " " << m.mbffType << " " << m.bitwidth << "} }" << "\n";
+    }
+}
+
 void WriteOutput::buildSimpleToFullNameMapping() {
     simpleToFullNameMap_.clear();
 
@@ -2031,9 +2056,50 @@ bool WriteOutput::writeDef() {
             defFile << " ;\n";
         }
         defFile << "END NETS\n\n";
+        defFile << std::endl;
 
-        defFile << "END DESIGN\n";
-        defFile.close();
+        // 3.8 複製其餘原始內容（跳過已處理的部分）
+        if (!defDataCopy.originalDefLines.empty()) {
+            enum State { NORMAL, SKIP_SECTION };
+            State state = NORMAL;
+
+            for (const auto& line : defDataCopy.originalDefLines) {
+                // 跳過已經手動產生的部分
+                if (line.find("VERSION") == 0) continue;
+                if (line.find("DIVIDERCHAR") == 0) continue;
+                if (line.find("BUSBITCHARS") == 0) continue;
+                if (line.find("DESIGN") == 0) continue;
+                if (line.find("UNITS") == 0) continue;
+                if (line.find("PROPERTYDEFINITIONS") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("DIEAREA") == 0) continue;
+                if (line.find("ROW ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("TRACKS ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("COMPONENTS ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("NETS ") == 0) { state = SKIP_SECTION; continue; }
+
+                // 檢查 END 標記
+                if (state == SKIP_SECTION) {
+                    if (line.find("END PROPERTYDEFINITIONS") != std::string::npos ||
+                        line.find("END ROWS") != std::string::npos ||
+                        line.find("END TRACKS") != std::string::npos ||
+                        line.find("END COMPONENTS") != std::string::npos ||
+                        line.find("END NETS") != std::string::npos) {
+                        state = NORMAL;
+                        continue;
+                    }
+                }
+
+                // 輸出未被跳過的內容
+                if (state == NORMAL) {
+                    // 跳過空行（可選）
+                    if (line.empty()) continue;
+
+                    defFile << line << std::endl;
+                }
+            }
+        }
+
+
 
         std::cout << "  ✓ DEF file written successfully\n"
             << "    - Components: " << newComponents.size() << "\n"
