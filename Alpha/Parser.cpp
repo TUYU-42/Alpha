@@ -814,7 +814,7 @@ bool Parser::writeOutputFiles() const {
         mapFile.close();
         cout << "✓ Generated " << mappingFile << endl;
 
-      
+
 
         // 產生 Verilog 檔案
         string verilogFile = outputName_ + ".v";
@@ -931,16 +931,16 @@ bool Parser::performLegalization() {
         addError("DEF and LEF must be loaded before legalization");
         return false;
     }
-    
+
     // Get reference to DEF data
     DefData& defData = getDefData();
 
-    
+
 
 
     // Create legalizer
     Legalizer legalizer(defData, getMacroMap(), getLefSites());
-	legalizer.setLibParser(getLibParser());
+    legalizer.setLibParser(getLibParser());
     legalizer.setBankingList(bankingList_);
     // Run legalization
     if (legalizer.legalizeAll()) {
@@ -950,7 +950,7 @@ bool Parser::performLegalization() {
         legalizer.updateDefComponents(defData);
 
         // Debug: Show same components after legalization
-        
+
         // Print summary
         legalizer.printLegalizationSummary();
 

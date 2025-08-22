@@ -49,10 +49,10 @@ struct VerilogModule {
 class VerilogParser {
 public:
     VerilogParser();
- 
+
 
     // 新增：設置（可選）LibParser 指標（目前不?依?）
-    
+
     // High-level APIs
     bool parseFile(const std::string& filepath);
     bool parseFromString(const std::string& text);
@@ -95,7 +95,6 @@ public:
     void printScanChainSummary();   // 列出 FF 與其 SI/SO 連?概況
 
 private:
-    static void collectDeclList(const std::string& s, size_t& i, size_t end, std::vector<std::string>& outIds);
     // ===== 琂Τ helper玂痙 =====
     static std::string removeComments(const std::string& s);
     std::unordered_map<std::string, std::string> localToFull_;
@@ -133,5 +132,5 @@ private:
     std::vector<VerilogInstance> flatInstances_;
     std::unordered_map<std::string, const VerilogInstance*> nameToInst_;      // instName -> ptr
     std::unordered_map<std::string, const VerilogInstance*> fullToInst_;      // fullPath -> ptr
-                 // local -> full path
+    // local -> full path
 };

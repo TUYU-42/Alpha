@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "DataStructures.h"
 #include "LibParser.h"
 #include <algorithm>
@@ -26,18 +26,34 @@ struct DPCCluster {
     int clusterId = -1;
     int centerIdx = -1;
     std::vector<int> members;
-    std::string celltype; // optional: ­Y§A¦³¥Î³o­Ó°O¿ı MBFF «¬§O
+    std::string celltype; // optional: ï¿½Yï¿½Aï¿½ï¿½ï¿½Î³oï¿½Ó°Oï¿½ï¿½ MBFF ï¿½ï¿½ï¿½O
     double avgX = 0.0, avgY = 0.0;
     double minX = 0.0, maxX = 0.0;
     double minY = 0.0, maxY = 0.0;
     double radius = 0.0;
+};
+// DPC.h
+struct CkCapReport {
+    int groupSize = 0;
+    std::string sbCell;      // â† èˆŠæ¬„ä½ï¼Œç‚ºç›¸å®¹ä¿ç•™ï¼ˆæœƒæ”¾ç¬¬ä¸€å€‹ familyï¼‰
+    std::string mbffCell;
+    double ckCapBefore = 0.0;
+    double ckCapAfter = 0.0;
+    double ckCapSaving = 0.0;
+    std::vector<std::string> members;
+
+    // NEW: æ”¯æ´æ··ç”¨å‹åˆ¥çš„å ±è¡¨æ¬„ä½
+    std::vector<std::string> sbFamiliesUnique;                  // é€™çµ„å‡ºç¾éçš„ SB å®¶æ—ï¼ˆå»é‡ï¼‰
+    std::vector<std::pair<std::string, int>> sbFamilyCounts;     // å„å®¶æ—å‡ºç¾æ¬¡æ•¸
+    std::vector<double> sbMemberCkCaps;                         // èˆ‡ members å°é½Šçš„ per-SB CK cap
+    double ckCapBeforeSum = 0.0;                                // Î£(CK_SB)
 };
 
 class DensityPeakClustering {
 public:
     DensityPeakClustering();
     ~DensityPeakClustering();
-
+    void dumpCkCapReport(const std::string& path) const;
     std::map<std::string, std::vector<DPCCluster>> clusterByScanChain(
         const std::map<std::string, std::vector<ScanChain>>& scanChains,
         const std::map<std::string, FlipFlopInfo>& ffLookup,
@@ -76,7 +92,7 @@ public:
         return remainingSingleBitFFs;
     }
 private:
-    std::vector<std::string> remainingSingleBitFFs; // ¥Î¨Ó¦¬¶°µLªk¦X¨Ö©Î³Q¸õ¹Lªº single-bit FFs
+    std::vector<std::string> remainingSingleBitFFs; // ï¿½Î¨Ó¦ï¿½ï¿½ï¿½ï¿½Lï¿½kï¿½Xï¿½Ö©Î³Qï¿½ï¿½ï¿½Lï¿½ï¿½ single-bit FFs
     void performClusteringOnScanChain(
         const ScanChain& chain,
         const std::map<std::string, FlipFlopInfo>& ffLookup,
@@ -93,7 +109,7 @@ private:
     void computeClusterGeometry();
     int estimateBestClusterCount() const;
     double estimateOptimalCutoffDistance() const;
-
+    std::vector<CkCapReport> ckCapReports_;
     std::vector<DPCPoint> points_;
     std::vector<std::vector<double>> distMat_;
     std::vector<DPCCluster> clusters_;
@@ -104,12 +120,12 @@ private:
     class LibParser* libParser_ = nullptr;
     std::unordered_map<std::string, int> instanceToClusterId_;
     std::unordered_map<int, DPCCluster> clusterIdToCluster_;
-    std::vector<MergedFF> mergedFFResults_; // Àx¦s¤ÀªR«áªº¦X¨Öµ²ªG
+    std::vector<MergedFF> mergedFFResults_; // ï¿½xï¿½sï¿½ï¿½ï¿½Rï¿½áªºï¿½Xï¿½Öµï¿½ï¿½G
     long long int totalPlacedComponentCount_;// === Grid-neighbor mode (big-N) ===
     bool useGrid_ = false;
-    double gridCell_ = 0.0;        // ºô®æÃäªø
-    double rhoRadius_ = 0.0;       // ­pºâ rho ªººIÂ_¥b®| (¬ù 5*dc)
-    double deltaStartRadius_ = 0.0;// ­pºâ delta ªº°_©l¥b®| (¬ù 2*dc)
+    double gridCell_ = 0.0;        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    double rhoRadius_ = 0.0;       // ï¿½pï¿½ï¿½ rho ï¿½ï¿½ï¿½Iï¿½_ï¿½bï¿½| (ï¿½ï¿½ 5*dc)
+    double deltaStartRadius_ = 0.0;// ï¿½pï¿½ï¿½ delta ï¿½ï¿½ï¿½_ï¿½lï¿½bï¿½| (ï¿½ï¿½ 2*dc)
 
     std::unordered_map<long long, std::vector<int>> grid_; // (ix,iy)-> indices
 
@@ -125,7 +141,7 @@ private:
     void computeRhoGrid_();
     void computeDeltaGrid_();
 
-    // sampling-based estimators (Á×§K«Ø distMat_)
+    // sampling-based estimators (ï¿½×§Kï¿½ï¿½ distMat_)
     double estimateCutoffBySampling_(size_t samples = 200000) const;
     double estimateMaxDistBySampling_(size_t samples = 200000) const;
 

@@ -727,31 +727,45 @@ void DefParser::printSummary() const {
 namespace DefUtils {
 
 
-    int getBitWidth(const string& cellType) {
-        // First try to extract number from end (your naming convention)
-        regex endNumberPattern(R"(_(\d+)$)");
-        smatch m;
-        if (regex_search(cellType, m, endNumberPattern)) {
-            int width = stoi(m[1]);
-            cout << "DEBUG: getBitWidth(\"" << cellType << "\") -> " << width << " (from end)" << endl;
-            return width;
+    static inline vector<string> splitUnderscore(const string& s) {
+        vector<string> out;
+        string cur;
+        for (char c : s) {
+            if (c == '_') { if (!cur.empty()) { out.push_back(cur); cur.clear(); } }
+            else cur.push_back(c);
+        }
+        if (!cur.empty()) out.push_back(cur);
+        return out;
+    }
+
+    int getBitWidth(const std::string& cellType) {
+        // 找到所有 '_' 的位置
+        std::vector<size_t> underscores;
+        for (size_t i = 0; i < cellType.size(); i++) {
+            if (cellType[i] == '_') underscores.push_back(i);
         }
 
-        // Original bit width detection patterns as backup
-        regex bitRx(R"((\d+)BIT|(\d+)B|_(\d+)_)");
-        if (regex_search(cellType, m, bitRx)) {
-            for (int i = 1; i <= 3; i++) {
-                if (m[i].matched) {
-                    int width = stoi(m[i]);
-                    cout << "DEBUG: getBitWidth(\"" << cellType << "\") -> " << width << " (pattern " << i << ")" << endl;
-                    return width;
-                }
+        if (underscores.size() >= 2) {
+            // 第二? '_' 前面的 token
+            std::string token = cellType.substr(underscores[1 - 1] + 1, underscores[1] - underscores[1 - 1] - 1);
+            // ↑ (第一? '_' 之後，第二? '_' 之前)
+
+            // 找 token 裡的數字
+            std::regex numRx(R"((\d+))");
+            std::smatch m;
+            if (std::regex_search(token, m, numRx)) {
+                int width = std::stoi(m[1]);
+                //   std::cout << "DEBUG: getBitWidth(\"" << cellType << "\") -> " << width
+                 //      << " (from token: " << token << ")\n";
+                return width;
             }
         }
 
-        cout << "DEBUG: getBitWidth(\"" << cellType << "\") -> 1 (default)" << endl;
+        // 沒找到數字，預設 1
+      //  std::cout << "DEBUG: getBitWidth(\"" << cellType << "\") -> 1 (default)\n";
         return 1;
     }
+
 
     string getCellCategory(const string& cellType) {
         if (cellType.find("OR2") != string::npos) return "OR_Gate";

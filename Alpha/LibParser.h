@@ -20,6 +20,7 @@ struct LibPin {
     double minCapacitance = 0.0;
     double maxTransition = 0.0;
     std::map<std::string, std::string> attributes;
+    bool isClock = false;   // <--- 新增
 };
 
 // 新增 Bundle 結?
@@ -101,7 +102,8 @@ private:
 public:
     LibParser() = default;
     ~LibParser() = default;
-
+    double getClockPinCap(const std::string& cellName) const;
+    std::string getClockPinName(const std::string& cellName) const; // 方便除錯/日後用
     // 新的主要函數：解析所有 FF cells
     bool parseAllLibraries(const std::vector<std::string>& libFiles);
 

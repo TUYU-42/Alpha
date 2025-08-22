@@ -100,6 +100,9 @@
     <ClCompile Include="WriteOutput.cpp">
       <Filter>WriteOutput</Filter>
     </ClCompile>
+    <ClCompile Include="CompatibleList.cpp">
+      <Filter>CompatibleList</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ParserWeights.h">
@@ -143,6 +146,9 @@
     </ClInclude>
     <ClInclude Include="WriteOutput.h">
       <Filter>WriteOutput</Filter>
+    </ClInclude>
+    <ClInclude Include="CompatibleList.h">
+      <Filter>CompatibleList</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

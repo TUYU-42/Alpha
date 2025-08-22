@@ -6,6 +6,122 @@
 #include <algorithm>
 
 using namespace std;
+#include <regex>
+#include <cctype>
+
+// 小工具：不分大小寫相等
+static inline bool iequals(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i)
+        if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i])) return false;
+    return true;
+}
+
+// 小工具：檢查是否像是時脈腳名
+static inline bool looksLikeClockPinName(const std::string& pin) {
+    // 允許：CLK, CK, CP, CLK0/CLK1, CLKP/CLKN, CLK_N, CK0/CK1…
+    static const std::regex clkRe(R"(^\s*(CLK(P|N)?|CK|CP)(\d+)?(_N|_P)?\s*$)",
+        std::regex::icase);
+    return std::regex_match(pin, clkRe);
+}
+
+// 從 LibPin 取等效 Ceff：優先 capacitance，否則回退到 rise/fall（若存在）
+static inline double effectiveCapFromPin(const LibPin& p) {
+    if (p.capacitance > 0) return p.capacitance;
+    double rc = 0.0, fc = 0.0;
+    if (auto it = p.attributes.find("rise_capacitance"); it != p.attributes.end()) {
+        try { rc = std::stod(it->second); }
+        catch (...) {}
+    }
+    if (auto it = p.attributes.find("fall_capacitance"); it != p.attributes.end()) {
+        try { fc = std::stod(it->second); }
+        catch (...) {}
+    }
+    if (rc > 0 && fc > 0) return 0.5 * (rc + fc);
+    if (rc > 0) return rc;
+    if (fc > 0) return fc;
+    // 也可選擇回退 min/maxCapacitance；這裡保守回傳 0
+    return 0.0;
+}
+
+std::string LibParser::getClockPinName(const std::string& cellName) const {
+    auto it = cellLibrary_.find(cellName);
+    if (it == cellLibrary_.end()) return "";
+
+    const LibCell& cell = it->second;
+
+    // 1) 先用 signalType == clock
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        if (iequals(p.signalType, "clock")) return p.name;
+    }
+
+    // 2) 名稱長得像 clock，且方向是 input
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        if (looksLikeClockPinName(p.name)) {
+            if (iequals(p.direction, "input") || p.direction.empty()) return p.name;
+        }
+    }
+
+    // 3) 退一步：任何 direction=input + 有 clock 關鍵字的 attributes
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        if (!iequals(p.direction, "input")) continue;
+        // 若你的 Parser 有把 "clock" 放入某個屬性（視你的 parsePin 實作而定）
+        if (iequals(p.signalType, "data")) {
+            // 仍找不到也沒關係，可能是資料腳
+            continue;
+        }
+        // 如果完全沒有標示，就不硬猜
+    }
+    return "";
+}
+
+double LibParser::getClockPinCap(const std::string& cellName) const {
+    auto it = cellLibrary_.find(cellName);
+    if (it == cellLibrary_.end()) return 0.0;
+
+    const LibCell& cell = it->second;
+    for (const auto& [pinName, pin] : cell.pins) {
+        if (pin.name == "CK") {
+            return pin.capacitance; // 優先回傳 CK 腳的 capacitance
+        }
+    }
+    // A. signalType=clock 優先
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        if (iequals(p.name, "CK"))
+            return effectiveCapFromPin(p);
+    }
+
+    // B. 名稱像 clock（CLK/CK/CP…），方向 input 優先
+    const LibPin* best = nullptr;
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        if (looksLikeClockPinName(p.name)) {
+            if (iequals(p.direction, "input")) {
+                return effectiveCapFromPin(p); // 直接回
+            }
+            else {
+                // 先暫存，如果沒有 input 也許仍想回傳它
+                if (!best) best = &p;
+            }
+        }
+    }
+    if (best) return effectiveCapFromPin(*best);
+
+    // C. 最後手段：找名字包含 "CLK" 的 input 腳
+    for (const auto& kv : cell.pins) {
+        const auto& p = kv.second;
+        std::string up = p.name; for (auto& c : up) c = std::toupper((unsigned char)c);
+        if (up.find("CLK") != std::string::npos && iequals(p.direction, "input"))
+            return effectiveCapFromPin(p);
+    }
+
+    // 找不到就 0
+    return 0.0;
+}
 
 // 新增：解析所有 library 檔案，找出所有 FF cells
 bool LibParser::parseAllLibraries(const vector<string>& libFiles) {
@@ -57,7 +173,7 @@ bool LibParser::parseAllLibraries(const vector<string>& libFiles) {
                 cell.libraryName = currentLibrary;
 
                 // 快速掃描判斷是否為 FF cell
-                if (parseCellForFF(file, cellName, cell, currentLibrary)) {
+                if (parseCell(file, cellName, cell, currentLibrary)) {
                     // 只有當 cell 有 single_bit_degenerate 或 ff() 時才加入
                     if (!cell.singleBitDegenerate.empty() || cell.hasFF) {
                         cellLibrary_[cellName] = cell;
@@ -365,23 +481,67 @@ bool LibParser::parseWithCellList(const vector<string>& libFiles,
 
 bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell, const string& libraryName) {
     string line;
-    int braceDepth = 1;  // 已經在 cell 區塊內
+    int braceDepth = 1;
 
     while (getline(file, line)) {
-        // 追蹤大括號深度
-        for (char c : line) {
-            if (c == '{') braceDepth++;
-            else if (c == '}') {
-                braceDepth--;
-                if (braceDepth == 0) {
-                    updateCellBitWidth(cell);
-                    updateCellBitWidthFromBundles(cell);  // 新增：從 bundles 更新 bitWidth
-                    return true;  // cell 解析完成
+        // 1) 先處理會下潛的區塊，處理完就跳下一行，避免外層重複計數
+        if (line.find("ff (") != string::npos || line.find("ff(") != string::npos) {
+            cell.ffType = "ff";
+            cell.hasFF = true;
+            parseFF(file, cell);
+            continue; // 關鍵！
+        }
+        if (line.find("pin(") != string::npos || line.find("pin (") != string::npos) {
+            smatch match; regex pinRegex(R"(pin\s*\(\s*([^\s\)]+)\s*\))");
+            if (regex_search(line, match, pinRegex)) {
+                string pinName = match[1];
+                LibPin pin; pin.name = pinName;
+                if (parsePin(file, pinName, pin)) {
+                    cell.pins[pinName] = pin;
                 }
             }
+            continue; // 關鍵！
+        }
+        if (line.find("bundle(") != string::npos || line.find("bundle (") != string::npos) {
+            smatch match; regex bundleRegex(R"(bundle\s*\(\s*([^\s\)]+)\s*\))");
+            if (regex_search(line, match, bundleRegex)) {
+                string bundleName = match[1];
+                LibBundle bundle;
+                if (parseBundle(file, bundleName, bundle)) {
+                    cell.bundles[bundleName] = bundle;
+                    for (const string& m : bundle.members) {
+                        auto itp = cell.pins.find(m);
+                        if (itp == cell.pins.end()) {
+                            LibPin mp; mp.name = m;
+                            mp.direction = bundle.direction;
+                            mp.signalType = bundle.signalType;
+                            cell.pins.emplace(m, std::move(mp)); // 不覆蓋既有
+                        }
+                        else {
+                            // 若既有 pin，僅在欄位空時小心補齊，不要把 cap 這類已解析到的數值蓋掉
+                            if (itp->second.direction.empty()) itp->second.direction = bundle.direction;
+                            if (itp->second.signalType.empty()) itp->second.signalType = bundle.signalType;
+                        }
+                    }
+
+                }
+            }
+            continue; // 關鍵！
+        }
+        if (line.find("test_cell(") != std::string::npos ||
+            line.find("test_cell (") != std::string::npos) {
+            // 直接跳過 test_cell 整個大括號
+            int depth = 1;
+            while (depth > 0 && std::getline(file, line)) {
+                for (char c : line) {
+                    if (c == '{') depth++;
+                    else if (c == '}') depth--;
+                }
+            }
+            continue; // 不要把 test_cell 當 cell pin
         }
 
-        // 解析 cell 屬性
+        // 2) 純屬性
         if (line.find("area :") != string::npos) {
             cell.area = extractNumericValue(line);
         }
@@ -391,54 +551,34 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell,
         else if (line.find("single_bit_degenerate :") != string::npos) {
             cell.singleBitDegenerate = extractQuotedString(line);
         }
-        else if (line.find("ff (") != string::npos || line.find("ff(") != string::npos) {
-            cell.ffType = "ff";
-            cell.hasFF = true;
-            parseFF(file, cell);
-        }
-        else if (line.find("pin(") != string::npos || line.find("pin (") != string::npos) {
-            smatch match;
-            regex pinRegex(R"(pin\s*\(\s*([^\s\)]+)\s*\))");
 
-            if (regex_search(line, match, pinRegex)) {
-                string pinName = match[1];
-                LibPin pin;
-                pin.name = pinName;
+        for (char c : line) {
+            if (c == '{') braceDepth++;
+            else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0) {
+                    updateCellBitWidth(cell);
+                    updateCellBitWidthFromBundles(cell);
 
-                if (parsePin(file, pinName, pin)) {
-                    cell.pins[pinName] = pin;
-                }
-            }
-        }
-        else if (line.find("bundle(") != string::npos || line.find("bundle (") != string::npos) {
-            // 新增：解析 bundle
-            smatch match;
-            regex bundleRegex(R"(bundle\s*\(\s*([^\s\)]+)\s*\))");
-
-            if (regex_search(line, match, bundleRegex)) {
-                string bundleName = match[1];
-                LibBundle bundle;
-
-                if (parseBundle(file, bundleName, bundle)) {
-                    cell.bundles[bundleName] = bundle;
-
-                    // 將 bundle members 也加入 pins（方便查詢）
-                    for (const string& member : bundle.members) {
-                        if (cell.pins.find(member) == cell.pins.end()) {
-                            LibPin memberPin;
-                            memberPin.name = member;
-                            memberPin.direction = bundle.direction;
-                            memberPin.signalType = bundle.signalType;
-                            cell.pins[member] = memberPin;
+                    // 在 cell 收尾時只印一次（優先依 isClock，其次名稱等於 CK/CLK）
+                    for (const auto& [pname, p] : cell.pins) {
+                        if (p.isClock || pname == "CK" || pname == "CLK") {
+                            std::cout << "  [DEBUG] " << cell.name
+                                << " clock pin = " << pname
+                                << ", C = " << p.capacitance << std::endl;
+                            break; // 只印一個時鐘腳
                         }
                     }
+                    return true;
                 }
             }
         }
-    }
 
-    return false;  // 未預期的檔案結束
+
+    }
+    return false; // EOF
 }
+
 vector<string> LibParser::getCellScanPins(const string& cellName) const {
     vector<string> scanPins;
 
@@ -728,6 +868,14 @@ bool LibParser::parsePin(ifstream& file, const string& pinName, LibPin& pin) {
         }
         else if (line.find("max_transition :") != string::npos) {
             pin.maxTransition = extractNumericValue(line);
+        }
+        else if (line.find("clock") != std::string::npos && line.find(':') != std::string::npos) {
+            // 支援 "clock : true ;" 或 "clock:true;"
+            auto val = line.substr(line.find(':') + 1);
+            // 去掉 ; 與空白
+            val.erase(std::remove_if(val.begin(), val.end(), [](unsigned char c) { return std::isspace(c) || c == ';'; }), val.end());
+            std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+            pin.isClock = (val.find("true") != std::string::npos);
         }
     }
 

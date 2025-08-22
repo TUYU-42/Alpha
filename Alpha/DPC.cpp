@@ -5,10 +5,37 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <sstream>
 #include <tuple>
 #include <numeric>
 #include <unordered_set>
+#include"CompatibleList.h"
+#include<algorithm>
+#include<map>
+#include<unordered_map>
+#include <regex>
+#include <iomanip> // for std::setprecision
+#include "LibParser.h"
+
+#include <limits>
 // 放在檔案頂端（.cpp/.h），包含必要的 header
+
+// DPC.cpp
+static std::string join(const std::vector<std::string>& v, const char* sep) {
+    std::ostringstream oss;
+    for (size_t i = 0;i < v.size();++i) { if (i) oss << sep; oss << v[i]; }
+    return oss.str();
+}
+static std::string joinD(const std::vector<double>& v, const char* sep) {
+    std::ostringstream oss; oss.setf(std::ios::fixed); oss << std::setprecision(6);
+    for (size_t i = 0;i < v.size();++i) { if (i) oss << sep; oss << v[i]; }
+    return oss.str();
+}
+static std::string countsToString(const std::vector<std::pair<std::string, int>>& v, const char* sepOuter = ";", const char* sepInner = ":") {
+    std::ostringstream oss;
+    for (size_t i = 0;i < v.size();++i) { if (i) oss << sepOuter; oss << v[i].first << sepInner << v[i].second; }
+    return oss.str();
+}
 
 
 
@@ -37,6 +64,50 @@ DensityPeakClustering::clusterByScanChain(
         result[clockNet] = allClusters;
     }
     return result;
+}
+
+void DensityPeakClustering::dumpCkCapReport(const std::string& path) const {
+    std::ofstream ofs(path);
+    if (!ofs.is_open()) {
+        std::cerr << "[DPC] Cannot open report file: " << path << "\n";
+        return;
+    }
+    // 新的表頭（舊欄位保留，新增 3 欄）
+    ofs << "merged_name,bitwidth,mbff_cell,sb_cell_legacy,"
+        "sb_families,sb_family_counts,sb_ck_caps,"
+        "ck_before_sum,ck_after_mb,ck_saving,members\n";
+
+    for (const auto& rep : ckCapReports_) {
+        // 尋找對應 merged instance 名稱（你應該能從 mergedFFResults_ 反查；若已有映射更好）
+        // 這裡示例：members[0] 所在的新名；若你已有 mergeMap_ 可改成 mergeMap_.getNewName(members[0]).
+        std::string mergedName = "(unknown)";
+        for (const auto& m : mergedFFResults_) {
+            if (!m.mergedFFs.empty() && m.mergedFFs[0] == rep.members.front()) {
+                mergedName = m.newInstanceName; break;
+            }
+        }
+
+        // NEW 欄位字串
+        std::string fams = join(rep.sbFamiliesUnique, ";");
+        std::string cnts = countsToString(rep.sbFamilyCounts);
+        std::string cks = joinD(rep.sbMemberCkCaps, ";");
+        std::string mems = join(rep.members, ";");
+
+        ofs << mergedName << ","
+            << rep.groupSize << ","
+            << rep.mbffCell << ","
+            << rep.sbCell << ","                 // 兼容舊欄位（第一個 family）
+            << fams << ","
+            << cnts << ","
+            << cks << ","
+            << std::fixed << std::setprecision(6)
+            << rep.ckCapBeforeSum << ","
+            << rep.ckCapAfter << ","
+            << rep.ckCapSaving << ","
+            << mems << "\n";
+    }
+    ofs.close();
+    std::cout << "[DPC] CK-cap report written: " << path << "\n";
 }
 
 void DensityPeakClustering::performClusteringOnScanChain(
@@ -599,338 +670,333 @@ const DPCCluster* DensityPeakClustering::getClusterById(int cid) const {
 
 // 統一處理 Single-Bit FF Merge with fallback width logic，包含距離優化群組選擇
 
-void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
-    // local collection (不要改 header，改成 local)
-    std::vector<std::string> remainingSingleBitFFs;
 
+
+     // for bankingCompatibleTable / MergedFF / MergeMapping
+
+
+void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
+    // === 初始化 ===
+    remainingSingleBitFFs.clear();
     mergeMap_.clear();
     mergedFFResults_.clear();
+    ckCapReports_.clear();
 
     if (!libParser_) {
-        std::cerr << "[DPC] Error: libParser is not set!" << std::endl;
+        std::cerr << "[DPC] Error: libParser is not set!\n";
         return;
     }
 
-    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates (4-bit priority, greedy, no-duplicate) ===" << std::endl;
+    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates (mixed-SBFF via common compatible MBFF, keep hierarchy) ===\n";
 
     const auto& allCells = libParser_->getAllCells();
-    int totalClustersWithMerges = 0;
-    int totalMergePairs = 0;
-    int fourbitFF = 0;
-    int twobitFF = 0;
 
-    // track globally-used single-bit instances so each instance is merged at most once
     std::unordered_set<std::string> usedInstances;
+    int totalMergeCount = 0, fourbitFF = 0, twobitFF = 0;
 
-    auto getBitWidthFromName = [](const std::string& name) -> int {
-        if (name.find("16_") != std::string::npos) return 16;
-        if (name.find("8_") != std::string::npos) return 8;
-        if (name.find("4_") != std::string::npos) return 4;
-        if (name.find("2_") != std::string::npos) return 2;
+    // 小工具：從 cellName 抓位寬（保留你原本規則）
+    auto getBitWidthFromName = [](const std::string& cellType) -> int {
+        std::vector<size_t> underscores;
+        for (size_t i = 0; i < cellType.size(); ++i) if (cellType[i] == '_') underscores.push_back(i);
+        if (underscores.size() >= 2) {
+            std::string token = cellType.substr(underscores[0] + 1, underscores[1] - underscores[0] - 1);
+            std::regex rx(R"((\d+))"); std::smatch m;
+            if (std::regex_search(token, m, rx)) return std::stoi(m[1]);
+        }
         return 1;
         };
 
-    auto distSq = [](double x1, double y1, double x2, double y2) -> double {
-        double dx = x1 - x2;
-        double dy = y1 - y2;
-        return dx * dx + dy * dy;
+    auto distSq = [](double x1, double y1, double x2, double y2) {
+        const double dx = x1 - x2, dy = y1 - y2; return dx * dx + dy * dy;
         };
 
-    auto calcGroupCenterFromCoords = [&](const std::vector<std::string>& group,
-        const std::map<std::string, std::pair<double, double>>& coords)
-        -> std::pair<int, int> {
-        double sumX = 0, sumY = 0;
-        int count = 0;
-        for (const auto& name : group) {
-            auto cit = coords.find(name);
-            if (cit != coords.end()) {
-                sumX += cit->second.first;
-                sumY += cit->second.second;
-                ++count;
-            }
-            else {
-                std::cerr << "[DPC] Warning: coord not found for " << name << "\n";
-            }
-        }
-        if (count == 0) return { 0, 0 };
-        return { static_cast<int>(sumX / count), static_cast<int>(sumY / count) };
+    auto calcCenter = [&](const std::vector<std::string>& group,
+        const std::map<std::string, std::pair<double, double>>& coords) -> std::pair<int, int> {
+            double sx = 0, sy = 0; int n = 0;
+            for (const auto& s : group) { auto it = coords.find(s); if (it != coords.end()) { sx += it->second.first; sy += it->second.second; ++n; } }
+            if (!n) return { 0,0 };
+            return { (int)std::lround(sx / n), (int)std::lround(sy / n) };
         };
 
-    // GREEDY grouping: pick best seed (min sum of nearest neighbors), then take nearest (bitSize-1) neighbors
+    // 你的 greedy：從 tmpList 中反覆取最近若干顆形成 group，並移除
     auto findGroupsRemoveUsedGreedy = [&](std::vector<std::string>& tmpList, int bitSize,
         const std::map<std::string, std::pair<double, double>>& coords)
         -> std::vector<std::vector<std::string>> {
         std::vector<std::vector<std::string>> groups;
-        // filter tmpList to those with coords
+
+        // 只保留座標存在者
         std::vector<std::string> filtered;
+        filtered.reserve(tmpList.size());
         for (auto& s : tmpList) if (coords.find(s) != coords.end()) filtered.push_back(s);
-        tmpList = filtered;
 
-        while (tmpList.size() >= static_cast<size_t>(bitSize)) {
-            int n = static_cast<int>(tmpList.size());
-            // find best seed: compute sum of nearest (bitSize-1) distances for each candidate
-            double bestSeedScore = std::numeric_limits<double>::infinity();
-            int bestSeedIdx = 0;
-            for (int i = 0; i < n; ++i) {
-                std::vector<double> dists; dists.reserve(n - 1);
-                for (int j = 0; j < n; ++j) if (i != j) {
-                    const auto& A = coords.at(tmpList[i]);
-                    const auto& B = coords.at(tmpList[j]);
-                    dists.push_back(distSq(A.first, A.second, B.first, B.second));
-                }
-                if (dists.empty()) continue;
-                std::nth_element(dists.begin(), dists.begin() + std::min((int)dists.size(), bitSize - 1), dists.end());
-                double s = 0;
-                int take = std::min((int)dists.size(), bitSize - 1);
-                for (int k = 0; k < take; ++k) s += dists[k];
-                if (s < bestSeedScore) { bestSeedScore = s; bestSeedIdx = i; }
-            }
+        // 就近（x+y）排序
+        std::sort(filtered.begin(), filtered.end(), [&](const std::string& a, const std::string& b) {
+            auto A = coords.at(a), B = coords.at(b); return (A.first + A.second) < (B.first + B.second);
+            });
 
-            // build group from seed + its nearest neighbors
-            std::vector<std::pair<double, int>> neigh; neigh.reserve(n - 1);
-            for (int j = 0; j < n; ++j) if (j != bestSeedIdx) {
-                const auto& A = coords.at(tmpList[bestSeedIdx]);
-                const auto& B = coords.at(tmpList[j]);
-                neigh.emplace_back(distSq(A.first, A.second, B.first, B.second), j);
+        std::vector<char> usedLocal(filtered.size(), 0);
+        for (size_t i = 0;i < filtered.size();++i) {
+            if (usedLocal[i]) continue;
+            std::vector<std::pair<double, size_t>> neigh;
+            for (size_t j = 0;j < filtered.size();++j) {
+                if (i == j || usedLocal[j]) continue;
+                auto Ai = coords.at(filtered[i]), Aj = coords.at(filtered[j]);
+                neigh.push_back({ distSq(Ai.first,Ai.second,Aj.first,Aj.second), j });
             }
+            if ((int)neigh.size() < bitSize - 1) continue;
             std::sort(neigh.begin(), neigh.end());
-            std::vector<std::string> group;
-            group.push_back(tmpList[bestSeedIdx]);
-            int need = bitSize - 1;
-            for (int k = 0; k < need && k < (int)neigh.size(); ++k)
-                group.push_back(tmpList[neigh[k].second]);
-
-            // if we couldn't gather enough neighbors (shouldn't happen due to while condition), break
-            if (group.size() < static_cast<size_t>(bitSize)) break;
-
-            // push group and remove used
-            groups.push_back(group);
-            for (const auto& s : group) tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), s), tmpList.end());
+            std::vector<std::string> g; g.reserve(bitSize);
+            g.push_back(filtered[i]);
+            for (int k = 0;k < bitSize - 1;++k) g.push_back(filtered[neigh[k].second]);
+            usedLocal[i] = 1; for (int k = 0;k < bitSize - 1;++k) usedLocal[neigh[k].second] = 1;
+            groups.push_back(std::move(g));
         }
+
+        // 從 tmpList 中剔除用掉者
+        for (const auto& g : groups)
+            for (const auto& s : g)
+                tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), s), tmpList.end());
         return groups;
         };
 
-    // iterate clusters_
+    // 選型：延續 Beta/Area 與 Gamma/Power 的權重，平手時以 CK‑cap saving 做最後 tie-break
+    auto chooseBestMBFF = [&](const std::vector<std::string>& cands, int bit,
+        double c_sb_perbit) -> std::string {
+            if (cands.empty()) return {};
+            std::string best; double aBest = std::numeric_limits<double>::infinity();
+            double pBest = std::numeric_limits<double>::infinity();
+            double ckSaveBest = -std::numeric_limits<double>::infinity();
+
+            for (const auto& mb : cands) {
+                if (getBitWidthFromName(mb) != bit) continue;
+                auto it = allCells.find(mb); if (it == allCells.end()) continue;
+                const auto& cell = it->second;
+                double area = cell.area;
+                double leak = cell.cellLeakagePower;
+                double ck_mb = libParser_->getClockPinCap(mb);
+                double ckSave = c_sb_perbit * bit - ck_mb; // 越大越好
+
+                if (weights_.Beta > weights_.Gamma) {
+                    // 先比 Area，再比 Power；最後比 CK 總節省
+                    if (area < aBest || (area == aBest && (leak < pBest || (leak == pBest && ckSave > ckSaveBest)))) {
+                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
+                    }
+                }
+                else if (weights_.Gamma > weights_.Beta) {
+                    // 先比 Power，再比 Area；最後比 CK 總節省
+                    if (leak < pBest || (leak == pBest && (area < aBest || (area == aBest && ckSave > ckSaveBest)))) {
+                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
+                    }
+                }
+                else {
+                    // 權重接近：Power→Area→CK
+                    if (leak < pBest || (leak == pBest && (area < aBest || (area == aBest && ckSave > ckSaveBest)))) {
+                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
+                    }
+                }
+            }
+            return best;
+        };
+
+    // === 逐個 cluster（同 clock domain 已由 DPC 分群保證）===
     for (const auto& cluster : clusters_) {
-        // build sbffToInstances and coords, but skip instances already used
-        std::map<std::string, std::vector<std::string>> sbffToInstances;
+
+        // 蒐集該 cluster 內 instance → {x,y} 與 sb-family（退化）
         std::map<std::string, std::pair<double, double>> coords;
+        std::unordered_map<std::string, std::string> instToSB; // inst -> sb family name
         for (int idx : cluster.members) {
+            if (idx < 0 || idx >= (int)points_.size()) continue;
             const auto& pt = points_[idx];
-            // skip if already merged elsewhere
-            if (usedInstances.find(pt.instanceName) != usedInstances.end()) continue;
+            if (usedInstances.count(pt.instanceName)) continue;
 
             std::string sbff = libParser_->getSingleBitDegenerate(pt.cellType);
             if (sbff.empty()) sbff = pt.cellType;
-            sbffToInstances[sbff].push_back(pt.instanceName);
+
+            // 只處理在 compatible-list 內有定義的 family
+            if (bankingCompatibleTable.find(sbff) == bankingCompatibleTable.end()) continue; // CompatibleList.h
+            instToSB[pt.instanceName] = sbff;
             coords[pt.instanceName] = { pt.x, pt.y };
         }
+        if (coords.size() < 2) continue;
 
-        bool clusterPrinted = false;
+        // 依「階層前綴（最後一個 '/' 之前）」拆桶（保留原本層級限制）
+        std::map<std::string, std::vector<std::string>> prefixGroups;
+        for (const auto& kv : coords) {
+            const std::string& inst = kv.first;
+            auto pos = inst.find_last_of('/');
+            std::string prefix = (pos != std::string::npos ? inst.substr(0, pos) : "");
+            prefixGroups[prefix].push_back(inst);
+        }
 
-        for (auto& kv : sbffToInstances) {
-            const std::string& sbff = kv.first;
-            const auto& instListRawAll = kv.second;
+        for (auto& pg : prefixGroups) {
+            // 濾掉全域已用
+            std::vector<std::string> instList;
+            instList.reserve(pg.second.size());
+            for (const auto& nm : pg.second)
+                if (!usedInstances.count(nm)) instList.push_back(nm);
 
-            // filter out any that became used since grouping (conservative)
-            std::vector<std::string> instListRaw;
-            instListRaw.reserve(instListRawAll.size());
-            for (const auto& nm : instListRawAll) if (usedInstances.find(nm) == usedInstances.end()) instListRaw.push_back(nm);
-
-            if (instListRaw.size() < 2) {
-                // add remaining that are not used
-                for (const auto& nm : instListRaw) remainingSingleBitFFs.push_back(nm);
+            if (instList.size() < 2) {
+                for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm);
                 continue;
             }
 
-            // group by path prefix
-            std::map<std::string, std::vector<std::string>> prefixGroups;
-            for (const auto& inst : instListRaw) {
-                auto pos = inst.find_last_of('/');
-                std::string prefix = (pos != std::string::npos ? inst.substr(0, pos) : "");
-                prefixGroups[prefix].push_back(inst);
-            }
+            // 產生 4→2 groups（同你原本 greedy）
+            auto tmp4 = instList;
+            auto groups4 = findGroupsRemoveUsedGreedy(tmp4, 4, coords);
+            auto groups2 = findGroupsRemoveUsedGreedy(tmp4, 2, coords);
 
-            for (auto& pg : prefixGroups) {
-                // filter out used in this prefix group too (defensive)
-                std::vector<std::string> instList;
-                instList.reserve(pg.second.size());
-                for (const auto& nm : pg.second) if (usedInstances.find(nm) == usedInstances.end()) instList.push_back(nm);
+            auto handleGroups = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
+                for (const auto& g : groups) {
+                    // 若任一成員已被用掉就跳過
+                    bool anyUsed = false; for (const auto& s : g) if (usedInstances.count(s)) { anyUsed = true; break; }
+                    if (anyUsed) continue;
 
-                if (instList.size() < 2) {
-                    for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm);
-                    continue;
-                }
-
-                if (!clusterPrinted) {
-                    std::cout << "\nCluster #" << cluster.clusterId << ":\n";
-                    clusterPrinted = true;
-                    totalClustersWithMerges++;
-                }
-
-                // find MBFF candidates
-                std::vector<std::string> mbffCandidates;
-                for (const auto& cellIt : allCells) {
-                    if (cellIt.second.singleBitDegenerate == sbff)
-                        mbffCandidates.push_back(cellIt.first);
-                }
-                if (mbffCandidates.empty()) {
-                    remainingSingleBitFFs.insert(remainingSingleBitFFs.end(), instList.begin(), instList.end());
-                    continue;
-                }
-
-                // before grouping, ensure tmpList excludes globally-used instances (defensive)
-                std::vector<std::string> tmpList;
-                tmpList.reserve(instList.size());
-                for (const auto& nm : instList) if (usedInstances.find(nm) == usedInstances.end()) tmpList.push_back(nm);
-
-                // prioritize 4-bit then 2-bit using greedy grouping that removes used instances from tmpList
-                auto groups4 = findGroupsRemoveUsedGreedy(tmpList, 4, coords);
-                // ensure groups do not contain already-used instances (shouldn't, but double-check)
-                for (auto& g : groups4) {
-                    bool ok = true;
-                    for (const auto& mbr : g) if (usedInstances.find(mbr) != usedInstances.end()) { ok = false; break; }
-                    if (!ok) continue;
-                }
-                auto groups2 = findGroupsRemoveUsedGreedy(tmpList, 2, coords);
-
-                auto handleGroups = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
-                    for (const auto& group : groups) {
-                        // skip any group if any member already used (defensive)
-                        bool anyUsed = false;
-                        for (const auto& mbr : group) if (usedInstances.find(mbr) != usedInstances.end()) { anyUsed = true; break; }
-                        if (anyUsed) continue;
-
-                        std::string bestFF;
-                        //double bestScore = std::numeric_limits<double>::infinity(); // 不再使用原加權分數
-
-                        // 替換後的選擇邏輯：按你要求的規則（beta/gamma 比較與 tie-breaker）
-                        double alpha = weights_.Alpha;
-                        double beta = weights_.Beta;
-                        double gamma = weights_.Gamma;
-
-                        auto chooseByAreaThenPower = [&](const std::vector<std::string>& cands) -> std::string {
-                            std::string best;
-                            double bestArea = std::numeric_limits<double>::infinity();
-                            double bestPower = std::numeric_limits<double>::infinity();
-                            for (const auto& mbff : cands) {
-                                if (getBitWidthFromName(mbff) != bit) continue;
-                                auto cit = allCells.find(mbff);
-                                if (cit == allCells.end()) continue;
-                                const auto& cell = cit->second;
-                                if (cell.area < bestArea || (cell.area == bestArea && cell.cellLeakagePower < bestPower)) {
-                                    bestArea = cell.area;
-                                    bestPower = cell.cellLeakagePower;
-                                    best = mbff;
-                                }
-                            }
-                            return best;
-                            };
-
-                        auto chooseByPowerThenArea = [&](const std::vector<std::string>& cands) -> std::string {
-                            std::string best;
-                            double bestPower = std::numeric_limits<double>::infinity();
-                            double bestArea = std::numeric_limits<double>::infinity();
-                            for (const auto& mbff : cands) {
-                                if (getBitWidthFromName(mbff) != bit) continue;
-                                auto cit = allCells.find(mbff);
-                                if (cit == allCells.end()) continue;
-                                const auto& cell = cit->second;
-                                if (cell.cellLeakagePower < bestPower || (cell.cellLeakagePower == bestPower && cell.area < bestArea)) {
-                                    bestPower = cell.cellLeakagePower;
-                                    bestArea = cell.area;
-                                    best = mbff;
-                                }
-                            }
-                            return best;
-                            };
-
-                        // Decide strategy according to weights
-                        std::string bestFF_cand;
-                        if (beta == 0.0) {
-                            // Beta = 0 -> choose area smallest (tie-breaker power)
-                            bestFF_cand = chooseByAreaThenPower(mbffCandidates);
-                        }
-                        else if (gamma == 0.0) {
-                            // Gamma = 0 -> choose power smallest (tie-breaker area)
-                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
-                        }
-                        else if (alpha > 10000*beta) {
-                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
-                        }
-                        else if (gamma >= 30000.0 * beta) {
-                            // Gamma >> Beta (>= 3000x) -> prioritize area
-                            bestFF_cand = chooseByAreaThenPower(mbffCandidates);
-                        }
-                        else if (beta >= 30000.0 * gamma) {
-                            // Beta >> Gamma (>= 3000x) -> prioritize power
-                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
-                        }
-                        else {
-                            // Default (weights comparable) -> 遵從 "不然一律選 power 小"
-                            bestFF_cand = chooseByPowerThenArea(mbffCandidates);
-                        }
-
-                        if (!bestFF_cand.empty()) {
-                            bestFF = bestFF_cand;
-                        }
-
-                        if (bestFF.empty()) continue;
-
-                        totalMergePairs++;
-                        MergedFF merged;
-                        merged.mbffType = bestFF;
-                        merged.bitwidth = bit;
-                        merged.mergedFFs = group;
-                        std::string base = "merged_" + std::to_string(totalMergePairs);
-                        merged.newInstanceName = (pg.first.empty() ? base : pg.first + "/" + base);
-
-                        auto cen = calcGroupCenterFromCoords(group, coords);
-                        merged.newX = cen.first;
-                        merged.newY = cen.second;
-
-                        auto cellIt = allCells.find(bestFF);
-                        if (cellIt != allCells.end()) {
-                            merged.power = cellIt->second.cellLeakagePower;
-                            merged.area = cellIt->second.area;
-                        }
-                        else {
-                            merged.power = 0.0; merged.area = 0.0;
-                        }
-
-                        // simple D/Q mapping
-                        for (int i = 0; i < (int)merged.mergedFFs.size(); ++i) {
-                            std::string d_pin = "D" + std::to_string(i);
-                            std::string q_pin = "Q" + std::to_string(i);
-                            merged.mbffPinToOrigPin[d_pin] = merged.mergedFFs[i] + "/D";
-                            merged.mbffPinToOrigPin[q_pin] = merged.mergedFFs[i] + "/Q";
-                            merged.mbffPinToOrigFF[d_pin] = merged.mergedFFs[i];
-                            merged.mbffPinToOrigFF[q_pin] = merged.mergedFFs[i];
-                        }
-
-                        // record merged and mark members as used (prevent duplicates globally)
-                        mergedFFResults_.push_back(merged);
-                        for (const auto& mbr : merged.mergedFFs) usedInstances.insert(mbr);
-
-                        if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
+                    // === 核心差異：對 group 內每顆 SBFF 的 compatible-list 取「交集」 ===
+                    // 1) 蒐集每顆的 white list（CompatibleList.h 提供 bankingCompatibleTable）
+                    std::vector<const std::vector<std::string>*> whites;
+                    whites.reserve(g.size());
+                    for (const auto& s : g) {
+                        const std::string& sb = instToSB.at(s);
+                        const auto itW = bankingCompatibleTable.find(sb);
+                        if (itW == bankingCompatibleTable.end()) { whites.clear(); break; }
+                        whites.push_back(&(itW->second));
                     }
-                    };
+                    if (whites.empty()) continue;
 
-                handleGroups(groups4, 4);
-                handleGroups(groups2, 2);
-            }
+                    // 2) 交集
+                    std::vector<std::string> commonMBFF = *whites[0];
+                    auto intersect_inplace = [&](const std::vector<std::string>& b) {
+                        std::vector<std::string> tmp; tmp.reserve(commonMBFF.size());
+                        for (const auto& x : commonMBFF)
+                            if (std::find(b.begin(), b.end(), x) != b.end()) tmp.push_back(x);
+                        commonMBFF.swap(tmp);
+                        };
+                    for (size_t i = 1;i < whites.size();++i) intersect_inplace(*whites[i]);
+                    if (commonMBFF.empty()) continue;
+
+                    // 3) 僅保留位寬相符的 MBFF
+                    std::vector<std::string> bitMatched;
+                    bitMatched.reserve(commonMBFF.size());
+                    for (const auto& mb : commonMBFF)
+                        if (getBitWidthFromName(mb) == bit) bitMatched.push_back(mb);
+                    if (bitMatched.empty()) continue;
+
+                    // 4) 取消「singleBitDegenerate == sbff」的硬條件（允許異型 SBFF 混用）
+                    //    但可做弱檢查：bestFF 的退化型需屬於 group 內至少一種 single-bit family（sanity）
+                    // CK-cap：以 group 內 SBFF 的 CK 值「平均」當作單顆 c_sb，較合理
+                    double c_sb_sum = 0.0;
+                    for (const auto& s : g) {
+                        const std::string& sb = instToSB.at(s);
+                        c_sb_sum += libParser_->getClockPinCap(sb);
+                    }
+                    double c_sb_avg = (g.empty() ? 0.0 : (c_sb_sum / (double)g.size()));
+
+                    // 5) 按權重與 CK saving 選出最佳 MBFF
+                    std::string bestFF = chooseBestMBFF(bitMatched, bit, c_sb_avg);
+                    if (bestFF.empty()) continue;
+
+                    // 弱檢查：bestFF 的單位退化是否屬於 group 內任一 sb-family（若取得到）
+                    bool sanityOK = true;
+                    if (const auto* cell = libParser_->getCell(bestFF)) {
+                        const std::string& deg = cell->singleBitDegenerate;
+                        if (!deg.empty()) {
+                            bool hit = false;
+                            for (const auto& s : g) if (instToSB.at(s) == deg) { hit = true; break; }
+                            sanityOK = hit; // 至少要覆蓋到其中一種 family
+                        }
+                    }
+                    if (!sanityOK) continue;
+
+                    // 6) 建立 MergedFF 結果，命名保留階層：prefix/merged_#
+                    ++totalMergeCount;
+                    MergedFF merged;
+                    merged.mbffType = bestFF;
+                    merged.bitwidth = bit;
+                    merged.mergedFFs = g;
+
+                    std::string base = "merged_" + std::to_string(totalMergeCount);
+                    merged.newInstanceName = (pg.first.empty() ? base : (pg.first + "/" + base));
+
+                    // 位置用幾何中心
+                    auto cen = calcCenter(g, coords);
+                    merged.newX = cen.first; merged.newY = cen.second;
+
+                    // 面積/功耗
+                    if (const auto it = allCells.find(bestFF); it != allCells.end()) {
+                        merged.area = (float)it->second.area;
+                        merged.power = (float)it->second.cellLeakagePower;
+                    }
+
+                    // D/Q pin 映射（簡單 D0/Q0 對應 group[0]…）
+                    for (int i = 0;i < (int)g.size();++i) {
+                        std::string d = "D" + std::to_string(i);
+                        std::string q = "Q" + std::to_string(i);
+                        merged.mbffPinToOrigPin[d] = g[i] + "/D";
+                        merged.mbffPinToOrigPin[q] = g[i] + "/Q";
+                        merged.mbffPinToOrigFF[d] = g[i];
+                        merged.mbffPinToOrigFF[q] = g[i];
+                    }
+
+                    c_sb_sum = 0.0;
+                    std::unordered_map<std::string, int> famCnt;
+                    std::vector<std::string> sbFamiliesPerMember;
+                    std::vector<double>     sbCkPerMember;
+                    sbFamiliesPerMember.reserve(g.size());
+                    sbCkPerMember.reserve(g.size());
+
+                    for (const auto& s : g) {
+                        const std::string& sb = instToSB.at(s);                   // 這顆的 single-bit family/type
+                        double c_sb = libParser_->getClockPinCap(sb);             // 這顆對應 family 的 CK cap
+                        c_sb_sum += c_sb;
+                        ++famCnt[sb];
+                        sbFamiliesPerMember.push_back(sb);
+                        sbCkPerMember.push_back(c_sb);
+                    }
+
+                    CkCapReport rep;
+                    rep.groupSize = bit;
+                    // 舊欄位：為了相容保留（放第一個 family；若你想顯示 "MIXED" 也可）
+                    rep.sbCell = sbFamiliesPerMember.empty() ? "" : sbFamiliesPerMember.front();
+                    rep.mbffCell = bestFF;
+                    rep.ckCapBeforeSum = c_sb_sum;
+                    rep.ckCapAfter = libParser_->getClockPinCap(bestFF);
+                    rep.ckCapBefore = c_sb_sum;                 // 舊欄位維持相同語意
+                    rep.ckCapSaving = rep.ckCapBeforeSum - rep.ckCapAfter;
+                    rep.members = g;
+
+                    // NEW: unique families + counts + 每顆 CK
+                    for (const auto& kv : famCnt) {
+                        rep.sbFamiliesUnique.push_back(kv.first);
+                        rep.sbFamilyCounts.push_back(kv);           // pair<family, count>
+                    }
+                    rep.sbMemberCkCaps = std::move(sbCkPerMember);
+
+                    // push
+                    ckCapReports_.push_back(std::move(rep));
+                    // 8) 標記 used、統計
+                    mergedFFResults_.push_back(std::move(merged));
+                    for (const auto& s : g) usedInstances.insert(s);
+                    if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
+                }
+                };
+
+            // 先 4 再 2（與原流程一致）
+            handleGroups(groups4, 4);
+            handleGroups(groups2, 2);
+
+            // 剩餘未用的收回 remaining
+            for (const auto& nm : tmp4) if (!usedInstances.count(nm)) remainingSingleBitFFs.push_back(nm);
         }
     }
 
-    // build mergeMap
+    // 建回 mergeMap_（供後續生成/輸出使用）
     for (const auto& m : mergedFFResults_) {
-        for (const auto& s : m.mergedFFs) {
-            mergeMap_.addMapping(s, m.newInstanceName);
-        }
+        for (const auto& s : m.mergedFFs) mergeMap_.addMapping(s, m.newInstanceName);
     }
 
     std::cout << "\n[DPC] Found " << mergedFFResults_.size()
-        << " merged instances. (4-bit: " << fourbitFF << ", 2-bit: " << twobitFF << ")\n";
+        << " merged instances. (4-bit: " << fourbitFF
+        << ", 2-bit: " << twobitFF << ")\n";
 }
 
 
@@ -1438,4 +1504,3 @@ double DensityPeakClustering::estimateCutoffBySampling_(size_t samples) const {
         ds.size() - 1);
     return ds[approxIdx];
 }
-

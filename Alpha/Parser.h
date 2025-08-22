@@ -177,9 +177,9 @@ public:
     bool isFFCellType(const std::string& cellType) const {
         return ffCellTypes_.find(cellType) != ffCellTypes_.end();
     }
-   
+
     // Get macro map
-  
+
     DefData& getDefData();  // Non-const version for updates
     const DefData& getDefData() const;  // Const version
 

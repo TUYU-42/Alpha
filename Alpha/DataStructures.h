@@ -7,8 +7,9 @@
 #include <unordered_map>
 #include <memory>
 #include<set>
-extern std::unordered_map<std::string, std::vector<std::string>> bankingCompatibleTable;
-extern std::unordered_map<std::string, std::vector<std::string>> debankingCompatibleTable;
+
+// === »щµAЩYБПЅY? ===
+
 // ™аЦШ…ў"µЅY?
 struct Weights {
     double Alpha = 0.0;
@@ -466,4 +467,6 @@ struct MBFFInstance {
     std::map<std::string, std::string> mbffPinToOrigPin; // 例如 D[0] -> foo1__100/D
     std::map<std::string, std::string> mbffPinToOrigFF;  // 例如 D[0] -> foo1__100
 };
+extern std::unordered_map<std::string, std::vector<std::string>> debankingCompatibleTable;
+extern std::unordered_map<std::string, std::vector<std::string>> bankingCompatibleTable;
 #endif // DATASTRUCTURES_H

@@ -91,7 +91,7 @@ private:
     std::set<std::string> flipFlopCellTypes_;
 
     // 新增：LibParser 的參考
-    const LibParser* libParser_= nullptr;
+    const LibParser* libParser_ = nullptr;
     double siteWidth_;
     double rowHeight_;
     int defUnits_;

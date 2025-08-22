@@ -8,6 +8,10 @@
 #include <array>
 using namespace std;
 
+
+
+
+
 // 是否為 escaped 標識（Verilog 以 '\' 開頭，並常以空白結尾）
 inline bool WO_isEscaped(const std::string& s) {
     return !s.empty() && s[0] == '\\';
@@ -40,78 +44,6 @@ inline std::string WO_normPath(const std::string& path) {
     }
     return out;
 }
-
-static std::vector<std::string> makeNameVariants(const std::string& name) {
-    std::vector<std::string> out;
-    if (name.empty()) return out;
-    auto push = [&](const std::string& s) {
-        if (!s.empty() && std::find(out.begin(), out.end(), s) == out.end()) out.push_back(s);
-        };
-
-    // raw
-    push(name);
-
-    // unescaped if starts with '\' and ends with ' '
-    if (name.size() >= 2 && name.front() == '\\' && name.back() == ' ') {
-        push(name.substr(1, name.size() - 2));
-    }
-    else {
-        // also try escaped form
-        push(std::string("\\") + name + " ");
-    }
-
-    // WO_normPath (if you have that function available in this translation unit)
-    push(WO_normPath(name));
-
-    // basename (after last '/')
-    size_t p = name.find_last_of('/');
-    if (p != std::string::npos) push(name.substr(p + 1));
-
-    // br2dunder and br2under on unescaped variant
-    auto unesc = (name.front() == '\\' && name.back() == ' ') ? name.substr(1, name.size() - 2) : name;
-    // br2dunder
-    {
-        std::string r; r.reserve(unesc.size() + 4);
-        for (size_t i = 0; i < unesc.size(); ++i) {
-            if (unesc[i] == '[') {
-                size_t j = i + 1, k = j;
-                while (k < unesc.size() && isdigit((unsigned char)unesc[k])) ++k;
-                if (k<unesc.size() && unesc[k] == ']' && k>j) {
-                    r += "__";
-                    r.append(unesc.begin() + j, unesc.begin() + k);
-                    r += "__";
-                    i = k; continue;
-                }
-            }
-            r.push_back(unesc[i]);
-        }
-        push(r);
-    }
-    // br2under
-    {
-        std::string r; r.reserve(unesc.size() + 2);
-        for (size_t i = 0; i < unesc.size(); ++i) {
-            if (unesc[i] == '[') {
-                size_t j = i + 1, k = j;
-                while (k < unesc.size() && isdigit((unsigned char)unesc[k])) ++k;
-                if (k<unesc.size() && unesc[k] == ']' && k>j) {
-                    r.push_back('_');
-                    r.append(unesc.begin() + j, unesc.begin() + k);
-                    r.push_back('_');
-                    i = k; continue;
-                }
-            }
-            r.push_back(unesc[i]);
-        }
-        push(r);
-    }
-
-    return out;
-}
-
-
-
-
 
 // 取得 basename（最後一段）
 inline std::string WO_basename(const std::string& path) {
@@ -368,6 +300,30 @@ int WriteOutput::getBitIndexFromPairs(const vector<pair<int, string>>& pairs,
     }
     return -1;
 }
+// WriteOutput.cpp
+void WriteOutput::writeOperationSection(std::ofstream& fout) const {
+    // 先把 input 的 SBFF -> lib 型別建索引
+    std::unordered_map<std::string, std::string> inst2lib;
+    inst2lib.reserve(originalDefData_.flipFlops.size());
+    for (const auto& ff : originalDefData_.flipFlops) {
+        inst2lib[ff.instName] = ff.cellType; // ff.cellType 即該 instance 的 library cell
+    }
+
+    // 目前只做 banking（SB -> MB），因此每個 mergedFF 產生一個 create_multibit
+    const size_t opCount = mergedFFResults_.size();
+    fout << "\nOPERATION " << opCount << "\n\n";
+
+    for (const auto& m : mergedFFResults_) {
+        fout << "create_multibit { ";
+        // 輸入端：各個單 bit flop（bit_width 一律 1）
+        for (const auto& sb : m.mergedFFs) {
+            const std::string lib = (inst2lib.count(sb) ? inst2lib.at(sb) : std::string("UNKNOWN"));
+            fout << "{" << sb << " " << lib << " 1} ";
+        }
+        // 輸出端：新產生的 MBFF（型別用 m.mbffType，寬度用 m.bitwidth）
+        fout << "{" << m.newInstanceName << " " << m.mbffType << " " << m.bitwidth << "} }" << "\n";
+    }
+}
 
 // 寫入 mapping list
 bool WriteOutput::writeMapList() {
@@ -556,31 +512,6 @@ bool WriteOutput::writeMapList() {
     cout << "  ✓ Generated " << mappingFile << endl;
     return true;
 }
-// WriteOutput.cpp
-void WriteOutput::writeOperationSection(std::ofstream& fout) const {
-    // 先把 input 的 SBFF -> lib 型別建索引
-    std::unordered_map<std::string, std::string> inst2lib;
-    inst2lib.reserve(originalDefData_.flipFlops.size());
-    for (const auto& ff : originalDefData_.flipFlops) {
-        inst2lib[ff.instName] = ff.cellType; // ff.cellType 即該 instance 的 library cell
-    }
-
-    // 目前只做 banking（SB -> MB），因此每個 mergedFF 產生一個 create_multibit
-    const size_t opCount = mergedFFResults_.size();
-    fout << "\nOPERATION " << opCount << "\n\n";
-
-    for (const auto& m : mergedFFResults_) {
-        fout << "create_multibit { ";
-        // 輸入端：各個單 bit flop（bit_width 一律 1）
-        for (const auto& sb : m.mergedFFs) {
-            const std::string lib = (inst2lib.count(sb) ? inst2lib.at(sb) : std::string("UNKNOWN"));
-            fout << "{" << sb << " " << lib << " 1} ";
-        }
-        // 輸出端：新產生的 MBFF（型別用 m.mbffType，寬度用 m.bitwidth）
-        fout << "{" << m.newInstanceName << " " << m.mbffType << " " << m.bitwidth << "} }" << "\n";
-    }
-}
-
 void WriteOutput::buildSimpleToFullNameMapping() {
     simpleToFullNameMap_.clear();
 
@@ -1156,6 +1087,7 @@ bool WriteOutput::writeVerilog() {
 
 
 
+
 // 產生 instance 字串
 string WriteOutput::generateInstanceString(const VerilogInstance& inst) const {
     stringstream ss;
@@ -1371,76 +1303,44 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
 
 // 找到 pin 的 net 連接
 string WriteOutput::findNetForPin(const string& ffName, const string& pinName) const {
-    // cache key
-    std::string key = ffName + "\t" + pinName;
-    auto itc = netLookupCache_.find(key);
-    if (itc != netLookupCache_.end()) return itc->second;
-
-    // generate variants once
-    auto variants = makeNameVariants(ffName);
-
-    // 1) try VerilogParser (most authoritative if available)
+    // 從 VerilogParser 查找
     if (verilogParser_) {
-        for (const auto& v : variants) {
-            // try hierarchical full path first
-            const VerilogInstance* inst = verilogParser_->findInstanceByHierarchicalPath(v);
-            if (!inst) inst = verilogParser_->findInstance(v);
-            if (inst) {
-                for (const auto& conn : inst->connections) {
-                    if (conn.first == pinName) {
-                        netLookupCache_[key] = conn.second;
-                        return conn.second;
-                    }
+        // 取得完整路徑
+        string fullPath = getFullPath(ffName);
+
+        // 查找 instance
+        const VerilogInstance* inst = verilogParser_->findInstanceByHierarchicalPath(fullPath);
+        if (!inst) {
+            inst = verilogParser_->findInstance(ffName);
+        }
+
+        if (inst) {
+            for (const auto& conn : inst->connections) {
+                if (conn.first == pinName) {
+                    return conn.second;
                 }
             }
         }
     }
 
-    // 2) try instPinNets (DEF-side quick table)
-    for (const auto& v : variants) {
-        for (const auto& ipn : originalDefData_.instPinNets) {
-            if (ipn.inst == v && ipn.pin == pinName) {
-                netLookupCache_[key] = ipn.net;
-                return ipn.net;
-            }
-        }
-    }
-
-    // 3) try original nets list (fall back)
-    for (const auto& v : variants) {
-        for (const auto& net : originalDefData_.nets) {
-            for (const auto& c : net.connections) {
-                if (c.instance == v && c.pin == pinName) {
-                    netLookupCache_[key] = net.name;
-                    return net.name;
-                }
-            }
-        }
-    }
-
-    // 4) last-resort: fuzzy match on unescaped basename
-    auto norm = [](const std::string& s)->std::string {
-        if (s.size() >= 2 && s.front() == '\\' && s.back() == ' ') return s.substr(1, s.size() - 2);
-        return s;
-        };
-    std::string un = norm(ffName);
+    // 從 DefData 查找
     for (const auto& net : originalDefData_.nets) {
-        for (const auto& c : net.connections) {
-            if (norm(c.instance) == un && c.pin == pinName) {
-                netLookupCache_[key] = net.name;
+        for (const auto& conn : net.connections) {
+            if (conn.instance == ffName && conn.pin == pinName) {
                 return net.name;
             }
         }
     }
 
-    netLookupCache_[key] = string("UNCONNECTED");
-    return string("UNCONNECTED");
+    // 從 instPinNets 查找
+    for (const auto& ipn : originalDefData_.instPinNets) {
+        if (ipn.inst == ffName && ipn.pin == pinName) {
+            return ipn.net;
+        }
+    }
+
+    return "UNCONNECTED";
 }
-
-
-
-
-
 
 // WriteOutput.cpp
 
@@ -2115,8 +2015,6 @@ bool WriteOutput::writeDef() {
         return false;
     }
 }
-
-
 
 // 寫入所有檔案
 bool WriteOutput::writeAll() {
