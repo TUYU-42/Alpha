@@ -343,6 +343,8 @@ struct MergedFF {
     std::string orientation = "N";
     std::map<std::string, std::string> mbffPinToOrigPin; // e.g. D0 -> foo/D
     std::map<std::string, std::string> mbffPinToOrigFF;  // e.g. D0 -> foo
+
+    std::string hierPrefix; // e.g. "hier_top_mod_5/.../hier_top_mod_2"
 };
 
 struct PlacedComponent {

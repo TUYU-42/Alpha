@@ -18,7 +18,12 @@ Parser::Parser(const string& baseName, const string& outputName)
     clusteringPerformed_(false) {  // Add this
     initializeParsers();
 }
-
+Weights Parser::getWeights() const {
+    // 已成功讀過 weight 檔就回傳實際權重，否則回傳 0 初始化
+    if (weightParser_ && weightLoaded_) return weightParser_->getWeights();
+    Weights w{}; // 全部 0
+    return w;
+}
 
 // Destructor
 Parser::~Parser() = default;

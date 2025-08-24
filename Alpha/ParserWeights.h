@@ -13,15 +13,17 @@ public:
     // Constructor & Destructor
     WeightParser();
     ~WeightParser() = default;
+    const Weights& getWeights() const { return weights_; }
+    // NEW: 是否已載入
+    bool isLoaded() const { return isLoaded_; }
+    // NEW: 初始 cell 清單（若你有用）
+    const std::vector<std::string>& getCellList() const { return cellList_; }
 
     // Main interface methods
     bool parseFile(const std::string& filename);
     bool parseFromString(const std::string& content);
 
-    // Data access methods
-    const Weights& getWeights() const { return weights_; }
     Weights& getWeights() { return weights_; }
-    bool isLoaded() const { return isLoaded_; }
 
     // Individual weight access
     double getAlpha() const { return weights_.Alpha; }

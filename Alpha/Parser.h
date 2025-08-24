@@ -179,6 +179,7 @@ public:
     }
 
     // Get macro map
+    Weights getWeights() const;
 
     DefData& getDefData();  // Non-const version for updates
     const DefData& getDefData() const;  // Const version
