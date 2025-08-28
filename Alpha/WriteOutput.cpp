@@ -1998,83 +1998,141 @@ bool WriteOutput::writeDef() {
         defFile << "END COMPONENTS\n\n";
 
         // 除錯：統計 UNCONNECTED nets
-        int unconnectedCount = 0;
-        int unconnectedWithQN = 0;
+        // === 收集原始檔中需保留並重排的區塊 ===
+        std::vector<std::string> pinsBlk, pinPropsBlk, blkgsBlk, spnetsBlk, scanchainsBlk, unknownTail;
 
-        defFile << "NETS " << defDataCopy.nets.size() << " ;\n";
-        for (const auto& net : defDataCopy.nets) {
-            if (net.name.find("UNCONNECTED") != std::string::npos) {
-                unconnectedCount++;
+        auto startsWith = [](const std::string& s, const char* kw)->bool { return s.rfind(kw, 0) == 0; };
+        enum CopyState { CPY_NORMAL, CPY_PINS, CPY_PINPROPS, CPY_BLOCKAGES, CPY_SPNS, CPY_SCANCH, CPY_SKIP_STD };
+        CopyState cst = CPY_NORMAL;
 
-                for (const auto& conn : net.connections) {
-                    if (conn.pin.find("QN") != std::string::npos) {
-                        unconnectedWithQN++;
-                        break;
+        auto pushLine = [&](CopyState st, const std::string& ln) {
+            switch (st) {
+            case CPY_PINS:       pinsBlk.push_back(ln); break;
+            case CPY_PINPROPS:   pinPropsBlk.push_back(ln); break;
+            case CPY_BLOCKAGES:  blkgsBlk.push_back(ln); break;
+            case CPY_SPNS:       spnetsBlk.push_back(ln); break;
+            case CPY_SCANCH:     scanchainsBlk.push_back(ln); break;
+            default:             unknownTail.push_back(ln); break;
+            }
+            };
+
+        if (!defDataCopy.originalDefLines.empty()) {
+            for (const auto& line : defDataCopy.originalDefLines) {
+                // 跳過你已手動輸出的標頭/幾何/元件/NETS 區塊（整段略過直到遇到 END ...）
+                if (startsWith(line, "VERSION") ||
+                    startsWith(line, "DIVIDERCHAR") ||
+                    startsWith(line, "BUSBITCHARS") ||
+                    startsWith(line, "DESIGN") ||
+                    startsWith(line, "UNITS") ||
+                    startsWith(line, "PROPERTYDEFINITIONS") ||
+                    startsWith(line, "DIEAREA") ||
+                    startsWith(line, "ROW ") ||
+                    startsWith(line, "TRACKS ") ||
+                    startsWith(line, "COMPONENTS ") ||
+                    startsWith(line, "NETS ")) {
+                    cst = CPY_SKIP_STD; continue;
+                }
+
+                // 進入要保留並重排的區塊（複數名）
+                if (startsWith(line, "PINS ")) { cst = CPY_PINS;      pushLine(cst, line); continue; }
+                if (startsWith(line, "PINPROPERTIES ")) { cst = CPY_PINPROPS;  pushLine(cst, line); continue; }
+                if (startsWith(line, "BLOCKAGES ")) { cst = CPY_BLOCKAGES; pushLine(cst, line); continue; }
+                if (startsWith(line, "SPECIALNETS ")) { cst = CPY_SPNS;      pushLine(cst, line); continue; }
+                if (startsWith(line, "SCANCHAINS ")) { cst = CPY_SCANCH;    pushLine(cst, line); continue; }
+
+                // 區塊內文或 END 行
+                if (cst == CPY_PINS || cst == CPY_PINPROPS || cst == CPY_BLOCKAGES || cst == CPY_SPNS || cst == CPY_SCANCH) {
+                    pushLine(cst, line);
+                    if (startsWith(line, "END PINS") ||
+                        startsWith(line, "END PINPROPERTIES") ||
+                        startsWith(line, "END BLOCKAGES") ||
+                        startsWith(line, "END SPECIALNETS") ||
+                        startsWith(line, "END SCANCHAINS")) {
+                        cst = CPY_NORMAL;
                     }
+                    continue;
+                }
+
+                // 跳過你手動輸出的標準段直到遇到 END ...
+                if (cst == CPY_SKIP_STD) {
+                    if (line.find("END PROPERTYDEFINITIONS") != std::string::npos ||
+                        line.find("END ROWS") != std::string::npos ||
+                        line.find("END TRACKS") != std::string::npos ||
+                        line.find("END COMPONENTS") != std::string::npos ||
+                        line.find("END NETS") != std::string::npos) {
+                        cst = CPY_NORMAL;
+                    }
+                    continue;
+                }
+
+                // 其它辨識不到的行，最後原樣貼回
+                if (!line.empty()) unknownTail.push_back(line);
+            }
+        }
+
+        // === 依序輸出：PINS → PINPROPERTIES → BLOCKAGES → SPECIALNETS ===
+        auto dumpBlk = [&](const std::vector<std::string>& blk) {
+            if (blk.empty()) return;
+            for (const auto& l : blk) defFile << l << "\n";
+            defFile << "\n";
+            };
+        dumpBlk(pinsBlk);
+        dumpBlk(pinPropsBlk);
+        dumpBlk(blkgsBlk);
+        dumpBlk(spnetsBlk); // SPECIALNETS 必須在 NETS 之前
+
+        // === NETS：維持你的新 NETS（含 MBFF 置換），並過濾純 top VDD/VSS 虛網 ===
+        auto isPureTopPG = [&](const NetInfo& net)->bool {
+            if (!(net.name == "VDD" || net.name == "VSS")) return false;
+            bool onlyTopPinStar = true;
+            for (const auto& c : net.connections) {
+                if (!((c.instance == "PIN" || c.instance == "*") && (c.pin == net.name))) { onlyTopPinStar = false; break; }
+            }
+            // +USE POWER/GROUND 通常會有；沒有時也可能是 PG，這裡放寬
+            return onlyTopPinStar;
+            };
+
+        std::vector<NetInfo> netsForOut;
+        netsForOut.reserve(defDataCopy.nets.size());
+        for (const auto& net : defDataCopy.nets) {
+            if (isPureTopPG(net)) continue; // 砍掉 "- VDD"/"- VSS" 僅 (PIN/*) 的兩條
+            netsForOut.push_back(net);
+        }
+
+        int unconnectedCount = 0, unconnectedWithQN = 0;
+        defFile << "NETS " << netsForOut.size() << " ;\n";
+        for (const auto& net : netsForOut) {
+            if (net.name.find("UNCONNECTED") != std::string::npos) {
+                ++unconnectedCount;
+                for (const auto& conn : net.connections) {
+                    if (conn.pin.find("QN") != std::string::npos) { ++unconnectedWithQN; break; }
                 }
             }
-
             defFile << "- " << net.name << "\n";
             for (size_t i = 0; i < net.connections.size(); ++i) {
-                defFile << "  ( " << net.connections[i].instance
-                    << " " << net.connections[i].pin << " )";
+                defFile << "  ( " << net.connections[i].instance << " " << net.connections[i].pin << " )";
                 if (i + 1 < net.connections.size()) defFile << "\n";
             }
             if (!net.use.empty()) defFile << "\n  + USE " << net.use;
             defFile << " ;\n";
         }
         defFile << "END NETS\n\n";
+
+        // === SCANCHAINS（若原檔存在就照原樣貼回；你未產生新的話就沿用）===
+        dumpBlk(scanchainsBlk);
+
+        // === 其餘辨識不到的行貼到底（避免遺漏）===
+        for (const auto& l : unknownTail) defFile << l << "\n";
         defFile << std::endl;
 
-        // 3.8 複製其餘原始內容（跳過已處理的部分）
-        if (!defDataCopy.originalDefLines.empty()) {
-            enum State { NORMAL, SKIP_SECTION };
-            State state = NORMAL;
-
-            for (const auto& line : defDataCopy.originalDefLines) {
-                // 跳過已經手動產生的部分
-                if (line.find("VERSION") == 0) continue;
-                if (line.find("DIVIDERCHAR") == 0) continue;
-                if (line.find("BUSBITCHARS") == 0) continue;
-                if (line.find("DESIGN") == 0) continue;
-                if (line.find("UNITS") == 0) continue;
-                if (line.find("PROPERTYDEFINITIONS") == 0) { state = SKIP_SECTION; continue; }
-                if (line.find("DIEAREA") == 0) continue;
-                if (line.find("ROW ") == 0) { state = SKIP_SECTION; continue; }
-                if (line.find("TRACKS ") == 0) { state = SKIP_SECTION; continue; }
-                if (line.find("COMPONENTS ") == 0) { state = SKIP_SECTION; continue; }
-                if (line.find("NETS ") == 0) { state = SKIP_SECTION; continue; }
-
-                // 檢查 END 標記
-                if (state == SKIP_SECTION) {
-                    if (line.find("END PROPERTYDEFINITIONS") != std::string::npos ||
-                        line.find("END ROWS") != std::string::npos ||
-                        line.find("END TRACKS") != std::string::npos ||
-                        line.find("END COMPONENTS") != std::string::npos ||
-                        line.find("END NETS") != std::string::npos) {
-                        state = NORMAL;
-                        continue;
-                    }
-                }
-
-                // 輸出未被跳過的內容
-                if (state == NORMAL) {
-                    // 跳過空行（可選）
-                    if (line.empty()) continue;
-
-                    defFile << line << std::endl;
-                }
-            }
-        }
-
-
-
+        // 你原本的統計輸出可保留（更新為 netsForOut.size()）：
         std::cout << "  ✓ DEF file written successfully\n"
             << "    - Components: " << newComponents.size() << "\n"
-            << "    - Nets: " << defDataCopy.nets.size() << "\n"
+            << "    - Nets: " << netsForOut.size() << "\n"
             << "    - UNCONNECTED nets: " << unconnectedCount << "\n"
             << "    - UNCONNECTED nets with QN: " << unconnectedWithQN << "\n"
             << "    - New MBFFs: " << mergedFFResults_.size() << std::endl;
+
         return true;
     }
     catch (const std::exception& e) {
@@ -2083,6 +2141,7 @@ bool WriteOutput::writeDef() {
         return false;
     }
 }
+
 
 // 寫入所有檔案
 bool WriteOutput::writeAll() {
