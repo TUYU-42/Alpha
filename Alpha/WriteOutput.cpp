@@ -324,7 +324,28 @@ void WriteOutput::writeOperationSection(std::ofstream& fout) const {
         fout << "{" << m.newInstanceName << " " << m.mbffType << " " << m.bitwidth << "} }" << "\n";
     }
 }
+// 在 WriteOutput 類中新增
+bool WriteOutput::isFlipFlopCell(const std::string& cellType) const {
+    // 與 Legalizer 使用相同的邏輯
+    if (libParser_ && libParser_->isLoaded()) {
+        const LibCell* cell = libParser_->getCell(cellType);
+        if (cell) {
+            if (!cell->singleBitDegenerate.empty() || cell->hasFF) {
+                return true;
+            }
+        }
+    }
 
+    // Fallback 到關鍵字檢查
+    std::string upperType = cellType;
+    std::transform(upperType.begin(), upperType.end(), upperType.begin(), ::toupper);
+
+    return (upperType.find("FF") != std::string::npos ||
+        upperType.find("DFF") != std::string::npos ||
+        upperType.find("FSD") != std::string::npos ||
+        upperType.find("FLIP") != std::string::npos ||
+        upperType.find("FLOP") != std::string::npos);
+}
 // 寫入 mapping list
 bool WriteOutput::writeMapList() {
     string mappingFile = outputName_ + ".list";
@@ -467,10 +488,10 @@ bool WriteOutput::writeMapList() {
             mapFile << origName << "/Q map " << mbffName << "/" << qPin << endl;
 
             // QN（檢查原始 FF 是否有 QN）
-            bool hasQN = (ffInfo->cellType.find("FSDNQ") == std::string::npos);
+        /*  bool hasQN = (mbffCell && mbffCell->hasBundle("QN"));
             if (hasQN && mbffCell && mbffCell->pins.find(qnPin) != mbffCell->pins.end()) {
                 mapFile << origName << "/QN map " << mbffName << "/" << qnPin << endl;
-            }
+            }*/
 
             // Clock（共用）
             mapFile << origName << "/CK map " << mbffName << "/CK" << endl;
@@ -494,9 +515,9 @@ bool WriteOutput::writeMapList() {
 
             mapFile << ff.instName << "/D map " << ff.instName << "/D" << endl;
             mapFile << ff.instName << "/Q map " << ff.instName << "/Q" << endl;
-            if (hasQN) {
-                mapFile << ff.instName << "/QN map " << ff.instName << "/QN" << endl;
-            }
+            /*    if (hasQN) {
+                    mapFile << ff.instName << "/QN map " << ff.instName << "/QN" << endl;
+                }*/
             mapFile << ff.instName << "/CK map " << ff.instName << "/CK" << endl;
 
             if (!ff.scanIn.empty() && ff.scanIn != "UNCONNECTED") {
@@ -602,8 +623,6 @@ void WriteOutput::buildSimpleToFullNameMapping() {
         }
     }
 }
-// writeVerilog() 中處理模組實例化的修正部分
-// 完整的 writeVerilog() 方法，包含 QN 支援
 bool WriteOutput::writeVerilog() {
     using std::string;
     using std::vector;
@@ -701,11 +720,29 @@ bool WriteOutput::writeVerilog() {
         return cand;
         };
     auto isConstNet = [](const string& s)->bool {
-        return s.find('\'') != string::npos;
+        return s.find('\'') != std::string::npos;
         };
+    // ---- CHANGED: 新增 escaped/escaped-bit-like 判斷 ----
+    auto isEscaped = [](const string& s)->bool {
+        return !s.empty() && s[0] == '\\';
+        };
+    auto isEscapedBitLike = [&](const string& s, string* baseOut = nullptr)->bool {
+        if (!isEscaped(s)) return false;
+        string t = s;
+        if (!t.empty() && t.back() == ' ') t = t.substr(1, t.size() - 2);
+        else t = t.substr(1);
+        size_t lb = t.find('[');
+        if (lb == string::npos) return false;
+        size_t rb = t.find(']', lb + 1);
+        if (rb == string::npos) return false;
+        for (size_t k = lb + 1; k < rb; ++k) if (!isdigit((unsigned char)t[k])) return false;
+        if (baseOut) *baseOut = t.substr(0, lb);
+        return true;
+        };
+    // ----------------------------------------------------
     auto isBitSelect = [](const string& s)->bool {
         if (s.empty()) return false;
-        if (s[0] == '\\') return false;
+        if (s[0] == '\\') return false; // escaped 視為 scalar 名
         size_t lb = s.find('[');
         if (lb == string::npos) return false;
         size_t rb = s.find(']', lb + 1);
@@ -751,9 +788,14 @@ bool WriteOutput::writeVerilog() {
         return needsEscapeActual(net) ? (string("\\") + net + " ") : net;
         };
     auto fmtDeclName = [&](string net)->string {
-        // 宣告用名稱（不含 []），必要時變 escaped identifier
         return needsEscapeActual(net) ? (string("\\") + net + " ") : net;
         };
+    // ---- CHANGED: baseOfNet 提前（供多處使用）----
+    auto baseOfNet = [&](const string& s)->string {
+        size_t lb = s.find('[');
+        return (lb == string::npos) ? s : s.substr(0, lb);
+        };
+    // -----------------------------------------------
 
     // 供應 merged group
     unordered_map<string, const MergedFF*> grpByMergedName;
@@ -792,15 +834,19 @@ bool WriteOutput::writeVerilog() {
         unordered_set<string> declaredWires_norm;
         for (auto& s : declaredWires_raw) declaredWires_norm.insert(unescapeIfEscaped(s));
 
-        // 也建 base 名集合
+        // ---- CHANGED: 建「base 名」集合要用 baseOfNet，而不是整串 ----
         unordered_set<string> declaredPortBases;
-        for (auto& s : declaredPorts_norm) declaredPortBases.insert(s);
+        for (auto& s : declaredPorts_norm) declaredPortBases.insert(baseOfNet(s));
         unordered_set<string> declaredWireBases;
-        for (auto& s : declaredWires_norm) declaredWireBases.insert(s);
+        for (auto& s : declaredWires_norm) declaredWireBases.insert(baseOfNet(s));
+        // ---------------------------------------------------------------
 
         // 收集用到的 nets + 統計匯流排範圍
         std::set<string> usedNets;
         std::unordered_map<string, std::pair<int, int>> busRange; // base -> {min,max}
+        // ---- CHANGED: 紀錄來自 escaped-bit 的 base，後面禁止自動宣告 ----
+        std::unordered_set<string> basesFromEscapedBit;
+        // ----------------------------------------------------------------
 
         auto touchBitUse = [&](const string& net) {
             string base; int lo = 0, hi = 0;
@@ -818,10 +864,22 @@ bool WriteOutput::writeVerilog() {
             for (const auto& conn : inst.connections) {
                 string netName = conn.second;
                 if (netName == "UNCONNECTED" || netName == "VSS" || netName == "VDD") continue;
+
+                bool esc = isEscaped(netName);                         // CHANGED
                 string netNorm = unescapeIfEscaped(netName);
                 if (!netNorm.empty()) {
                     usedNets.insert(netNorm);
-                    touchBitUse(netNorm);
+                    if (!esc) {
+                        // 只有非 escaped 的 a[3]/a[7:0] 視為真正 bit-select
+                        touchBitUse(netNorm);                          // CHANGED
+                    }
+                    else {
+                        // 記錄 \a[3] 這類 scalar 的 base，禁止後面自動宣告 bus
+                        string base;
+                        if (isEscapedBitLike(netName, &base)) {        // CHANGED
+                            basesFromEscapedBit.insert(base);
+                        }
+                    }
                 }
             }
         }
@@ -875,7 +933,7 @@ bool WriteOutput::writeVerilog() {
         unordered_set<string> s0(module.supplies0.begin(), module.supplies0.end());
         unordered_set<string> s1(module.supplies1.begin(), module.supplies1.end());
 
-        // 先印原始 wires
+        // 先印原始 wires（跳 ports/supplies）
         vector<string> filteredWires;
         filteredWires.reserve(module.wires.size());
         for (auto& w : module.wires) {
@@ -883,11 +941,19 @@ bool WriteOutput::writeVerilog() {
             if (s0.count(w) || s1.count(w)) continue;
             filteredWires.push_back(w);
         }
+        // ---- CHANGED: wire 宣告帶上原始寬度（wireDeclWidth）----
+        auto widthOfWire = [&](const string& w_raw)->string {
+            const string w_norm = unescapeIfEscaped(w_raw);
+            auto it = module.wireDeclWidth.find(w_norm);
+            if (it == module.wireDeclWidth.end()) it = module.wireDeclWidth.find(w_raw);
+            return (it != module.wireDeclWidth.end() && !it->second.empty()) ? (it->second + " ") : "";
+            };
         for (const auto& w : filteredWires) {
             string wn = w;
             if (wn[0] != '\\' && wn.find('[') != string::npos) wn = "\\" + wn + " ";
-            fout << "wire " << wn << " ;\n";
+            fout << "wire " << widthOfWire(w) << wn << " ;\n";
         }
+        // -----------------------------------------------------
 
         // 先補「bus 宣告」
         vector<std::tuple<string, int, int>> busDecls;
@@ -895,12 +961,18 @@ bool WriteOutput::writeVerilog() {
             const string& base = kv.first;
             int lo = kv.second.first, hi = kv.second.second;
             if (base.empty()) continue;
+
             // 已宣告過就略過
             bool declared = declaredPorts_norm.count(base) ||
                 declaredWires_norm.count(base) ||
                 declaredPortBases.count(base) ||
                 declaredWireBases.count(base);
             if (declared) continue;
+
+            // ---- CHANGED: 若 base 來自 \base[idx]（escaped-bit），禁止自動宣告 ----
+            if (basesFromEscapedBit.count(base)) continue;
+            // ----------------------------------------------------------------------
+
             busDecls.emplace_back(base, lo, hi);
             declaredWireBases.insert(base);
             declaredWires_norm.insert(base);
@@ -919,10 +991,6 @@ bool WriteOutput::writeVerilog() {
 
         // 再補「純 scalar nets」（非 bit-select）
         vector<string> additionalWires;
-        auto baseOfNet = [&](const string& s)->string {
-            size_t lb = s.find('[');
-            return (lb == string::npos) ? s : s.substr(0, lb);
-            };
         for (const auto& net : usedNets) {
             if (net.empty()) continue;
             if (net == "VDD" || net == "VSS") continue;
@@ -1930,141 +1998,83 @@ bool WriteOutput::writeDef() {
         defFile << "END COMPONENTS\n\n";
 
         // 除錯：統計 UNCONNECTED nets
-        // === 收集原始檔中需保留並重排的區塊 ===
-        std::vector<std::string> pinsBlk, pinPropsBlk, blkgsBlk, spnetsBlk, scanchainsBlk, unknownTail;
+        int unconnectedCount = 0;
+        int unconnectedWithQN = 0;
 
-        auto startsWith = [](const std::string& s, const char* kw)->bool { return s.rfind(kw, 0) == 0; };
-        enum CopyState { CPY_NORMAL, CPY_PINS, CPY_PINPROPS, CPY_BLOCKAGES, CPY_SPNS, CPY_SCANCH, CPY_SKIP_STD };
-        CopyState cst = CPY_NORMAL;
-
-        auto pushLine = [&](CopyState st, const std::string& ln) {
-            switch (st) {
-            case CPY_PINS:       pinsBlk.push_back(ln); break;
-            case CPY_PINPROPS:   pinPropsBlk.push_back(ln); break;
-            case CPY_BLOCKAGES:  blkgsBlk.push_back(ln); break;
-            case CPY_SPNS:       spnetsBlk.push_back(ln); break;
-            case CPY_SCANCH:     scanchainsBlk.push_back(ln); break;
-            default:             unknownTail.push_back(ln); break;
-            }
-            };
-
-        if (!defDataCopy.originalDefLines.empty()) {
-            for (const auto& line : defDataCopy.originalDefLines) {
-                // 跳過你已手動輸出的標頭/幾何/元件/NETS 區塊（整段略過直到遇到 END ...）
-                if (startsWith(line, "VERSION") ||
-                    startsWith(line, "DIVIDERCHAR") ||
-                    startsWith(line, "BUSBITCHARS") ||
-                    startsWith(line, "DESIGN") ||
-                    startsWith(line, "UNITS") ||
-                    startsWith(line, "PROPERTYDEFINITIONS") ||
-                    startsWith(line, "DIEAREA") ||
-                    startsWith(line, "ROW ") ||
-                    startsWith(line, "TRACKS ") ||
-                    startsWith(line, "COMPONENTS ") ||
-                    startsWith(line, "NETS ")) {
-                    cst = CPY_SKIP_STD; continue;
-                }
-
-                // 進入要保留並重排的區塊（複數名）
-                if (startsWith(line, "PINS ")) { cst = CPY_PINS;      pushLine(cst, line); continue; }
-                if (startsWith(line, "PINPROPERTIES ")) { cst = CPY_PINPROPS;  pushLine(cst, line); continue; }
-                if (startsWith(line, "BLOCKAGES ")) { cst = CPY_BLOCKAGES; pushLine(cst, line); continue; }
-                if (startsWith(line, "SPECIALNETS ")) { cst = CPY_SPNS;      pushLine(cst, line); continue; }
-                if (startsWith(line, "SCANCHAINS ")) { cst = CPY_SCANCH;    pushLine(cst, line); continue; }
-
-                // 區塊內文或 END 行
-                if (cst == CPY_PINS || cst == CPY_PINPROPS || cst == CPY_BLOCKAGES || cst == CPY_SPNS || cst == CPY_SCANCH) {
-                    pushLine(cst, line);
-                    if (startsWith(line, "END PINS") ||
-                        startsWith(line, "END PINPROPERTIES") ||
-                        startsWith(line, "END BLOCKAGES") ||
-                        startsWith(line, "END SPECIALNETS") ||
-                        startsWith(line, "END SCANCHAINS")) {
-                        cst = CPY_NORMAL;
-                    }
-                    continue;
-                }
-
-                // 跳過你手動輸出的標準段直到遇到 END ...
-                if (cst == CPY_SKIP_STD) {
-                    if (line.find("END PROPERTYDEFINITIONS") != std::string::npos ||
-                        line.find("END ROWS") != std::string::npos ||
-                        line.find("END TRACKS") != std::string::npos ||
-                        line.find("END COMPONENTS") != std::string::npos ||
-                        line.find("END NETS") != std::string::npos) {
-                        cst = CPY_NORMAL;
-                    }
-                    continue;
-                }
-
-                // 其它辨識不到的行，最後原樣貼回
-                if (!line.empty()) unknownTail.push_back(line);
-            }
-        }
-
-        // === 依序輸出：PINS → PINPROPERTIES → BLOCKAGES → SPECIALNETS ===
-        auto dumpBlk = [&](const std::vector<std::string>& blk) {
-            if (blk.empty()) return;
-            for (const auto& l : blk) defFile << l << "\n";
-            defFile << "\n";
-            };
-        dumpBlk(pinsBlk);
-        dumpBlk(pinPropsBlk);
-        dumpBlk(blkgsBlk);
-        dumpBlk(spnetsBlk); // SPECIALNETS 必須在 NETS 之前
-
-        // === NETS：維持你的新 NETS（含 MBFF 置換），並過濾純 top VDD/VSS 虛網 ===
-        auto isPureTopPG = [&](const NetInfo& net)->bool {
-            if (!(net.name == "VDD" || net.name == "VSS")) return false;
-            bool onlyTopPinStar = true;
-            for (const auto& c : net.connections) {
-                if (!((c.instance == "PIN" || c.instance == "*") && (c.pin == net.name))) { onlyTopPinStar = false; break; }
-            }
-            // +USE POWER/GROUND 通常會有；沒有時也可能是 PG，這裡放寬
-            return onlyTopPinStar;
-            };
-
-        std::vector<NetInfo> netsForOut;
-        netsForOut.reserve(defDataCopy.nets.size());
+        defFile << "NETS " << defDataCopy.nets.size() << " ;\n";
         for (const auto& net : defDataCopy.nets) {
-            if (isPureTopPG(net)) continue; // 砍掉 "- VDD"/"- VSS" 僅 (PIN/*) 的兩條
-            netsForOut.push_back(net);
-        }
-
-        int unconnectedCount = 0, unconnectedWithQN = 0;
-        defFile << "NETS " << netsForOut.size() << " ;\n";
-        for (const auto& net : netsForOut) {
             if (net.name.find("UNCONNECTED") != std::string::npos) {
-                ++unconnectedCount;
+                unconnectedCount++;
+
                 for (const auto& conn : net.connections) {
-                    if (conn.pin.find("QN") != std::string::npos) { ++unconnectedWithQN; break; }
+                    if (conn.pin.find("QN") != std::string::npos) {
+                        unconnectedWithQN++;
+                        break;
+                    }
                 }
             }
+
             defFile << "- " << net.name << "\n";
             for (size_t i = 0; i < net.connections.size(); ++i) {
-                defFile << "  ( " << net.connections[i].instance << " " << net.connections[i].pin << " )";
+                defFile << "  ( " << net.connections[i].instance
+                    << " " << net.connections[i].pin << " )";
                 if (i + 1 < net.connections.size()) defFile << "\n";
             }
             if (!net.use.empty()) defFile << "\n  + USE " << net.use;
             defFile << " ;\n";
         }
         defFile << "END NETS\n\n";
-
-        // === SCANCHAINS（若原檔存在就照原樣貼回；你未產生新的話就沿用）===
-        dumpBlk(scanchainsBlk);
-
-        // === 其餘辨識不到的行貼到底（避免遺漏）===
-        for (const auto& l : unknownTail) defFile << l << "\n";
         defFile << std::endl;
 
-        // 你原本的統計輸出可保留（更新為 netsForOut.size()）：
+        // 3.8 複製其餘原始內容（跳過已處理的部分）
+        if (!defDataCopy.originalDefLines.empty()) {
+            enum State { NORMAL, SKIP_SECTION };
+            State state = NORMAL;
+
+            for (const auto& line : defDataCopy.originalDefLines) {
+                // 跳過已經手動產生的部分
+                if (line.find("VERSION") == 0) continue;
+                if (line.find("DIVIDERCHAR") == 0) continue;
+                if (line.find("BUSBITCHARS") == 0) continue;
+                if (line.find("DESIGN") == 0) continue;
+                if (line.find("UNITS") == 0) continue;
+                if (line.find("PROPERTYDEFINITIONS") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("DIEAREA") == 0) continue;
+                if (line.find("ROW ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("TRACKS ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("COMPONENTS ") == 0) { state = SKIP_SECTION; continue; }
+                if (line.find("NETS ") == 0) { state = SKIP_SECTION; continue; }
+
+                // 檢查 END 標記
+                if (state == SKIP_SECTION) {
+                    if (line.find("END PROPERTYDEFINITIONS") != std::string::npos ||
+                        line.find("END ROWS") != std::string::npos ||
+                        line.find("END TRACKS") != std::string::npos ||
+                        line.find("END COMPONENTS") != std::string::npos ||
+                        line.find("END NETS") != std::string::npos) {
+                        state = NORMAL;
+                        continue;
+                    }
+                }
+
+                // 輸出未被跳過的內容
+                if (state == NORMAL) {
+                    // 跳過空行（可選）
+                    if (line.empty()) continue;
+
+                    defFile << line << std::endl;
+                }
+            }
+        }
+
+
+
         std::cout << "  ✓ DEF file written successfully\n"
             << "    - Components: " << newComponents.size() << "\n"
-            << "    - Nets: " << netsForOut.size() << "\n"
+            << "    - Nets: " << defDataCopy.nets.size() << "\n"
             << "    - UNCONNECTED nets: " << unconnectedCount << "\n"
             << "    - UNCONNECTED nets with QN: " << unconnectedWithQN << "\n"
             << "    - New MBFFs: " << mergedFFResults_.size() << std::endl;
-
         return true;
     }
     catch (const std::exception& e) {

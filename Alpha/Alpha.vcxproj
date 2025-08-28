@@ -132,11 +132,11 @@
   <ItemGroup>
     <ClCompile Include="Alpha.cpp" />
     <ClCompile Include="CompatibleList.cpp" />
-    <ClCompile Include="Firefly.cpp" />
-    <ClCompile Include="FireflyPreprocess.cpp" />
+    <ClCompile Include="DPC.cpp" />
     <ClCompile Include="HierarchicalClustering.cpp" />
     <ClCompile Include="Legalizer.cpp" />
     <ClCompile Include="LibParser.cpp" />
+    <ClCompile Include="MetricsEstimator.cpp" />
     <ClCompile Include="Parser.cpp" />
     <ClCompile Include="ParserDEF.cpp" />
     <ClCompile Include="ParserLEF.cpp" />
@@ -150,11 +150,11 @@
   <ItemGroup>
     <ClInclude Include="CompatibleList.h" />
     <ClInclude Include="DataStructures.h" />
-    <ClInclude Include="Firefly.h" />
-    <ClInclude Include="FireflyPreprocess.h" />
+    <ClInclude Include="DPC.h" />
     <ClInclude Include="HierarchicalClustering.h" />
     <ClInclude Include="Legalizer.h" />
     <ClInclude Include="LibParser.h" />
+    <ClInclude Include="MetricsEstimator.h" />
     <ClInclude Include="Parser.h" />
     <ClInclude Include="ParserDEF.h" />
     <ClInclude Include="ParserLEF.h" />

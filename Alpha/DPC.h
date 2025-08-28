@@ -10,6 +10,7 @@
 #include <limits>
 #include <unordered_map>
 
+
 struct DPCPoint {
     std::string instanceName;
     std::string cellType;
@@ -49,8 +50,39 @@ struct CkCapReport {
     double ckCapBeforeSum = 0.0;                                // Σ(CK_SB)
 };
 
+
 class DensityPeakClustering {
 public:
+    // DPC.h 內
+    // dpc.h
+    struct DpcParams {
+        // --- DPC 本體 ---
+        double neighborPercent = 0.010;
+        enum class KMode { Sigma, CeilNOver4 } kMode = KMode::Sigma;
+        double kSigmaLambda = 1.10;
+        double rhoRadiusMul = 4.0;
+        double deltaStartMul = 2.0;
+        double gridCellMul = 2.0;
+
+        // --- Merge 守門（防 TNS）---
+        double sameRowTolMul = 0.60;   // 允許的 |Δy| ≤ sameRowTolMul * rowHeight
+
+        // pairwise 距離上限：distLimit = min( distMulRho * rhoRadius, distMulDc * dc )
+        double dist2_rhoMul = 1.20;    // 2-bit
+        double dist2_dcMul = 2.50;
+        double dist4_rhoMul = 0.80;    // 4-bit 更嚴
+        double dist4_dcMul = 1.80;
+
+        // ΔHPWL（每條 net 的增量）上限與 Q 權重
+        double hpwlThrDMul = 1.50;    // D 每網 ΔHPWL ≤ hpwlThrDMul * dc
+        double hpwlThrQMul = 2.50;    // Q 每網 ΔHPWL ≤ hpwlThrQMul * dc
+        double hpwlWeightQ = 1.80;    // cost = d_inc + hpwlWeightQ * q_inc
+
+        // CK-cap 最小節省（避免臨界合併）：(ΣCsb - Cmbff) ≥ frac * ΣCsb
+        double ckSaveMinFrac = 0.010;
+    };
+
+    void setParams(const DpcParams& p) { params_ = p; }
     DensityPeakClustering();
     ~DensityPeakClustering();
     void dumpCkCapReport(const std::string& path) const;
@@ -145,5 +177,7 @@ private:
     double estimateCutoffBySampling_(size_t samples = 200000) const;
     double estimateMaxDistBySampling_(size_t samples = 200000) const;
 
-
+    DpcParams params_;
 };
+
+std::vector<DensityPeakClustering::DpcParams> makeFivePresets();

@@ -44,6 +44,7 @@ struct VerilogModule {
     std::vector<VerilogInstance> instances;
     std::vector<std::string> inouts;
     std::unordered_map<std::string, std::string> portDeclWidth;
+    std::unordered_map<std::string, std::string> wireDeclWidth; // name -> "[msb:lsb]"
 };
 
 class VerilogParser {

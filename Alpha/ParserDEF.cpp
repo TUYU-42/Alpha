@@ -533,14 +533,14 @@ void DefParser::analyzeFlipFlops() {
 
                         if ((upperPin == "CK" || upperPin == "CLK") && ff.clockNet.empty()) {
                             ff.clockNet = net.name;
-                            cout << "    Clock (from nets): " << conn.pin << " -> " << net.name << endl;
+                            //   cout << "    Clock (from nets): " << conn.pin << " -> " << net.name << endl;
                         }
                     }
                 }
             }
 
-            cout << "    Pin connections from InstPinNets: " << pinConnectionsFound << endl;
-            cout << "    Pin connections from Nets: " << netConnectionsFound << endl;
+            //    cout << "    Pin connections from InstPinNets: " << pinConnectionsFound << endl;
+           //     cout << "    Pin connections from Nets: " << netConnectionsFound << endl;
 
             defData_.flipFlops.push_back(ff);
 

@@ -100,10 +100,10 @@
     <ClCompile Include="CompatibleList.cpp">
       <Filter>CompatibleList</Filter>
     </ClCompile>
-    <ClCompile Include="FireflyPreprocess.cpp">
-      <Filter>BankingEngine</Filter>
+    <ClCompile Include="MetricsEstimator.cpp">
+      <Filter>來源檔案</Filter>
     </ClCompile>
-    <ClCompile Include="Firefly.cpp">
+    <ClCompile Include="DPC.cpp">
       <Filter>BankingEngine</Filter>
     </ClCompile>
   </ItemGroup>
@@ -150,10 +150,10 @@
     <ClInclude Include="CompatibleList.h">
       <Filter>CompatibleList</Filter>
     </ClInclude>
-    <ClInclude Include="FireflyPreprocess.h">
-      <Filter>BankingEngine</Filter>
+    <ClInclude Include="MetricsEstimator.h">
+      <Filter>來源檔案</Filter>
     </ClInclude>
-    <ClInclude Include="Firefly.h">
+    <ClInclude Include="DPC.h">
       <Filter>BankingEngine</Filter>
     </ClInclude>
   </ItemGroup>

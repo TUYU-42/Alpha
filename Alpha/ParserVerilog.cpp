@@ -168,10 +168,24 @@ void VerilogParser::parseDeclarationsAndAssigns(const std::string& text, size_t 
         }
 
         if (startsWith("wire") || startsWith("logic") || startsWith("reg")) {
-            // 一律視為 wires
             size_t kwlen = startsWith("wire") ? 4 : (startsWith("logic") ? 5 : 3);
             i += kwlen;
+
+            // 讀可選的 packed range，如 [599:0] 或 [0:0]
+            skipSpaces(text, i);
+            std::string range = readPackedRange(text, i, bodyEnd);
+            skipSpaces(text, i);
+
+            // 記下這行宣告的識別字列表
+            size_t base = out.wires.size();
             collectDeclList(text, i, bodyEnd, out.wires);
+
+            // 把寬度記起來（跟你 portDeclWidth 一樣的做法）
+            if (!range.empty()) {
+                for (size_t k = base; k < out.wires.size(); ++k) {
+                    out.wireDeclWidth[normalizeId(out.wires[k])] = range;
+                }
+            }
             continue;
         }
         if (startsWith("assign")) {

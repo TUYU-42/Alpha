@@ -20,6 +20,8 @@
 #include <limits>
 // 放在檔案頂端（.cpp/.h），包含必要的 header
 
+
+
 // DPC.cpp
 static std::string join(const std::vector<std::string>& v, const char* sep) {
     std::ostringstream oss;
@@ -148,9 +150,10 @@ void DensityPeakClustering::performClustering(const std::vector<FlipFlopInfo>& f
         std::cout << "[DPC][grid] cutoffDistance auto-set to " << cutoffDistance_ << std::endl;
 
         // 網格與半徑設定：經驗值
-        gridCell_ = std::max(1.0, 2.0 * cutoffDistance_);
-        rhoRadius_ = std::max(1.0, 5.0 * cutoffDistance_);
-        deltaStartRadius_ = std::max(1.0, 2.0 * cutoffDistance_);
+        gridCell_ = std::max(1.0, params_.gridCellMul * cutoffDistance_);
+        rhoRadius_ = std::max(1.0, params_.rhoRadiusMul * cutoffDistance_);
+        deltaStartRadius_ = std::max(1.0, params_.deltaStartMul * cutoffDistance_);
+
 
         buildGrid_(gridCell_);
         computeRhoGrid_();
@@ -348,34 +351,46 @@ std::vector<int> DensityPeakClustering::selectCenters() {
 }
 
 int DensityPeakClustering::estimateBestClusterCount() const {
-    int N = points_.size();
-    return (N + 3) / 4; // ceil(N/4)
+    const int N = (int)points_.size();
+    if (params_.kMode == DpcParams::KMode::CeilNOver4) return (N + 3) / 4;
+
+    // Sigma: rho*delta >= mean + lambda*std
+    std::vector<double> s; s.reserve(N);
+    for (const auto& p : points_) s.push_back(p.rho * p.delta);
+    if (s.empty()) return 1;
+    double mean = std::accumulate(s.begin(), s.end(), 0.0) / s.size();
+    double var = 0.0; for (double v : s) var += (v - mean) * (v - mean);
+    double stdv = std::sqrt(var / std::max(1, (int)s.size() - 1));
+    double thr = mean + params_.kSigmaLambda * stdv;
+
+    int k = 0; for (double v : s) if (v >= thr) ++k;
+    if (k <= 0) k = 1; // 不要默默變 8
+    // 合理上限：sqrt(N) 或 N/4 取小者
+    int cap = std::max(1, (int)std::sqrt((double)N));
+    return std::min(k, cap);
 }
 
+
+
+
 double DensityPeakClustering::estimateOptimalCutoffDistance() const {
-    if (distMat_.empty() || points_.size() < 2)
-        return 10.0;
+    if (distMat_.empty() || points_.size() < 2) return 10.0;
 
     std::vector<double> dists;
-    int N = points_.size();
-    for (int i = 0; i < N; ++i) {
-        for (int j = i + 1; j < N; ++j) {
-            dists.push_back(distMat_[i][j]);
-        }
-    }
-
+    const int N = (int)points_.size();
+    dists.reserve((size_t)N * (N - 1) / 2);
+    for (int i = 0; i < N; ++i) for (int j = i + 1; j < N; ++j) dists.push_back(distMat_[i][j]);
     if (dists.empty()) return 10.0;
 
     std::sort(dists.begin(), dists.end());
 
-    // 替代 std::clamp 的寫法
-    int targetNeighbor = N / 100;
-    if (targetNeighbor < 10) targetNeighbor = 10;
-    if (targetNeighbor > 50) targetNeighbor = 50;
-
-    int cutoffIdx = std::min(targetNeighbor * N, static_cast<int>(dists.size()) - 1);
-    return dists[cutoffIdx];
+    // 用分位數，百分比來自 params_.neighborPercent（建議 0.3%~5%）
+    double p = std::max(0.0005, std::min(0.05, params_.neighborPercent)); // 0.05%~5%
+    size_t idx = (size_t)std::llround(p * (dists.size() - 1));
+    if (idx >= dists.size()) idx = dists.size() - 1;
+    return dists[idx];
 }
+
 
 
 
@@ -687,14 +702,25 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         return;
     }
 
-    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates (mixed-SBFF via common compatible MBFF, keep hierarchy) ===\n";
+    // === 顯示目前 preset（用來確認 A/B/C 有生效）===
+    std::cout << "[DPC] Params:"
+        << " sameRowTolMul=" << params_.sameRowTolMul
+        << " dist4=(" << params_.dist4_rhoMul << "," << params_.dist4_dcMul << ")"
+        << " dist2=(" << params_.dist2_rhoMul << "," << params_.dist2_dcMul << ")"
+        << " hpwlThr(D,Q)=(" << params_.hpwlThrDMul << "," << params_.hpwlThrQMul << ")"
+        << " wQ=" << params_.hpwlWeightQ
+        << " ckSaveMinFrac=" << params_.ckSaveMinFrac
+        << std::endl;
+
+    std::cout << "\n=== [DPC] Analyze Single-Bit FF Merge Candidates "
+        "(mixed-SBFF via common compatible MBFF, keep hierarchy) ===\n";
 
     const auto& allCells = libParser_->getAllCells();
 
     std::unordered_set<std::string> usedInstances;
     int totalMergeCount = 0, fourbitFF = 0, twobitFF = 0;
 
-    // 小工具：從 cellName 抓位寬（保留你原本規則）
+    // cellName 抓位寬
     auto getBitWidthFromName = [](const std::string& cellType) -> int {
         std::vector<size_t> underscores;
         for (size_t i = 0; i < cellType.size(); ++i) if (cellType[i] == '_') underscores.push_back(i);
@@ -718,27 +744,89 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
             return { (int)std::lround(sx / n), (int)std::lround(sy / n) };
         };
 
-    // 你的 greedy：從 tmpList 中反覆取最近若干顆形成 group，並移除
+    // 幾何快取：inst -> (x, y, w, h)
+    std::unordered_map<std::string, std::tuple<double, double, double, double>> instGeom;
+    for (const auto& p : points_) instGeom[p.instanceName] = std::make_tuple(p.x, p.y, (double)p.width, (double)p.height);
+
+    auto getHeightOf = [&](const std::string& inst)->double {
+        auto it = instGeom.find(inst);
+        if (it == instGeom.end()) return 0.0;
+        return std::get<3>(it->second);
+        };
+
+    // HPWL 工具與 net 端點（若無 net DB，回空；會用位移距離替代）
+    auto hpwl_of_points = [&](const std::vector<std::pair<double, double>>& pts)->double {
+        if (pts.empty()) return 0.0;
+        double minx = 1e100, maxx = -1e100, miny = 1e100, maxy = -1e100;
+        for (auto& q : pts) {
+            minx = std::min(minx, q.first); maxx = std::max(maxx, q.first);
+            miny = std::min(miny, q.second); maxy = std::max(maxy, q.second);
+        }
+        return (maxx - minx) + (maxy - miny);
+        };
+    auto getDNetOtherPts = [&](const std::string& ff)->std::vector<std::pair<double, double>> {
+        std::vector<std::pair<double, double>> pts; return pts;
+        };
+    auto getQNetOtherPts = [&](const std::string& ff)->std::vector<std::pair<double, double>> {
+        std::vector<std::pair<double, double>> pts; return pts;
+        };
+
+    // 同 row 守門（用 y 差與 cell 高度）—— 使用 preset
+    auto isSameRowGroup = [&](const std::vector<std::string>& gg)->bool {
+        std::vector<double> hs; hs.reserve(gg.size());
+        for (auto& s : gg) { double h = getHeightOf(s); if (h > 0) hs.push_back(h); }
+        if (hs.empty()) return true;
+        std::sort(hs.begin(), hs.end());
+        double rowH = hs[hs.size() / 2];
+        double tol = params_.sameRowTolMul * rowH;  // <== 原本固定 0.6，改用 preset
+        double y0 = std::get<1>(instGeom.at(gg.front()));
+        for (auto& s : gg) {
+            double y = std::get<1>(instGeom.at(s));
+            if (std::fabs(y - y0) > tol) return false;
+        }
+        return true;
+        };
+
+    // 4 -> (2,2) 最短總距離配對
+    auto splitBestPairs4 = [&](const std::vector<std::string>& g4)
+        -> std::vector<std::vector<std::string>> {
+        if (g4.size() != 4) return {};
+        auto D = [&](int i, int j) {
+            auto [xi, yi, wi, hi] = instGeom.at(g4[i]);
+            auto [xj, yj, wj, hj] = instGeom.at(g4[j]);
+            double dx = xi - xj, dy = yi - yj; return std::sqrt(dx * dx + dy * dy);
+            };
+        double c01_23 = D(0, 1) + D(2, 3);
+        double c02_13 = D(0, 2) + D(1, 3);
+        double c03_12 = D(0, 3) + D(1, 2);
+        if (c01_23 <= c02_13 && c01_23 <= c03_12) return { {g4[0],g4[1]}, {g4[2],g4[3]} };
+        if (c02_13 <= c03_12)                    return { {g4[0],g4[2]}, {g4[1],g4[3]} };
+        return { {g4[0],g4[3]}, {g4[1],g4[2]} };
+        };
+
+    // 枚舉排列
+    auto allPerms = [&](int bit) {
+        std::vector<std::vector<int>> perms;
+        std::vector<int> p(bit); std::iota(p.begin(), p.end(), 0);
+        do { perms.push_back(p); } while (std::next_permutation(p.begin(), p.end()));
+        return perms;
+        };
+
+    // greedy 分群
     auto findGroupsRemoveUsedGreedy = [&](std::vector<std::string>& tmpList, int bitSize,
         const std::map<std::string, std::pair<double, double>>& coords)
         -> std::vector<std::vector<std::string>> {
         std::vector<std::vector<std::string>> groups;
-
-        // 只保留座標存在者
-        std::vector<std::string> filtered;
-        filtered.reserve(tmpList.size());
+        std::vector<std::string> filtered; filtered.reserve(tmpList.size());
         for (auto& s : tmpList) if (coords.find(s) != coords.end()) filtered.push_back(s);
-
-        // 就近（x+y）排序
         std::sort(filtered.begin(), filtered.end(), [&](const std::string& a, const std::string& b) {
             auto A = coords.at(a), B = coords.at(b); return (A.first + A.second) < (B.first + B.second);
             });
-
         std::vector<char> usedLocal(filtered.size(), 0);
-        for (size_t i = 0;i < filtered.size();++i) {
+        for (size_t i = 0; i < filtered.size(); ++i) {
             if (usedLocal[i]) continue;
             std::vector<std::pair<double, size_t>> neigh;
-            for (size_t j = 0;j < filtered.size();++j) {
+            for (size_t j = 0; j < filtered.size(); ++j) {
                 if (i == j || usedLocal[j]) continue;
                 auto Ai = coords.at(filtered[i]), Aj = coords.at(filtered[j]);
                 neigh.push_back({ distSq(Ai.first,Ai.second,Aj.first,Aj.second), j });
@@ -747,25 +835,24 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
             std::sort(neigh.begin(), neigh.end());
             std::vector<std::string> g; g.reserve(bitSize);
             g.push_back(filtered[i]);
-            for (int k = 0;k < bitSize - 1;++k) g.push_back(filtered[neigh[k].second]);
-            usedLocal[i] = 1; for (int k = 0;k < bitSize - 1;++k) usedLocal[neigh[k].second] = 1;
+            for (int k = 0; k < bitSize - 1; ++k) g.push_back(filtered[neigh[k].second]);
+            usedLocal[i] = 1; for (int k = 0; k < bitSize - 1; ++k) usedLocal[neigh[k].second] = 1;
             groups.push_back(std::move(g));
         }
-
-        // 從 tmpList 中剔除用掉者
         for (const auto& g : groups)
             for (const auto& s : g)
                 tmpList.erase(std::remove(tmpList.begin(), tmpList.end(), s), tmpList.end());
         return groups;
         };
 
-    // 選型：延續 Beta/Area 與 Gamma/Power 的權重，平手時以 CK‑cap saving 做最後 tie-break
+    // CK 優先挑型 —— 也套用 ckSaveMinFrac
     auto chooseBestMBFF = [&](const std::vector<std::string>& cands, int bit,
         double c_sb_perbit) -> std::string {
             if (cands.empty()) return {};
-            std::string best; double aBest = std::numeric_limits<double>::infinity();
-            double pBest = std::numeric_limits<double>::infinity();
-            double ckSaveBest = -std::numeric_limits<double>::infinity();
+            std::string best;
+            double bestSave = -std::numeric_limits<double>::infinity();
+            double bestArea = std::numeric_limits<double>::infinity();
+            double bestLeak = std::numeric_limits<double>::infinity();
 
             for (const auto& mb : cands) {
                 if (getBitWidthFromName(mb) != bit) continue;
@@ -774,36 +861,21 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                 double area = cell.area;
                 double leak = cell.cellLeakagePower;
                 double ck_mb = libParser_->getClockPinCap(mb);
-                double ckSave = c_sb_perbit * bit - ck_mb; // 越大越好
-
-                if (weights_.Beta > weights_.Gamma) {
-                    // 先比 Area，再比 Power；最後比 CK 總節省
-                    if (area < aBest || (area == aBest && (leak < pBest || (leak == pBest && ckSave > ckSaveBest)))) {
-                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
-                    }
-                }
-                else if (weights_.Gamma > weights_.Beta) {
-                    // 先比 Power，再比 Area；最後比 CK 總節省
-                    if (leak < pBest || (leak == pBest && (area < aBest || (area == aBest && ckSave > ckSaveBest)))) {
-                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
-                    }
-                }
-                else {
-                    // 權重接近：Power→Area→CK
-                    if (leak < pBest || (leak == pBest && (area < aBest || (area == aBest && ckSave > ckSaveBest)))) {
-                        best = mb; aBest = area; pBest = leak; ckSaveBest = ckSave;
-                    }
+                double ckSave = c_sb_perbit * bit - ck_mb;                   // ≈ ΣCsb − Cmb
+                double minSave = params_.ckSaveMinFrac * (c_sb_perbit * bit + 1e-12);
+                if (ckSave < minSave) continue;                              // <== 改用相對門檻
+                if (ckSave > bestSave || (ckSave == bestSave && (area < bestArea || (area == bestArea && leak < bestLeak)))) {
+                    best = mb; bestSave = ckSave; bestArea = area; bestLeak = leak;
                 }
             }
             return best;
         };
 
-    // === 逐個 cluster（同 clock domain 已由 DPC 分群保證）===
+    // === 逐 cluster（同 clock domain 已由 DPC 保證）===
     for (const auto& cluster : clusters_) {
-
-        // 蒐集該 cluster 內 instance → {x,y} 與 sb-family（退化）
+        // 蒐集 instance → {x,y} 與 sb-family（退化）
         std::map<std::string, std::pair<double, double>> coords;
-        std::unordered_map<std::string, std::string> instToSB; // inst -> sb family name
+        std::unordered_map<std::string, std::string> instToSB;
         for (int idx : cluster.members) {
             if (idx < 0 || idx >= (int)points_.size()) continue;
             const auto& pt = points_[idx];
@@ -811,15 +883,13 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
 
             std::string sbff = libParser_->getSingleBitDegenerate(pt.cellType);
             if (sbff.empty()) sbff = pt.cellType;
-
-            // 只處理在 compatible-list 內有定義的 family
-            if (bankingCompatibleTable.find(sbff) == bankingCompatibleTable.end()) continue; // CompatibleList.h
+            if (bankingCompatibleTable.find(sbff) == bankingCompatibleTable.end()) continue;
             instToSB[pt.instanceName] = sbff;
             coords[pt.instanceName] = { pt.x, pt.y };
         }
         if (coords.size() < 2) continue;
 
-        // 依「階層前綴（最後一個 '/' 之前）」拆桶（保留原本層級限制）
+        // 依階層前綴拆桶
         std::map<std::string, std::vector<std::string>> prefixGroups;
         for (const auto& kv : coords) {
             const std::string& inst = kv.first;
@@ -829,167 +899,215 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         }
 
         for (auto& pg : prefixGroups) {
-            // 濾掉全域已用
-            std::vector<std::string> instList;
-            instList.reserve(pg.second.size());
-            for (const auto& nm : pg.second)
-                if (!usedInstances.count(nm)) instList.push_back(nm);
+            // 濾掉已用
+            std::vector<std::string> instList; instList.reserve(pg.second.size());
+            for (const auto& nm : pg.second) if (!usedInstances.count(nm)) instList.push_back(nm);
+            if (instList.size() < 2) { for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm); continue; }
 
-            if (instList.size() < 2) {
-                for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm);
-                continue;
-            }
-
-            // 產生 4→2 groups（同你原本 greedy）
+            // 先 4 後 2
             auto tmp4 = instList;
             auto groups4 = findGroupsRemoveUsedGreedy(tmp4, 4, coords);
             auto groups2 = findGroupsRemoveUsedGreedy(tmp4, 2, coords);
 
+            // 一組 group 嘗試合併（含 anchor+perm + ΔHPWL 守門）
+            auto tryMergeGroup = [&](const std::vector<std::string>& g, int bit)->bool {
+                // 幾何先決
+                if (!isSameRowGroup(g)) return false;
+
+                // 兼容名單交集
+                std::vector<const std::vector<std::string>*> whites; whites.reserve(g.size());
+                for (const auto& s : g) {
+                    const std::string& sb = instToSB.at(s);
+                    const auto itW = bankingCompatibleTable.find(sb);
+                    if (itW == bankingCompatibleTable.end()) { whites.clear(); break; }
+                    whites.push_back(&(itW->second));
+                }
+                if (whites.empty()) return false;
+
+                std::vector<std::string> commonMBFF = *whites[0];
+                auto intersect_inplace = [&](const std::vector<std::string>& b) {
+                    std::vector<std::string> tmp; tmp.reserve(commonMBFF.size());
+                    for (const auto& x : commonMBFF)
+                        if (std::find(b.begin(), b.end(), x) != b.end()) tmp.push_back(x);
+                    commonMBFF.swap(tmp);
+                    };
+                for (size_t i = 1; i < whites.size(); ++i) intersect_inplace(*whites[i]);
+                if (commonMBFF.empty()) return false;
+
+                std::vector<std::string> bitMatched;
+                bitMatched.reserve(commonMBFF.size());
+                for (const auto& mb : commonMBFF) if (getBitWidthFromName(mb) == bit) bitMatched.push_back(mb);
+                if (bitMatched.empty()) return false;
+
+                // 距離上限（4b 更嚴）—— 使用 preset
+                auto max_pairwise_dist = [&](const std::vector<std::string>& gg)->double {
+                    double best = 0.0;
+                    for (size_t i = 0; i < gg.size(); ++i) {
+                        auto Ai = coords.at(gg[i]);
+                        for (size_t j = i + 1; j < gg.size(); ++j) {
+                            auto Aj = coords.at(gg[j]); double dx = Ai.first - Aj.first, dy = Ai.second - Aj.second;
+                            best = std::max(best, std::sqrt(dx * dx + dy * dy));
+                        }
+                    } return best;
+                    };
+                const double dc = (cutoffDistance_ > 0 ? cutoffDistance_ : 1.0);
+                const double rR = (rhoRadius_ > 0 ? rhoRadius_ : 4.0 * dc);
+
+                double distLimit = (bit == 4)
+                    ? std::min(params_.dist4_rhoMul * rR, params_.dist4_dcMul * dc)
+                    : std::min(params_.dist2_rhoMul * rR, params_.dist2_dcMul * dc);
+                if (max_pairwise_dist(g) > distLimit) return false;
+
+                // CK-cap 準備
+                double c_sb_sum = 0.0;
+                for (const auto& s : g) c_sb_sum += libParser_->getClockPinCap(instToSB.at(s));
+                double c_sb_avg = c_sb_sum / std::max(1, (int)g.size());
+
+                // CK 優先挑型（含相對門檻）
+                std::string bestFF = chooseBestMBFF(bitMatched, bit, c_sb_avg);
+                if (bestFF.empty()) return false;
+
+                // 退化型覆蓋 sanity
+                if (const auto* cell = libParser_->getCell(bestFF)) {
+                    const std::string& deg = cell->singleBitDegenerate;
+                    if (!deg.empty()) {
+                        bool hit = false; for (auto& s : g) if (instToSB.at(s) == deg) { hit = true; break; }
+                        if (!hit) return false;
+                    }
+                }
+
+                // 最終 CK 把關（ΣCsb − Cmb ≥ 最小比例）
+                double ck_mb = libParser_->getClockPinCap(bestFF);
+                double ck_save = c_sb_sum - ck_mb;
+                double min_save = params_.ckSaveMinFrac * std::max(1e-12, c_sb_sum);
+                if (ck_save < min_save) return false;
+
+                // ΔHPWL 守門 + anchor+perm 搜尋 —— 使用 preset
+                std::unordered_map<std::string, double> hpwlD_before, hpwlQ_before;
+                for (auto& s : g) {
+                    auto dpts = getDNetOtherPts(s); dpts.push_back(coords.at(s));
+                    auto qpts = getQNetOtherPts(s); qpts.push_back(coords.at(s));
+                    hpwlD_before[s] = dpts.size() > 1 ? hpwl_of_points(dpts) : 0.0;
+                    hpwlQ_before[s] = qpts.size() > 1 ? hpwl_of_points(qpts) : 0.0;
+                }
+                auto perms = allPerms(bit);
+                double wQ = params_.hpwlWeightQ;
+                double thrD = params_.hpwlThrDMul * dc;
+                double thrQ = params_.hpwlThrQMul * dc;
+
+                double bestCost = 1e100; int bestAnchor = -1; std::vector<int> bestPerm;
+
+                for (int anchor = 0; anchor < bit; ++anchor) {
+                    auto A0 = coords.at(g[anchor]);
+                    for (auto& perm : perms) {
+                        bool pass = true; double cost = 0.0;
+                        for (int j = 0; j < bit; ++j) {
+                            const std::string& s = g[perm[j]];
+                            auto dpts = getDNetOtherPts(s); dpts.push_back(A0);
+                            auto qpts = getQNetOtherPts(s); qpts.push_back(A0);
+                            double d_after = dpts.size() > 1 ? hpwl_of_points(dpts)
+                                : std::hypot(A0.first - coords.at(s).first, A0.second - coords.at(s).second);
+                            double q_after = qpts.size() > 1 ? hpwl_of_points(qpts)
+                                : std::hypot(A0.first - coords.at(s).first, A0.second - coords.at(s).second);
+                            double d_inc = d_after - hpwlD_before[s];
+                            double q_inc = q_after - hpwlQ_before[s];
+                            if (d_inc > thrD || q_inc > thrQ) { pass = false; break; }
+                            cost += d_inc + wQ * q_inc;
+                        }
+                        if (pass && cost < bestCost) { bestCost = cost; bestAnchor = anchor; bestPerm = perm; }
+                    }
+                }
+                if (bestAnchor < 0) return false;
+
+                // === 建立輸出（採最佳 anchor+perm） ===
+                ++totalMergeCount;
+                MergedFF merged;
+                merged.mbffType = bestFF;
+                merged.bitwidth = bit;
+                merged.mergedFFs = g;
+                std::string base = "merged_" + std::to_string(totalMergeCount);
+                merged.newInstanceName = (pg.first.empty() ? base : (pg.first + "/" + base));
+                auto A0 = coords.at(g[bestAnchor]);
+                merged.newX = (int)std::lround(A0.first);
+                merged.newY = (int)std::lround(A0.second);
+
+                if (const auto it = allCells.find(bestFF); it != allCells.end()) {
+                    merged.area = (float)it->second.area;
+                    merged.power = (float)it->second.cellLeakagePower;
+                }
+                for (int i = 0; i < bit; ++i) {
+                    std::string d = "D" + std::to_string(i);
+                    std::string q = "Q" + std::to_string(i);
+                    const std::string& src = g[bestPerm[i]];
+                    merged.mbffPinToOrigPin[d] = src + "/D";
+                    merged.mbffPinToOrigPin[q] = src + "/Q";
+                    merged.mbffPinToOrigFF[d] = src;
+                    merged.mbffPinToOrigFF[q] = src;
+                }
+
+                // 報表
+                std::unordered_map<std::string, int> famCnt;
+                std::vector<std::string> sbFamiliesPerMember;
+                std::vector<double>      sbCkPerMember;
+                sbFamiliesPerMember.reserve(g.size());
+                sbCkPerMember.reserve(g.size());
+                for (const auto& s : g) {
+                    const std::string& sb = instToSB.at(s);
+                    ++famCnt[sb];
+                    sbFamiliesPerMember.push_back(sb);
+                    sbCkPerMember.push_back(libParser_->getClockPinCap(sb));
+                }
+                CkCapReport rep;
+                rep.groupSize = bit;
+                rep.sbCell = sbFamiliesPerMember.empty() ? "" : sbFamiliesPerMember.front();
+                rep.mbffCell = bestFF;
+                rep.ckCapBeforeSum = c_sb_sum;
+                rep.ckCapAfter = libParser_->getClockPinCap(bestFF);
+                rep.ckCapBefore = c_sb_sum;
+                rep.ckCapSaving = rep.ckCapBeforeSum - rep.ckCapAfter;
+                rep.members = g;
+                for (const auto& kv : famCnt) { rep.sbFamiliesUnique.push_back(kv.first); rep.sbFamilyCounts.push_back(kv); }
+                rep.sbMemberCkCaps = std::move(sbCkPerMember);
+                ckCapReports_.push_back(std::move(rep));
+
+                mergedFFResults_.push_back(std::move(merged));
+                for (const auto& s : g) usedInstances.insert(s);
+                if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
+                return true;
+                };
+
             auto handleGroups = [&](const std::vector<std::vector<std::string>>& groups, int bit) {
                 for (const auto& g : groups) {
-                    // 若任一成員已被用掉就跳過
                     bool anyUsed = false; for (const auto& s : g) if (usedInstances.count(s)) { anyUsed = true; break; }
                     if (anyUsed) continue;
 
-                    // === 核心差異：對 group 內每顆 SBFF 的 compatible-list 取「交集」 ===
-                    // 1) 蒐集每顆的 white list（CompatibleList.h 提供 bankingCompatibleTable）
-                    std::vector<const std::vector<std::string>*> whites;
-                    whites.reserve(g.size());
-                    for (const auto& s : g) {
-                        const std::string& sb = instToSB.at(s);
-                        const auto itW = bankingCompatibleTable.find(sb);
-                        if (itW == bankingCompatibleTable.end()) { whites.clear(); break; }
-                        whites.push_back(&(itW->second));
-                    }
-                    if (whites.empty()) continue;
-
-                    // 2) 交集
-                    std::vector<std::string> commonMBFF = *whites[0];
-                    auto intersect_inplace = [&](const std::vector<std::string>& b) {
-                        std::vector<std::string> tmp; tmp.reserve(commonMBFF.size());
-                        for (const auto& x : commonMBFF)
-                            if (std::find(b.begin(), b.end(), x) != b.end()) tmp.push_back(x);
-                        commonMBFF.swap(tmp);
-                        };
-                    for (size_t i = 1;i < whites.size();++i) intersect_inplace(*whites[i]);
-                    if (commonMBFF.empty()) continue;
-
-                    // 3) 僅保留位寬相符的 MBFF
-                    std::vector<std::string> bitMatched;
-                    bitMatched.reserve(commonMBFF.size());
-                    for (const auto& mb : commonMBFF)
-                        if (getBitWidthFromName(mb) == bit) bitMatched.push_back(mb);
-                    if (bitMatched.empty()) continue;
-
-                    // 4) 取消「singleBitDegenerate == sbff」的硬條件（允許異型 SBFF 混用）
-                    //    但可做弱檢查：bestFF 的退化型需屬於 group 內至少一種 single-bit family（sanity）
-                    // CK-cap：以 group 內 SBFF 的 CK 值「平均」當作單顆 c_sb，較合理
-                    double c_sb_sum = 0.0;
-                    for (const auto& s : g) {
-                        const std::string& sb = instToSB.at(s);
-                        c_sb_sum += libParser_->getClockPinCap(sb);
-                    }
-                    double c_sb_avg = (g.empty() ? 0.0 : (c_sb_sum / (double)g.size()));
-
-                    // 5) 按權重與 CK saving 選出最佳 MBFF
-                    std::string bestFF = chooseBestMBFF(bitMatched, bit, c_sb_avg);
-                    if (bestFF.empty()) continue;
-
-                    // 弱檢查：bestFF 的單位退化是否屬於 group 內任一 sb-family（若取得到）
-                    bool sanityOK = true;
-                    if (const auto* cell = libParser_->getCell(bestFF)) {
-                        const std::string& deg = cell->singleBitDegenerate;
-                        if (!deg.empty()) {
-                            bool hit = false;
-                            for (const auto& s : g) if (instToSB.at(s) == deg) { hit = true; break; }
-                            sanityOK = hit; // 至少要覆蓋到其中一種 family
+                    if (bit == 4) {
+                        bool ok = tryMergeGroup(g, 4);
+                        if (!ok) {
+                            // 4 -> (2,2) 回退
+                            auto pairs = splitBestPairs4(g);
+                            for (auto& p : pairs) {
+                                bool anyUsed2 = false; for (auto& s : p) if (usedInstances.count(s)) { anyUsed2 = true; break; }
+                                if (!anyUsed2) (void)tryMergeGroup(p, 2);
+                            }
                         }
                     }
-                    if (!sanityOK) continue;
-
-                    // 6) 建立 MergedFF 結果，命名保留階層：prefix/merged_#
-                    ++totalMergeCount;
-                    MergedFF merged;
-                    merged.mbffType = bestFF;
-                    merged.bitwidth = bit;
-                    merged.mergedFFs = g;
-
-                    std::string base = "merged_" + std::to_string(totalMergeCount);
-                    merged.newInstanceName = (pg.first.empty() ? base : (pg.first + "/" + base));
-
-                    // 位置用幾何中心
-                    auto cen = calcCenter(g, coords);
-                    merged.newX = cen.first; merged.newY = cen.second;
-
-                    // 面積/功耗
-                    if (const auto it = allCells.find(bestFF); it != allCells.end()) {
-                        merged.area = (float)it->second.area;
-                        merged.power = (float)it->second.cellLeakagePower;
+                    else {
+                        (void)tryMergeGroup(g, 2);
                     }
-
-                    // D/Q pin 映射（簡單 D0/Q0 對應 group[0]…）
-                    for (int i = 0;i < (int)g.size();++i) {
-                        std::string d = "D" + std::to_string(i);
-                        std::string q = "Q" + std::to_string(i);
-                        merged.mbffPinToOrigPin[d] = g[i] + "/D";
-                        merged.mbffPinToOrigPin[q] = g[i] + "/Q";
-                        merged.mbffPinToOrigFF[d] = g[i];
-                        merged.mbffPinToOrigFF[q] = g[i];
-                    }
-
-                    c_sb_sum = 0.0;
-                    std::unordered_map<std::string, int> famCnt;
-                    std::vector<std::string> sbFamiliesPerMember;
-                    std::vector<double>     sbCkPerMember;
-                    sbFamiliesPerMember.reserve(g.size());
-                    sbCkPerMember.reserve(g.size());
-
-                    for (const auto& s : g) {
-                        const std::string& sb = instToSB.at(s);                   // 這顆的 single-bit family/type
-                        double c_sb = libParser_->getClockPinCap(sb);             // 這顆對應 family 的 CK cap
-                        c_sb_sum += c_sb;
-                        ++famCnt[sb];
-                        sbFamiliesPerMember.push_back(sb);
-                        sbCkPerMember.push_back(c_sb);
-                    }
-
-                    CkCapReport rep;
-                    rep.groupSize = bit;
-                    // 舊欄位：為了相容保留（放第一個 family；若你想顯示 "MIXED" 也可）
-                    rep.sbCell = sbFamiliesPerMember.empty() ? "" : sbFamiliesPerMember.front();
-                    rep.mbffCell = bestFF;
-                    rep.ckCapBeforeSum = c_sb_sum;
-                    rep.ckCapAfter = libParser_->getClockPinCap(bestFF);
-                    rep.ckCapBefore = c_sb_sum;                 // 舊欄位維持相同語意
-                    rep.ckCapSaving = rep.ckCapBeforeSum - rep.ckCapAfter;
-                    rep.members = g;
-
-                    // NEW: unique families + counts + 每顆 CK
-                    for (const auto& kv : famCnt) {
-                        rep.sbFamiliesUnique.push_back(kv.first);
-                        rep.sbFamilyCounts.push_back(kv);           // pair<family, count>
-                    }
-                    rep.sbMemberCkCaps = std::move(sbCkPerMember);
-
-                    // push
-                    ckCapReports_.push_back(std::move(rep));
-                    // 8) 標記 used、統計
-                    mergedFFResults_.push_back(std::move(merged));
-                    for (const auto& s : g) usedInstances.insert(s);
-                    if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
                 }
                 };
 
-            // 先 4 再 2（與原流程一致）
+            // 先 4 再 2
             handleGroups(groups4, 4);
             handleGroups(groups2, 2);
 
-            // 剩餘未用的收回 remaining
+            // 未用者回收
             for (const auto& nm : tmp4) if (!usedInstances.count(nm)) remainingSingleBitFFs.push_back(nm);
         }
     }
 
-    // 建回 mergeMap_（供後續生成/輸出使用）
+    // 建回 mergeMap_
     for (const auto& m : mergedFFResults_) {
         for (const auto& s : m.mergedFFs) mergeMap_.addMapping(s, m.newInstanceName);
     }
@@ -998,6 +1116,8 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         << " merged instances. (4-bit: " << fourbitFF
         << ", 2-bit: " << twobitFF << ")\n";
 }
+
+
 
 
 
@@ -1477,30 +1597,202 @@ double DensityPeakClustering::estimateCutoffBySampling_(size_t samples) const {
     if (N < 2) return 10.0;
     samples = std::min(samples, (size_t)N * 20);
 
-    std::vector<double> ds;
-    ds.reserve(samples);
-
+    std::vector<double> ds; ds.reserve(samples);
     unsigned seed = 1234567u;
     auto rnd = [&]() { seed = 1664525u * seed + 1013904223u; return seed; };
-
-    size_t cnt = 0;
-    while (cnt < samples) {
-        int i = (int)(rnd() % N);
-        int j = (int)(rnd() % N);
+    while (ds.size() < samples) {
+        int i = (int)(rnd() % N), j = (int)(rnd() % N);
         if (i == j) continue;
         ds.push_back(boxManhattanDistance(points_[i], points_[j]));
-        ++cnt;
     }
-
     std::sort(ds.begin(), ds.end());
 
-    int targetNeighbor = N / 100;
-    if (targetNeighbor < 10) targetNeighbor = 10;
-    if (targetNeighbor > 50) targetNeighbor = 50;
-
-    // 以分位數近似原本 cutoff 索引
-    size_t approxIdx = std::min((size_t)targetNeighbor * (size_t)N * ds.size()
-        / (size_t)((long long)N * (N - 1) / 2),
-        ds.size() - 1);
-    return ds[approxIdx];
+    double p = std::max(0.0005, std::min(0.05, params_.neighborPercent));
+    size_t idx = (size_t)std::llround(p * (ds.size() - 1));
+    if (idx >= ds.size()) idx = ds.size() - 1;
+    return ds[idx];
 }
+
+
+
+std::vector<DensityPeakClustering::DpcParams> makeFivePresets() {
+    using DpcParams = DensityPeakClustering::DpcParams;
+    std::vector<DpcParams> v;
+
+    // A) TNS_SAFE —— 最保守（Tapeout 前夜用它）
+    {
+        DpcParams P;
+        P.neighborPercent = 0.012;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 1.35;
+        P.rhoRadiusMul = 3.0;
+        P.deltaStartMul = 1.5;
+        P.gridCellMul = 2.5;
+
+        P.sameRowTolMul = 0.50;
+        P.dist4_rhoMul = 0.70; P.dist4_dcMul = 1.60;
+        P.dist2_rhoMul = 1.10; P.dist2_dcMul = 2.20;
+
+        P.hpwlThrDMul = 1.20;
+        P.hpwlThrQMul = 2.00;
+        P.hpwlWeightQ = 2.20;
+
+        P.ckSaveMinFrac = 0.020;
+        v.push_back(P);
+    }
+
+    // B) BALANCED —— 標準預設（安全 + 省功耗兼顧）
+    {
+        DpcParams P;
+        P.neighborPercent = 0.010;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 1.10;
+        P.rhoRadiusMul = 4.0;
+        P.deltaStartMul = 2.0;
+        P.gridCellMul = 2.0;
+
+        P.sameRowTolMul = 0.60;
+        P.dist4_rhoMul = 0.80; P.dist4_dcMul = 1.80;
+        P.dist2_rhoMul = 1.20; P.dist2_dcMul = 2.50;
+
+        P.hpwlThrDMul = 1.50;
+        P.hpwlThrQMul = 2.50;
+        P.hpwlWeightQ = 1.80;
+
+        P.ckSaveMinFrac = 0.010;
+        v.push_back(P);
+    }
+
+    //B2 test （Balanced 放鬆版）
+    {
+        DpcParams P;
+        // === DPC 分群：跟 B 很像，只微調 ===
+        P.neighborPercent = 0.010;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 1.05;   // from 1.10 → 1.05：中心稍微多一點（但不激進）
+        P.rhoRadiusMul = 3.8;    // from 4.0：略縮 ρ 半徑，計算更局部
+        P.deltaStartMul = 2.0;
+        P.gridCellMul = 2.2;    // from 2.0：大一點的格，速度略快
+
+        // === Merge 守門（放鬆）===
+        P.sameRowTolMul = 0.70;  // from 0.60：允許跨 row 輕微不齊
+
+        // 2b/4b 群距上限：放寬 ~15–20%
+        P.dist4_rhoMul = 0.90;   // from 0.80
+        P.dist4_dcMul = 2.00;   // from 1.80
+        P.dist2_rhoMul = 1.35;   // from 1.20
+        P.dist2_dcMul = 2.80;   // from 2.50
+
+        // ΔHPWL 上限 & 權重：放寬，且降低 Q 權重（但仍 >1）
+        P.hpwlThrDMul = 1.80;   // from 1.50
+        P.hpwlThrQMul = 3.00;   // from 2.50
+        P.hpwlWeightQ = 1.60;   // from 1.80
+
+        // CK-cap 最小節省比例：放寬，允許臨界但仍有正收益
+        P.ckSaveMinFrac = 0.007; // from 0.010（0.7% of ΣCsb）
+        v.push_back(P);
+    }
+
+
+    // C) POWER_SAVE —— 激進合併（允許多走線、換更多 MBFF）
+    {
+        DpcParams P;
+        P.neighborPercent = 0.008;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 0.90;
+        P.rhoRadiusMul = 3.5;
+        P.deltaStartMul = 1.5;
+        P.gridCellMul = 1.8;
+
+        P.sameRowTolMul = 0.65;
+        P.dist4_rhoMul = 0.90; P.dist4_dcMul = 2.10;
+        P.dist2_rhoMul = 1.40; P.dist2_dcMul = 3.00;
+
+        P.hpwlThrDMul = 2.00;
+        P.hpwlThrQMul = 3.20;
+        P.hpwlWeightQ = 1.50;
+
+        P.ckSaveMinFrac = 0.005;
+        v.push_back(P);
+    }
+
+    // D) SPEED —— 大設計加速（較粗網格、較窄半徑）
+    {
+        DpcParams P;
+        P.neighborPercent = 0.010;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 1.10;
+        P.rhoRadiusMul = 3.2;
+        P.deltaStartMul = 2.0;
+        P.gridCellMul = 3.0;
+
+        P.sameRowTolMul = 0.55;
+        P.dist4_rhoMul = 0.75; P.dist4_dcMul = 1.70;
+        P.dist2_rhoMul = 1.15; P.dist2_dcMul = 2.30;
+
+        P.hpwlThrDMul = 1.50;
+        P.hpwlThrQMul = 2.40;
+        P.hpwlWeightQ = 1.80;
+
+        P.ckSaveMinFrac = 0.010;
+        v.push_back(P);
+    }
+
+    // C++ —— 更激進（確認 TNS/合法化 OK 才用）
+    {
+        DpcParams P;
+        // DPC 更在地 + 多中心
+        P.neighborPercent = 0.008;
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 0.80;
+        P.rhoRadiusMul = 3.2;
+        P.deltaStartMul = 1.6;
+        P.gridCellMul = 1.6;
+
+        // Merge 守門（較鬆，但仍保 Q 風險）
+        P.sameRowTolMul = 0.78;
+        P.dist4_rhoMul = 1.10;
+        P.dist4_dcMul = 2.40;
+        P.dist2_rhoMul = 1.70;
+        P.dist2_dcMul = 3.40;
+
+        P.hpwlThrDMul = 2.40;
+        P.hpwlThrQMul = 3.80;
+        P.hpwlWeightQ = 1.30;
+
+        P.ckSaveMinFrac = 0.002;
+        v.push_back(P);
+    }
+
+    // C_BOLD —— 更進取的合併（更局部 + 更寬距離/HPWL）
+    {
+        DpcParams P;
+        // —— DPC：更局部、中心更多 —— 
+        P.neighborPercent = 0.006;        // C: 0.008 → 更小 dc，更局部
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 0.80;            // C: 0.90 → 中心挑更鬆
+        P.rhoRadiusMul = 3.2;             // C: 3.5 → 更近鄰的密度
+        P.deltaStartMul = 1.8;            // C: 1.5~2.0 之間取中
+        P.gridCellMul = 1.8;             // 與 C 相同（速度/品質平衡）
+
+        // —— Merge 幾何守門：明顯放寬（仍限制在局部）——
+        P.sameRowTolMul = 0.80;           // C: 0.65 → 跨 row 輕微不齊可接受
+        P.dist4_rhoMul = 1.00;           // C: 0.90
+        P.dist4_dcMul = 2.30;           // C: 2.10
+        P.dist2_rhoMul = 1.55;           // C: 1.40
+        P.dist2_dcMul = 3.20;           // C: 3.00
+
+        // —— ΔHPWL 守門：再鬆一點，但仍加重 Q —— 
+        P.hpwlThrDMul = 2.40;             // C: 2.00
+        P.hpwlThrQMul = 3.60;             // C: 3.20
+        P.hpwlWeightQ = 1.45;             // C: 1.50（仍>1，避免Q惡化）
+
+        // —— CK-cap 最小節省：收進邊界案，但仍要求正節省 —— 
+        P.ckSaveMinFrac = 0.004;          // C: 0.005
+
+        v.push_back(P);
+    }
+
+    return v;
+}
+

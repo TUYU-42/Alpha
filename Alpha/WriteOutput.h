@@ -37,7 +37,7 @@ private:
     void buildHierarchicalMapping();
     std::string getFullPath(const std::string& localName) const;
     std::string getLocalName(const std::string& fullPath) const;
-
+    bool isFlipFlopCell(const std::string& cellType) const;
     // Instance ³B²z
     bool isFlipFlopInstance(const std::string& cellType) const;
     std::string generateMBFFInstance(const MergedFF& mergedFF) const;
