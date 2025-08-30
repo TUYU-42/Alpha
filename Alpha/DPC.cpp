@@ -1792,6 +1792,33 @@ std::vector<DensityPeakClustering::DpcParams> makeFivePresets() {
 
         v.push_back(P);
     }
+    {  // 建議名稱：TNS_OPT
+    DpcParams P;
+
+    P.neighborPercent = 0.009;          // C=0.008，略放大cutoff，密度更平滑
+    P.kMode =DpcParams::KMode::Sigma;
+    P.kSigmaLambda = 0.95;               // C=0.90，中心略減，避免過碎群造成亂配
+
+    P.rhoRadiusMul = 3.4;                // C=3.5，略縮rho半徑，強化「就近」
+    P.deltaStartMul = 1.6;               // 與C系列一致
+    P.gridCellMul = 1.8;                 // 與C一致，速度/品質平衡
+
+    // 幾何守門 —— 顯著收緊以保TNS
+    P.sameRowTolMul = 0.55;              // C=0.65 → 降跨row容忍
+    P.dist4_rhoMul = 0.75;               // C=0.90
+    P.dist4_dcMul = 1.80;               // C=2.10  (4b特別嚴)
+    P.dist2_rhoMul = 1.20;               // C=1.40
+    P.dist2_dcMul = 2.50;               // C=3.00
+
+    // ΔHPWL與Q權重 —— 對Q更嚴格
+    P.hpwlThrDMul = 1.60;               // C=2.00
+    P.hpwlThrQMul = 2.20;               // C=3.20  (Q網更緊)
+    P.hpwlWeightQ = 2.00;               // C=1.50  (加重Q代價)
+
+    // CK-cap 節省下限 —— 避免「幾乎不省」的風險合併
+    P.ckSaveMinFrac = 0.012;
+    v.push_back(P);
+}
 
     return v;
 }

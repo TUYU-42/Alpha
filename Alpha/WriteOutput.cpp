@@ -5,10 +5,124 @@
 #include <regex>
 #include <unordered_set>
 #include <cassert>
+#include<atomic>
+#include<unordered_map>
 #include <array>
+#include <cctype>
 using namespace std;
 
+static std::atomic<int> g_syn_unconn_new_counter{ 0 };
 
+// 只產生「尾碼」：SYNOPSYS_UNCONNECTED_new_N
+static std::unordered_map<std::string, int> g_qn_fallback_id;
+
+static inline std::string dropLastPathElem(const std::string& fullPath) {
+    // 拿掉最後一段（例如 .../merged_1 -> ...）
+    size_t p = fullPath.rfind('/');
+    return (p == std::string::npos) ? std::string() : fullPath.substr(0, p);
+}
+
+// 取得或分配一個 id（確保 .v/.def 同一 pin 同一個 id）
+static int getOrAllocFallbackId(const std::string& baseHierPath,
+    const std::string& formalPin) {
+    std::string key = baseHierPath + "/" + formalPin;
+    auto it = g_qn_fallback_id.find(key);
+    if (it != g_qn_fallback_id.end()) return it->second;
+    int id = g_syn_unconn_new_counter.fetch_add(1);
+    g_qn_fallback_id.emplace(key, id);
+    return id;
+}
+
+// 依規格生成 .def 與 .v 的名稱
+static inline std::string makeDefFallbackName(const std::string& baseHierPath, int id) {
+    return baseHierPath + "/SYNOPSYS_UNCONNECTED_new_" + std::to_string(id);
+}
+static inline std::string makeVlogFallbackName(int id) {
+    return std::string("SYNOPSYS_UNCONNECTED_new_") + std::to_string(id);
+}// 將 "QN[3]" 轉為 "QN_3_"。若是 Verilog escaped（\name<space>），先去殼再轉。
+static inline std::string br2under(std::string t) {
+    // 你已經有的 helper；若名稱不同，請用你檔案裡的版本
+    auto unescapeIfEscaped = [](std::string s) {
+        if (!s.empty() && s[0] == '\\' && s.back() == ' ') return s.substr(1, s.size() - 2);
+        return s;
+        };
+    t = unescapeIfEscaped(t);
+
+    std::string out; out.reserve(t.size() + 2);
+    for (size_t i = 0;i < t.size();++i) {
+        if (t[i] == '[') {
+            size_t j = i + 1, k = j;
+            while (k < t.size() && std::isdigit((unsigned char)t[k])) ++k;
+            if (k<t.size() && t[k] == ']' && k>j) {
+                out.push_back('_'); out.append(t.begin() + j, t.begin() + k); out.push_back('_');
+                i = k; continue;
+            }
+        }
+        out.push_back(t[i]);
+    }
+    return out;
+}
+
+// 將 "QN[3]" 轉為 "QN__3__"（有些 lib 用雙底線樣式）
+static inline std::string br2dunder(std::string t) {
+    auto unescapeIfEscaped = [](std::string s) {
+        if (!s.empty() && s[0] == '\\' && s.back() == ' ') return s.substr(1, s.size() - 2);
+        return s;
+        };
+    t = unescapeIfEscaped(t);
+
+    std::string out; out.reserve(t.size() + 4);
+    for (size_t i = 0;i < t.size();++i) {
+        if (t[i] == '[') {
+            size_t j = i + 1, k = j;
+            while (k < t.size() && std::isdigit((unsigned char)t[k])) ++k;
+            if (k<t.size() && t[k] == ']' && k>j) {
+                out += "__"; out.append(t.begin() + j, t.begin() + k); out += "__";
+                i = k; continue;
+            }
+        }
+        out.push_back(t[i]);
+    }
+    return out;
+}
+
+// 產生統一的 fallback net 名稱：<hier>/<...>/merged_*/**SYNOPSYS_UNCONNECTED_new_k**
+static std::string makeHierSynopsysUnconn(const std::string& hierInstPath) {
+    std::ostringstream oss;
+    oss << hierInstPath << "/SYNOPSYS_UNCONNECTED_new_" << g_syn_unconn_new_counter++;
+    return oss.str();
+}
+
+// 讓 .v / .def 共用同一批 fallback 名稱（key: <hierInstPath>/<formalPin>）
+static std::unordered_map<std::string, std::string> g_qn_fallback_cache;
+
+static std::string getOrMakeFallbackNet(const std::string& hierInstPath,
+    const std::string& formalPin /* e.g. QN0 or QN[0] */) {
+    std::string key = hierInstPath + "/" + formalPin;
+    auto it = g_qn_fallback_cache.find(key);
+    if (it != g_qn_fallback_cache.end()) return it->second;
+    std::string name = makeHierSynopsysUnconn(hierInstPath);
+    g_qn_fallback_cache.emplace(key, name);
+    return name;
+}
+
+// Verilog 需要時做 escaped identifier（遇到 / [] . 等非 [A-Za-z0-9_$] 就轉為 \name<space>）
+static std::string verilogEscapeIfNeeded(const std::string& net) {
+    auto ok = [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '$'; };
+    bool need = false;
+    for (char c : net) { if (!ok(c)) { need = true; break; } }
+    if (need) return std::string("\\") + net + " ";
+    return net;
+}
+
+// （可選）若你的 instance 名稱存的是 Verilog escaped（以 '\' 開頭、尾端空白）可去殼
+static std::string unescapeOnceIfNeeded(std::string s) {
+    if (!s.empty() && s[0] == '\\') {
+        if (!s.empty() && s.back() == ' ') s.pop_back();
+        return s.substr(1);
+    }
+    return s;
+}
 
 
 
@@ -1101,6 +1215,41 @@ bool WriteOutput::writeVerilog() {
             conns.push_back({ ".VDD","VDD" });
             conns.push_back({ ".VSS","VSS" });
 
+
+            // Ensure all QN formals are present; if missing, add fallback net (only for missing pins)
+           // === Ensure all QN formals are present; only fill missing with fallback ===
+            if (mbffCell) {
+                size_t BW = g.mergedFFs.size();
+                // 取 base 階層（拿掉最後的 merged_*）
+                std::string fullHier = WO_normPath(g.newInstanceName);
+                std::string baseHier = dropLastPathElem(fullHier);
+
+                for (size_t bitIdx = 0; bitIdx < BW; ++bitIdx) {
+                    std::string formalQN = nthBundlePin(mbffCell, "QN", bitIdx, "QN");
+
+                    // MBFF 真的有 QN 才處理（支援 bundle 與各種命名）
+                    bool hasQNPin = (mbffCell->hasBundle("QN") ||
+                        mbffCell->pins.count(formalQN) ||
+                        mbffCell->pins.count(br2under(formalQN)) ||
+                        mbffCell->pins.count(br2dunder(formalQN)));
+                    if (!hasQNPin) continue;
+
+                    std::string formalQNEsc = "." + escapeFormalPinIfNeeded(formalQN);
+
+                    // conns 裡面是否已經有這個 QN 連線（代表原本就接好了）
+                    bool already = false;
+                    for (const auto& pr : conns) {
+                        if (pr.first == formalQNEsc) { already = true; break; }
+                    }
+                    if (already) continue; // 有就不補
+
+                    // 沒有：補 fallback。 .v 只要最後的 token
+                    int id = getOrAllocFallbackId(baseHier, formalQN);
+                    std::string fbV = makeVlogFallbackName(id);
+                    conns.push_back({ formalQNEsc, fbV });
+                }
+            }
+
             string instName = g.newInstanceName;
             size_t slash = instName.find_last_of('/');
             if (slash != string::npos) instName = instName.substr(slash + 1);
@@ -1258,51 +1407,55 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
             }
         }
 
-        // === 3. 處理 QN bundle (新增) ===
+
+        // === QN ===
+        std::string fullHier = WO_normPath(mergedFF.newInstanceName);
+        std::string baseHier = dropLastPathElem(fullHier);
+
         if (mbffCell->hasBundle("QN")) {
             auto members = mbffCell->getBundleMembers("QN");
             for (size_t i = 0; i < members.size() && i < mergedFF.mergedFFs.size(); ++i) {
-                const string& pinName = members[i]; // e.g. QN0, QN1
-                const string& singleFF = mergedFF.mergedFFs[i];
+                const std::string& pinName = members[i]; // QN0 或 QN[0]
+                std::string netName = findNetForPin(mergedFF.mergedFFs[i], "QN");
 
-                // 嘗試找到原始 FF 的 QN 連接
-                string netName = findNetForPin(singleFF, "QN");
+                auto missing = [&](const std::string& s) {
+                    if (s.empty() || s == "UNCONNECTED") return true;
+                    return s.rfind("SYNOPSYS_UNCONNECTED", 0) == 0;
+                    };
 
-                // 如果原始 FF 沒有 QN pin 或未連接，可以選擇保持未連接
-                // 或者根據需求產生反向訊號（這需要額外的邏輯）
-                if (!netName.empty() && netName != "UNCONNECTED") {
-                    connections.push_back({ pinName, netName });
+                if (missing(netName)) {
+                    int id = getOrAllocFallbackId(baseHier, pinName);
+                    netName = makeVlogFallbackName(id); // .v 只用最後 token
                 }
-                // 注意：如果原始單位元 FF 沒有 QN，但 MBFF 有 QN，
-                // 可能需要特殊處理（例如留空或產生新的 net）
+                connections.push_back({ pinName, netName });
             }
         }
         else {
-            // 檢查是否有個別的 QN pins（不在 bundle 中）
+            // 個別腳位 QN0/QN1...
             for (size_t i = 0; i < mergedFF.mergedFFs.size(); ++i) {
-                string pinName = "QN" + to_string(i);
-                if (mbffCell && mbffCell->pins.find(pinName) != mbffCell->pins.end()) {
-                    string netName = findNetForPin(mergedFF.mergedFFs[i], "QN");
-                    if (!netName.empty() && netName != "UNCONNECTED") {
-                        connections.push_back({ pinName, netName });
-                    }
-                }
-            }
-        }
-    }
-    else {
-        // 沒有 lib info 的 fallback 處理
-        for (size_t i = 0; i < mergedFF.mergedFFs.size(); ++i) {
-            connections.push_back({ "D" + to_string(i), findNetForPin(mergedFF.mergedFFs[i], "D") });
-            connections.push_back({ "Q" + to_string(i), findNetForPin(mergedFF.mergedFFs[i], "Q") });
+                std::string pinName = "QN" + std::to_string(i);
+                if (mbffCell && mbffCell->pins.find(pinName) == mbffCell->pins.end()) continue;
 
-            // 嘗試處理 QN
-            string qnNet = findNetForPin(mergedFF.mergedFFs[i], "QN");
-            if (!qnNet.empty() && qnNet != "UNCONNECTED") {
-                connections.push_back({ "QN" + to_string(i), qnNet });
+                std::string netName = findNetForPin(mergedFF.mergedFFs[i], "QN");
+                auto missing = [&](const std::string& s) {
+                    if (s.empty() || s == "UNCONNECTED") return true;
+                    return s.rfind("SYNOPSYS_UNCONNECTED", 0) == 0;
+                    };
+
+                if (missing(netName)) {
+                    int id = getOrAllocFallbackId(baseHier, pinName);
+                    netName = makeVlogFallbackName(id); // .v 只用最後 token
+                }
+                connections.push_back({ pinName, netName });
             }
         }
+
     }
+  
+
+        
+    
+    
 
     // === 4. 處理 scan pins ===
     for (size_t bitIdx = 0; bitIdx < mergedFF.mergedFFs.size(); ++bitIdx) {
@@ -1763,6 +1916,7 @@ bool WriteOutput::writeDef() {
                     else {
                         NetInfo ni;
                         ni.name = netName;
+                        if (netName.find("SYNOPSYS_UNCONNECTED_new_") != std::string::npos) ni.use = "SIGNAL";
                         ni.connections.push_back({ inst, pin });
                         defDataCopy.nets.push_back(ni);
                         size_t idx = defDataCopy.nets.size() - 1;
@@ -1898,10 +2052,23 @@ bool WriteOutput::writeDef() {
                     if (origQnNet.empty() && !qnNet.empty()) origQnNet = qnNet;
 
                     if (origQnNet.empty()) {
-                        origQnNet = std::string("UNCONNECTED_") + mbff.newInstanceName + "_" + mbffQnPin;
+                        std::string fullHier = WO_normPath(mbff.newInstanceName);
+                        std::string baseHier = dropLastPathElem(fullHier);
+
+                        // 同一個 <baseHier, formalQN> 配一個 id；.v/.def 會用到同一個 id
+                        int id = getOrAllocFallbackId(baseHier, mbffQnPin);
+
+                        // DEF 的 fallback 名稱：<父階層>/SYNOPSYS_UNCONNECTED_new_<id>
+                        origQnNet = makeDefFallbackName(baseHier, id);
                     }
 
                     ensureConnectedFast(origQnNet, mbff.newInstanceName, mbffQnPin);
+
+                    // 標記 + USE SIGNAL（你的 DEF 輸出會讀這個欄位）
+                    auto itIdx = netIndex.find(origQnNet);
+                    if (itIdx != netIndex.end()) {
+                        defDataCopy.nets[itIdx->second].use = "SIGNAL";
+                    }
                     qnBackfillCount++;
                     if (qnBackfillCount <= 20 || origQnNet.find("UNCONNECTED") != std::string::npos) {
                         std::cout << "[DEBUG] Backfilling QN: " << mbff.newInstanceName
@@ -2146,6 +2313,10 @@ bool WriteOutput::writeDef() {
 // 寫入所有檔案
 bool WriteOutput::writeAll() {
     cout << "\n=== Writing Output Files ===" << endl;
+
+    g_syn_unconn_new_counter = 0;
+    g_qn_fallback_cache.clear();
+
 
     bool success = true;
 

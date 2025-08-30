@@ -331,7 +331,7 @@ int main(int argc, char* argv[]) {
         DensityPeakClustering dpc;
 
         auto presets = makeFivePresets();
-        size_t pick = 6; // 想跑哪組就改這個索引
+        size_t pick = 7; // 想跑哪組就改這個索引
 
         dpc.setParams(presets.at(pick)); // at() 有界限檢查
         // run clustering → banking → flow → collect metrics
