@@ -462,191 +462,199 @@ bool WriteOutput::isFlipFlopCell(const std::string& cellType) const {
 }
 // 寫入 mapping list
 bool WriteOutput::writeMapList() {
-    string mappingFile = outputName_ + ".list";
-    ofstream mapFile(mappingFile);
+    std::string mappingFile = outputName_ + ".list";
+    std::ofstream mapFile(mappingFile);
     if (!mapFile.is_open()) {
-        cerr << "[WriteOutput] Error: Cannot create mapping file: " << mappingFile << endl;
+        std::cerr << "[WriteOutput] Error: Cannot create mapping file: " << mappingFile << std::endl;
         return false;
     }
+    std::cout << "\n[WriteOutput] Writing mapping list to " << mappingFile << "..." << std::endl;
 
-    cout << "\n[WriteOutput] Writing mapping list to " << mappingFile << "..." << endl;
+    // -------- helpers --------
+    auto lc = [](const std::string& s) { std::string t; t.reserve(s.size());
+    for (unsigned char c : s) t.push_back(std::tolower(c)); return t; };
 
-    // Step 1: 預先驗證所有 merged groups 的完整性
-    std::unordered_set<std::string> processedGroups;
-    std::unordered_set<std::string> consumedFFs;
-    std::vector<std::pair<const MergedFF*, std::vector<const FlipFlopInfo*>>> validGroups;
+    auto getLibCell = [&](const std::string& cellType)->const LibCell* {
+        return libParser_ ? libParser_->getCell(cellType) : nullptr;
+        };
 
-    // 建立 FF lookup map
-    std::unordered_map<std::string, const FlipFlopInfo*> ffLookup;
+    auto hasPin = [&](const LibCell* c, const std::string& p)->bool {
+        return c && (c->pins.find(p) != c->pins.end());
+        };
+
+    auto getClockPinName = [&](const LibCell* c)->std::string {
+        if (!c) return "";
+        for (const auto& kv : c->pins) if (lc(kv.second.signalType) == "clock") return kv.first;
+        for (const char* k : { "CK","CLK","CP" }) if (hasPin(c, k)) return k;
+        for (const auto& kv : c->pins) { auto n = lc(kv.first); if (n == "ck" || n == "clk" || n.find("clk") != std::string::npos) return kv.first; }
+        return "";
+        };
+
+    auto getBundleMember = [&](const LibCell* c, const std::string& b, size_t bit, const std::string& fb)->std::string {
+        if (c && c->hasBundle(b)) {
+            auto mem = c->getBundleMembers(b);
+            if (bit < mem.size()) return mem[bit];
+        }
+        return fb + std::to_string(bit);
+        };
+
+    auto findScanByTypeOrName = [&](const LibCell* c, const std::string& kind)->std::string {
+        if (!c) return "";
+        std::string st = (kind == "in" ? "test_scan_in" : (kind == "out" ? "test_scan_out" : "test_scan_enable"));
+        for (const auto& kv : c->pins) if (lc(kv.second.signalType) == st) return kv.first;
+        if (kind == "in" && hasPin(c, "SI")) return "SI";
+        if (kind == "out" && hasPin(c, "SO")) return "SO";
+        if (kind == "enable" && hasPin(c, "SE")) return "SE";
+        return "";
+        };
+
+    // 常見控制腳別名群組（同名優先，否則在同群找可用）
+    auto mapCtrlByNameOrType = [&](const std::string& srcPin, const LibPin& srcInfo, const LibCell* dst)->std::string {
+        if (!dst) return "";
+        if (hasPin(dst, srcPin)) return srcPin; // 同名優先
+        static const std::vector<std::vector<std::string>> groups = {
+            {"RD","RN","RESET","RST","CLR","ARST","ARSTB","RESETB","RSTB"},
+            {"SD","SN","SET","PRE","PRESET","SETB"},
+            {"EN","CE","ENABLE"},
+            {"SE"}
+        };
+        auto eq = [&](const std::string& a, const std::string& b) {return lc(a) == lc(b);};
+        for (const auto& g : groups) {
+            bool inGrp = false; for (const auto& x : g) if (eq(srcPin, x)) { inGrp = true; break; }
+            if (inGrp) { for (const auto& x : g) if (hasPin(dst, x)) return x; }
+        }
+        // 用 signalType 對（含 scan 以外可能的自定義型別）
+        std::string st = lc(srcInfo.signalType);
+        if (!st.empty()) {
+            for (const auto& dv : dst->pins) {
+                if (lc(dv.second.direction) != "inout" && lc(dv.second.signalType) == st) return dv.first;
+            }
+        }
+        return "";
+        };
+
+    // -------- collect merged groups --------
+    std::unordered_set<std::string> consumed;
+    std::vector<std::pair<const MergedFF*, std::vector<const FlipFlopInfo*>>> groups;
+
+    std::unordered_map<std::string, const FlipFlopInfo*> ffLut;
     for (const auto& ff : originalDefData_.flipFlops) {
-        // 支援多種名稱格式
-        ffLookup[ff.instName] = &ff;
-        ffLookup[WO_normPath(ff.instName)] = &ff;
+        ffLut[ff.instName] = &ff; ffLut[WO_normPath(ff.instName)] = &ff;
+        if (!ff.instName.empty() && ff.instName[0] == '\\') ffLut[WO_unescapeOnce(ff.instName)] = &ff;
+    }
 
-        // 處理 escaped names
-        if (ff.instName[0] == '\\') {
-            std::string unescaped = WO_unescapeOnce(ff.instName);
-            ffLookup[unescaped] = &ff;
+    for (const auto& m : mergedFFResults_) {
+        std::vector<const FlipFlopInfo*> vs; bool ok = true;
+        for (const auto& name : m.mergedFFs) {
+            const FlipFlopInfo* fi = nullptr;
+            auto it = ffLut.find(name);
+            if (it == ffLut.end()) it = ffLut.find(WO_normPath(name));
+            if (it == ffLut.end()) it = ffLut.find(WO_basename(name));
+            if (it != ffLut.end()) fi = it->second;
+            if (!fi) { std::cerr << "  Warning: Cannot find FF info for " << name << " in " << m.newInstanceName << "\n"; ok = false; break; }
+            vs.push_back(fi);
+        }
+        if (ok && !vs.empty()) {
+            groups.push_back({ &m,vs });
+            for (auto* fi : vs) { consumed.insert(fi->instName); consumed.insert(WO_normPath(fi->instName)); }
         }
     }
 
-    // Step 2: 驗證每個 merged group
-    for (const auto& mergedFF : mergedFFResults_) {
-        std::vector<const FlipFlopInfo*> groupFFs;
-        bool allValid = true;
+    // -------- count & header --------
+    int mergedCount = (int)groups.size(), unmerged = 0;
+    for (const auto& ff : originalDefData_.flipFlops)
+        if (!consumed.count(ff.instName) && !consumed.count(WO_normPath(ff.instName))) unmerged++;
+    int total = mergedCount + unmerged;
+    std::cout << "  Valid merged groups: " << mergedCount << "\n"
+        << "  Unmerged FFs: " << unmerged << "\n"
+        << "  Total instances: " << total << "\n";
+    mapFile << "CellInst " << total << "\n";
 
-        for (const auto& ffName : mergedFF.mergedFFs) {
-            // 嘗試多種名稱格式查找
-            const FlipFlopInfo* ffInfo = nullptr;
+    // -------- merged mapping：左邊(SBFF)「所有 pin」都嘗試；右邊(MBFF)有才寫 --------
+    for (const auto& [m, sbList] : groups) {
+        const LibCell* dst = getLibCell(m->mbffType);
+        const std::string& mbffName = m->newInstanceName;
 
-            // 直接查找
-            auto it = ffLookup.find(ffName);
-            if (it != ffLookup.end()) {
-                ffInfo = it->second;
+        // 目標 bit/共用腳資訊
+        std::string dstCLK = getClockPinName(dst);
+        std::string dstSI = findScanByTypeOrName(dst, "in");
+        std::string dstSO = findScanByTypeOrName(dst, "out");
+        std::string dstSE = findScanByTypeOrName(dst, "enable");
+
+        for (size_t bit = 0; bit < sbList.size(); ++bit) {
+            const auto* sb = sbList[bit];
+            const std::string& sbName = sb->instName;
+            const LibCell* src = getLibCell(sb->cellType);
+            if (!src) continue;
+
+            // 來源共用腳，用於同名比對
+            std::string srcCLK = getClockPinName(src);
+            std::string srcSI = findScanByTypeOrName(src, "in");
+            std::string srcSO = findScanByTypeOrName(src, "out");
+            std::string srcSE = findScanByTypeOrName(src, "enable");
+
+            // ---- bit-wise：D / Q / QN（存在才寫）----
+            if (hasPin(src, "D")) {
+                std::string dDst = getBundleMember(dst, "D", bit, "D");
+                if (hasPin(dst, dDst)) mapFile << sbName << "/D map " << mbffName << "/" << dDst << "\n";
+            }
+            {
+                std::string qDst = getBundleMember(dst, "Q", bit, "Q");
+                if (hasPin(src, "Q") && hasPin(dst, qDst))  mapFile << sbName << "/Q map " << mbffName << "/" << qDst << "\n";
+                std::string qnDst = getBundleMember(dst, "QN", bit, "QN");
+                if (hasPin(src, "QN") && hasPin(dst, qnDst)) mapFile << sbName << "/QN map " << mbffName << "/" << qnDst << "\n";
             }
 
-            // 嘗試規格化後查找
-            if (!ffInfo) {
-                it = ffLookup.find(WO_normPath(ffName));
-                if (it != ffLookup.end()) {
-                    ffInfo = it->second;
+            // ---- 共用腳：CLK / SI / SE / SO（你要每顆 SBFF 都對一次）----
+            if (!srcCLK.empty() && !dstCLK.empty())
+                mapFile << sbName << "/" << srcCLK << " map " << mbffName << "/" << dstCLK << "\n";
+
+            if (!srcSI.empty() && !dstSI.empty())
+                mapFile << sbName << "/" << srcSI << " map " << mbffName << "/" << dstSI << "\n";
+            if (!srcSE.empty() && !dstSE.empty())
+                mapFile << sbName << "/" << srcSE << " map " << mbffName << "/" << dstSE << "\n";
+            if (!srcSO.empty() && !dstSO.empty())
+                mapFile << sbName << "/" << srcSO << " map " << mbffName << "/" << dstSO << "\n";
+
+            // ---- 其他所有 pin（包含 VDD/VSS、inout、reset/set/enable 自訂名稱…）
+            for (const auto& kv : src->pins) {
+                const std::string& pnm = kv.first; const LibPin& pin = kv.second;
+
+                // 已處理過的跳過（避免重複：D/Q/QN/CLK/SI/SE/SO）
+                if (pnm == "D" || pnm == "Q" || pnm == "QN" ||
+                    (!srcCLK.empty() && pnm == srcCLK) ||
+                    pnm == srcSI || pnm == srcSO || pnm == srcSE) continue;
+
+                // 規則：同名優先；無同名則用別名群組或 signalType 嘗試；MBFF 有才寫
+                std::string dstPin = mapCtrlByNameOrType(pnm, pin, dst);
+                // 對於 power/ground/inout/其它非典型腳，如果上面找不到，同名已經判過，找不到就算了
+                if (!dstPin.empty() && hasPin(dst, dstPin)) {
+                    mapFile << sbName << "/" << pnm << " map " << mbffName << "/" << dstPin << "\n";
                 }
-            }
-
-            // 嘗試 basename 查找
-            if (!ffInfo) {
-                std::string baseName = WO_basename(ffName);
-                it = ffLookup.find(baseName);
-                if (it != ffLookup.end()) {
-                    ffInfo = it->second;
-                }
-            }
-
-            if (!ffInfo) {
-                cerr << "  Warning: Cannot find FF info for " << ffName << " in group "
-                    << mergedFF.newInstanceName << endl;
-                allValid = false;
-                break;
-            }
-
-            groupFFs.push_back(ffInfo);
-        }
-
-        if (allValid && !groupFFs.empty()) {
-            validGroups.push_back({ &mergedFF, groupFFs });
-            processedGroups.insert(WO_normPath(mergedFF.newInstanceName));
-
-            // 標記 consumed
-            for (const auto& ffInfo : groupFFs) {
-                consumedFFs.insert(ffInfo->instName);
-                consumedFFs.insert(WO_normPath(ffInfo->instName));
             }
         }
     }
 
-    // Step 3: 計算實際 instance 數量
-    int mergedCount = validGroups.size();
-    int unmergedCount = 0;
-
+    // -------- unmerged：左邊(單顆)的所有 pin 做 identity --------
     for (const auto& ff : originalDefData_.flipFlops) {
-        if (consumedFFs.find(ff.instName) == consumedFFs.end() &&
-            consumedFFs.find(WO_normPath(ff.instName)) == consumedFFs.end()) {
-            unmergedCount++;
+        if (consumed.count(ff.instName) || consumed.count(WO_normPath(ff.instName))) continue;
+        const LibCell* c = getLibCell(ff.cellType);
+        if (!c) continue;
+        for (const auto& kv : c->pins) {
+            const std::string& pnm = kv.first;
+            mapFile << ff.instName << "/" << pnm << " map " << ff.instName << "/" << pnm << "\n";
         }
     }
 
-    int totalCount = mergedCount + unmergedCount;
-
-    cout << "  Valid merged groups: " << mergedCount << endl;
-    cout << "  Unmerged FFs: " << unmergedCount << endl;
-    cout << "  Total instances: " << totalCount << endl;
-
-    // Step 4: 寫入 header
-    mapFile << "CellInst " << totalCount << endl;
-
-    // Step 5: 寫入 merged FF mappings（對齊 bit 順序）
-    for (const auto& [mergedFF, groupFFs] : validGroups) {
-        const LibCell* mbffCell = nullptr;
-        if (libParser_) {
-            mbffCell = libParser_->getCell(mergedFF->mbffType);
-        }
-
-        // 處理每個 bit
-        for (size_t bitIdx = 0; bitIdx < groupFFs.size(); ++bitIdx) {
-            const auto* ffInfo = groupFFs[bitIdx];
-            std::string origName = ffInfo->instName;
-            std::string mbffName = mergedFF->newInstanceName;
-
-            // 取得正確的 pin 名稱（使用 library bundle 或 fallback）
-            std::string dPin = "D" + std::to_string(bitIdx);
-            std::string qPin = "Q" + std::to_string(bitIdx);
-            std::string qnPin = "QN" + std::to_string(bitIdx);
-
-            if (mbffCell) {
-                if (mbffCell->hasBundle("D")) {
-                    auto members = mbffCell->getBundleMembers("D");
-                    if (bitIdx < members.size()) dPin = members[bitIdx];
-                }
-                if (mbffCell->hasBundle("Q")) {
-                    auto members = mbffCell->getBundleMembers("Q");
-                    if (bitIdx < members.size()) qPin = members[bitIdx];
-                }
-                if (mbffCell->hasBundle("QN")) {
-                    auto members = mbffCell->getBundleMembers("QN");
-                    if (bitIdx < members.size()) qnPin = members[bitIdx];
-                }
-            }
-
-            // 寫入 mappings
-            mapFile << origName << "/D map " << mbffName << "/" << dPin << endl;
-            mapFile << origName << "/Q map " << mbffName << "/" << qPin << endl;
-
-            // QN（檢查原始 FF 是否有 QN）
-        /*  bool hasQN = (mbffCell && mbffCell->hasBundle("QN"));
-            if (hasQN && mbffCell && mbffCell->pins.find(qnPin) != mbffCell->pins.end()) {
-                mapFile << origName << "/QN map " << mbffName << "/" << qnPin << endl;
-            }*/
-
-            // Clock（共用）
-            mapFile << origName << "/CK map " << mbffName << "/CK" << endl;
-
-            // Scan pins（第一個和最後一個）
-            if (bitIdx == 0 && !ffInfo->scanIn.empty() && ffInfo->scanIn != "UNCONNECTED") {
-                mapFile << origName << "/SI map " << mbffName << "/SI" << endl;
-            }
-            if (bitIdx == groupFFs.size() - 1 && !ffInfo->scanOut.empty() && ffInfo->scanOut != "UNCONNECTED") {
-                mapFile << origName << "/SO map " << mbffName << "/SO" << endl;
-            }
-        }
-    }
-
-    // Step 6: 寫入未合併的 FFs
-    for (const auto& ff : originalDefData_.flipFlops) {
-        if (consumedFFs.find(ff.instName) == consumedFFs.end() &&
-            consumedFFs.find(WO_normPath(ff.instName)) == consumedFFs.end()) {
-
-            bool hasQN = (ff.cellType.find("FSDNQ") == std::string::npos);
-
-            mapFile << ff.instName << "/D map " << ff.instName << "/D" << endl;
-            mapFile << ff.instName << "/Q map " << ff.instName << "/Q" << endl;
-            /*    if (hasQN) {
-                    mapFile << ff.instName << "/QN map " << ff.instName << "/QN" << endl;
-                }*/
-            mapFile << ff.instName << "/CK map " << ff.instName << "/CK" << endl;
-
-            if (!ff.scanIn.empty() && ff.scanIn != "UNCONNECTED") {
-                mapFile << ff.instName << "/SI map " << ff.instName << "/SI" << endl;
-            }
-            if (!ff.scanOut.empty() && ff.scanOut != "UNCONNECTED") {
-                mapFile << ff.instName << "/SO map " << ff.instName << "/SO" << endl;
-            }
-        }
-    }
+    // -------- OPERATION --------
     writeOperationSection(mapFile);
+
     mapFile.close();
-    cout << "  ✓ Generated " << mappingFile << endl;
+    std::cout << "  ✓ Generated " << mappingFile << std::endl;
     return true;
 }
+
+
 void WriteOutput::buildSimpleToFullNameMapping() {
     simpleToFullNameMap_.clear();
 

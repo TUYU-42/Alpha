@@ -1793,31 +1793,30 @@ std::vector<DensityPeakClustering::DpcParams> makeFivePresets() {
         v.push_back(P);
     }
     {  // 建議名稱：TNS_OPT
-    DpcParams P;
+        DpcParams P;
 
-    P.neighborPercent = 0.009;          // C=0.008，略放大cutoff，密度更平滑
-    P.kMode =DpcParams::KMode::Sigma;
-    P.kSigmaLambda = 0.95;               // C=0.90，中心略減，避免過碎群造成亂配
+        // 分群：讓 cluster 變大、鄰域加寬
+        P.neighborPercent = 0.1;              // 提高 dc（鄰居分位數）
+        P.kMode = DpcParams::KMode::Sigma;
+        P.kSigmaLambda = 0.1;                   // 取更少中心 → 大群聚
+        P.rhoRadiusMul = 5.0;
+        P.deltaStartMul = 3.0;
+        P.gridCellMul = 2.5;
 
-    P.rhoRadiusMul = 3.4;                // C=3.5，略縮rho半徑，強化「就近」
-    P.deltaStartMul = 1.6;               // 與C系列一致
-    P.gridCellMul = 1.8;                 // 與C一致，速度/品質平衡
+        // 幾何守門：大幅放寬（允許跨 row、遠距配對）
+        P.sameRowTolMul = 1.50;                  // 容許 ≈1.5× row 高度的 y 差
+        P.dist4_rhoMul = 3.50;  P.dist4_dcMul = 5.00;  // 4-bit 允許更遠
+        P.dist2_rhoMul = 4.50;  P.dist2_dcMul = 7.00;  // 2-bit 更遠
 
-    // 幾何守門 —— 顯著收緊以保TNS
-    P.sameRowTolMul = 0.55;              // C=0.65 → 降跨row容忍
-    P.dist4_rhoMul = 0.75;               // C=0.90
-    P.dist4_dcMul = 1.80;               // C=2.10  (4b特別嚴)
-    P.dist2_rhoMul = 1.20;               // C=1.40
-    P.dist2_dcMul = 2.50;               // C=3.00
+        // ΔHPWL 與 Q 權重：幾乎不擋（只為了不無限大）
+        P.hpwlThrDMul = 6.0;
+        P.hpwlThrQMul = 8.0;
+        P.hpwlWeightQ = 1.00;                  // 不特別加重 Q
 
-    // ΔHPWL與Q權重 —— 對Q更嚴格
-    P.hpwlThrDMul = 1.60;               // C=2.00
-    P.hpwlThrQMul = 2.20;               // C=3.20  (Q網更緊)
-    P.hpwlWeightQ = 2.00;               // C=1.50  (加重Q代價)
+        // CK-cap 最小節省：不要求（只要不變負）
+        P.ckSaveMinFrac = 0.000;
 
-    // CK-cap 節省下限 —— 避免「幾乎不省」的風險合併
-    P.ckSaveMinFrac = 0.012;
-    v.push_back(P);
+        v.push_back(P);
 }
 
     return v;

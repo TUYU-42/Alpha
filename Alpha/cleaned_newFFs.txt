@@ -1,7 +1,21 @@
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/merged_1 SNPSROPT25_FSDN2_V2_1 + PLACED ( 767866 272000 ) N width=3996 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_2 SNPSROPT25_FSDN2_V2_1 + PLACED ( 604548 125000 ) N width=3996 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/merged_3 SNPSROPT25_FSDN2_V2_1 + PLACED ( 566956 597200 ) N width=3996 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_4 SNPSROPT25_FSDN2_V2_1 + PLACED ( 213680 98000 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_1 SNPSROPT25_FSDN2_V2_1 + PLACED ( 482226 543200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/merged_2 SNPSROPT25_FSDN2_V2_1 + PLACED ( 767866 272000 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/merged_3 SNPSROPT25_FSDN2_V2_1 + PLACED ( 790362 321800 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_4 SNPSROPT25_FSDN2_V2_1 + PLACED ( 696900 408800 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_5 SNPSROPT25_FSDN2_V2_1 + PLACED ( 125102 189200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_6 SNPSROPT25_FSDN2_V2_1 + PLACED ( 13880 538400 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_7 SNPSROPT25_FSDN2_V2_1 + PLACED ( 522408 66200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/merged_8 SNPSROPT25_FSDN2_V2_1 + PLACED ( 598110 77000 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/merged_9 SNPSROPT25_FSDN2_V2_1 + PLACED ( 713180 561800 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_10 SNPSROPT25_FSDN2_V2_1 + PLACED ( 581164 562400 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_11 SNPSROPT25_FSDN2_V2_1 + PLACED ( 569620 572000 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/merged_12 SNPSROPT25_FSDN2_V2_1 + PLACED ( 747072 603200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_13 SNPSROPT25_FSDN2_V2_1 + PLACED ( 583458 603200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_14 SNPSROPT25_FSDN2_V2_1 + PLACED ( 798724 472400 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/merged_15 SNPSROPT25_FSDN2_V2_1 + PLACED ( 221968 573800 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/merged_16 SNPSROPT25_FSDN2_V2_1 + PLACED ( 365380 603200 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/merged_17 SNPSROPT25_FSDN2_V2_1 + PLACED ( 151668 335000 ) N width=3996 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/merged_18 SNPSROPT25_FSDN2_V2_1 + PLACED ( 213680 98000 ) N width=3996 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid11__372 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 308178 475400 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid_hier14__468 SNPSLOPT25_FSDN_V2_1 + PLACED ( 308178 475400 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar14__53 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 202876 497600 ) N width=2960 height=600 ;
@@ -87,7 +101,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid5__26 SNPSLOPT25_FSDN_V2_2 + PLACED ( 226482 87200 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid8__199 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 703338 417800 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo2__229 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 600774 159200 ) N width=1998 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid2__170 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 598110 77000 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid10__122 SNPSROPT25_FSDN_V2_2 + PLACED ( 491994 307400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid9__174 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 582940 351200 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar14__601 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 148042 583400 ) FS width=2812 height=600 ;
@@ -154,7 +167,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar12__122 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 721246 590000 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar1__227 SNPSROPT25_FSDN_V2_2 + PLACED ( 747442 12200 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo8__71 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 777412 566600 ) FS width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid2__85 SNPSROPT25_FSDN_V2_1 + PLACED ( 601810 77000 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid_hier13__266 SNPSROPT25_FSDN_V2_1 + PLACED ( 536986 438200 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar1__19 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 750772 11600 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar7__104 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 254750 260600 ) FS width=1924 height=600 ;
@@ -438,7 +450,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid13__462 SNPSROPT25_FSDN_V2_2 + PLACED ( 578500 406400 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar2__271 SNPSROPT25_FSDN_V2_1 + PLACED ( 604622 20000 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo10__53 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 599072 290000 ) N width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid15__206 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 151668 335000 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo16__405 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 60870 300800 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar14__181 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 180380 600200 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid12__69 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 665672 566600 ) FS width=1998 height=600 ;
@@ -876,7 +887,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar14__329 SNPSLOPT25_FSDN_V2_4 + PLACED ( 173794 545000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo14__67 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 421842 596600 ) FS width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar12__367 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 678844 556400 ) N width=1924 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar12__311 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 747072 603200 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid4__271 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 307512 183200 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid3__250 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 438418 46400 ) N width=1850 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid_hier10__99 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 509976 285200 ) N width=2516 height=600 ;
@@ -1160,6 +1170,7 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid5__158 SNPSHOPT25_FSDN_V2_2 + PLACED ( 258598 110600 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo1__294 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 771566 53000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid16__31 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 190148 239000 ) FS width=2220 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar13__449 SNPSROPT25_FSDN_V2_1 + PLACED ( 566956 597200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid15__149 SNPSROPT25_FSDN_V2_2 + PLACED ( 85290 315800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar9__190 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 698750 305000 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo5__41 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 267626 37400 ) FS width=2220 height=600 ;
@@ -1196,7 +1207,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo16__95 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 125250 284600 ) FS width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid15__92 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 107268 471800 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar3__83 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 453884 36200 ) FS width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar15__88 SNPSROPT25_FSDN_V2_1 + PLACED ( 168762 335000 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar14__189 SNPSHOPT25_FSDN_V2_1 + PLACED ( 209166 602600 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo14__323 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 373372 575600 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar2__165 SNPSROPT25_FSDN_V2_4 + PLACED ( 616536 25400 ) FS width=2516 height=600 ;
@@ -1598,7 +1608,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar15__549 SNPSROPT25_FSDN_V2_4 + PLACED ( 11216 533600 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid12__125 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 361014 309200 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar13__315 SNPSROPT25_FSDN_V2_2 + PLACED ( 467722 560600 ) FS width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar12__84 SNPSROPT25_FSDN_V2_1 + PLACED ( 770234 603200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid7__37 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 201026 285200 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid3__117 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 518708 40400 ) N width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar16__418 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 16766 124400 ) N width=2220 height=600 ;
@@ -1680,6 +1689,7 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar1__156 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 715844 30200 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid6__218 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 124732 101000 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo1__214 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 781556 28400 ) N width=2220 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo13__115 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 573394 597200 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/foo7__237 SNPSROPT25_FSDNQ_V3_4 + PLACED ( 57762 44000 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/bar4__8 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 337112 9800 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_mod_6/mid5__258 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 251568 111800 ) FS width=2960 height=600 ;
@@ -3072,7 +3082,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid_hier10__168 SNPSLOPT25_FSDN_V2_4 + PLACED ( 503390 280400 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar1__138 SNPSHOPT25_FSDN_V2_4 + PLACED ( 740486 21800 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar12__184 SNPSHOPT25_FSDN_V2_2 + PLACED ( 755434 596600 ) FS width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar8__5 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 798724 472400 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid11__195 SNPSLOPT25_FSDN_V2_2 + PLACED ( 514194 279800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar10__157 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 795172 201800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar7__182 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 790732 602600 ) FS width=2812 height=600 ;
@@ -3501,7 +3510,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar4__283 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 347324 28400 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar13__550 SNPSHOPT25_FSDN_V2_4 + PLACED ( 498506 597800 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid_hier14__513 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 294636 569000 ) FS width=1850 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar8__28 SNPSROPT25_FSDN_V2_1 + PLACED ( 802498 472400 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo14__516 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 415108 583400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid13__49 SNPSHOPT25_FSDN_V2_4 + PLACED ( 583828 421400 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar13__579 SNPSLOPT25_FSDN_V2_2 + PLACED ( 553488 601400 ) FS width=2220 height=600 ;
@@ -3773,7 +3781,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid13__416 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 573172 517400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid12__406 SNPSHOPT25_FSDN_V2_2 + PLACED ( 214198 324800 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid9__86 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 675884 328400 ) N width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid13__207 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 484816 543200 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid11__250 SNPSLOPT25_FSDN_V2_4 + PLACED ( 598258 203600 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid_hier14__269 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 307438 420200 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid15__412 SNPSLOPT25_FSDN_V2_1 + PLACED ( 11882 504200 ) FS width=1998 height=600 ;
@@ -3813,7 +3820,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid14__265 SNPSROPT25_FSDN_V2_2 + PLACED ( 308030 440000 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid15__585 SNPSROPT25_FSDNQ_V3_4 + PLACED ( 186152 332000 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo10__286 SNPSROPT25_FSDN_V2_1 + PLACED ( 749440 279800 ) FS width=1998 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar13__395 SNPSROPT25_FSDN_V2_1 + PLACED ( 482226 543200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo8__237 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 699564 480800 ) N width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo6__276 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 158180 72800 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo7__198 SNPSHOPT25_FSDN_V2_4 + PLACED ( 72118 13400 ) FS width=2516 height=600 ;
@@ -4272,7 +4278,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar13__712 SNPSHOPT25_FSDN_V2_4 + PLACED ( 556448 549200 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid11__172 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 299150 282200 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid10__209 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 421694 282200 ) FS width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid16__161 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 128580 189200 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid8__255 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 696604 443600 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid7__34 SNPSLOPT25_FSDN_V2_1 + PLACED ( 252382 288800 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid16__262 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 57688 73400 ) FS width=2220 height=600 ;
@@ -4580,7 +4585,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar14__620 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 213014 594200 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid14__562 SNPSROPT25_FSDN_V2_2 + PLACED ( 416366 548600 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar1__292 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 700082 72800 ) N width=1850 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo13__186 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 583458 603200 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid12__155 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 650798 573800 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid8__39 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 697122 406400 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid_hier14__428 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 378404 584600 ) FS width=2516 height=600 ;
@@ -5281,7 +5285,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid9__76 SNPSROPT25_FSDN_V2_1 + PLACED ( 657976 313400 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid7__22 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 203394 224600 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar11__490 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 802128 51800 ) FS width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid16__319 SNPSROPT25_FSDN_V2_1 + PLACED ( 125102 189200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo3__59 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 533434 22400 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid_hier13__37 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 543350 536600 ) FS width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar12__300 SNPSROPT25_FSDN_V2_1 + PLACED ( 700600 590000 ) N width=1998 height=600 ;
@@ -5433,7 +5436,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid8__59 SNPSROPT25_FSDN_V2_2 + PLACED ( 697344 527600 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo14__380 SNPSROPT25_FSDN_V2_4 + PLACED ( 351024 564800 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid9__9 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 687502 312800 ) N width=2294 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/foo13__332 SNPSROPT25_FSDN_V2_1 + PLACED ( 586640 603200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid2__169 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 614464 51200 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/mid12__131 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 332672 296600 ) FS width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_1/hier_top_mod_0_1/hier_mod_5/bar3__185 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 477490 25400 ) FS width=2812 height=600 ;
@@ -8678,7 +8680,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar8__36 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 696900 452600 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar16__555 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 23352 93200 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar13__40 SNPSLOPT25_FSDN_V2_4 + PLACED ( 506794 593000 ) FS width=2516 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/mid12__505 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 715918 561800 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar11__459 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 700082 266600 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar16__472 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 5740 67400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar6__261 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 123770 58400 ) N width=2960 height=600 ;
@@ -8863,7 +8864,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar4__257 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 306698 238400 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar10__220 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 703412 191600 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo15__574 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 69380 588800 ) N width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/mid12__36 SNPSROPT25_FSDN_V2_1 + PLACED ( 713180 561800 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar8__231 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 796282 425000 ) FS width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo4__35 SNPSHOPT25_FSDN_V2_2 + PLACED ( 425098 17000 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar15__394 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 5000 523400 ) FS width=2220 height=600 ;
@@ -9520,7 +9520,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo1__150 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 772010 35600 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/mid12__573 SNPSLOPT25_FSDNQ_V3_1 + PLACED ( 595372 371600 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo14__542 SNPSROPT25_FSDN_V2_4 + PLACED ( 356500 558200 ) FS width=2516 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar9__7 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 784294 321800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo2__25 SNPSHOPT25_FSDN_V2_1 + PLACED ( 655386 50000 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar11__540 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 750772 303800 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar6__130 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 90322 47600 ) N width=2220 height=600 ;
@@ -10756,7 +10755,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar2__118 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 581534 31400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo3__186 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 552008 6200 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo15__204 SNPSLOPT25_FSDN_V2_4 + PLACED ( 5666 584600 ) FS width=2516 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/bar9__46 SNPSROPT25_FSDN_V2_1 + PLACED ( 790362 321800 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo16__526 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 104900 239600 ) N width=1850 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/mid_hier14__77 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 231662 551000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_0/foo8__109 SNPSLOPT25_FSDN_V2_1 + PLACED ( 790362 554000 ) N width=1998 height=600 ;
@@ -11392,7 +11390,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid_hier13__227 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 523296 467000 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar1__221 SNPSLOPT25_FSDN_V2_2 + PLACED ( 697640 72200 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid14__578 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 401418 462200 ) FS width=2960 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo13__170 SNPSROPT25_FSDN_V2_1 + PLACED ( 569620 572000 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo3__223 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 531584 15800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid9__149 SNPSHOPT25_FSDN_V2_2 + PLACED ( 586418 330800 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__479 SNPSHOPT25_FSDN_V2_1 + PLACED ( 554820 485000 ) FS width=1998 height=600 ;
@@ -11583,7 +11580,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo10__228 SNPSLOPT25_FSDN_V2_4 + PLACED ( 761058 294200 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar14__369 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 182896 540800 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo1__273 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 697196 111800 ) FS width=2294 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid15__553 SNPSROPT25_FSDN_V2_1 + PLACED ( 24980 538400 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar10__257 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 796282 158000 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar16__321 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 53026 77000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__473 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 582052 516200 ) FS width=1850 height=600 ;
@@ -11732,7 +11728,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid9__220 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 663452 331400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__456 SNPSLOPT25_FSDN_V2_2 + PLACED ( 584494 468200 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo3__257 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 512196 41600 ) N width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar14__40 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 228554 573800 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo15__121 SNPSLOPT25_FSDN_V2_1 + PLACED ( 20984 585800 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid9__112 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 599738 336800 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo13__1 SNPSHOPT25_FSDN_V2_4 + PLACED ( 597592 584600 ) FS width=2516 height=600 ;
@@ -11915,7 +11910,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid12__515 SNPSHOPT25_FSDN_V2_4 + PLACED ( 245574 312800 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid12__308 SNPSROPT25_FSDN_V2_4 + PLACED ( 685430 564200 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo7__122 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 59612 34400 ) N width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar13__324 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 574356 572000 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar4__97 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 337778 35600 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__89 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 538762 366800 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar6__126 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 185856 60200 ) FS width=2960 height=600 ;
@@ -11950,7 +11944,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar16__59 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 38966 151400 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar2__150 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 566290 50000 ) N width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar6__175 SNPSLOPT25_FSDN_V2_1 + PLACED ( 86770 45200 ) N width=1998 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo3__160 SNPSROPT25_FSDN_V2_1 + PLACED ( 522408 66200 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar11__515 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 323200 274400 ) N width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo4__209 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 347916 59000 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid16__477 SNPSLOPT25_FSDN_V2_4 + PLACED ( 91580 136400 ) N width=2516 height=600 ;
@@ -11977,7 +11970,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid14__64 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 325790 540800 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid12__262 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 709554 562400 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo13__14 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 625342 602600 ) FS width=1998 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid15__568 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 13880 538400 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo2__289 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 601662 110600 ) FS width=1850 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__69 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 569768 428000 ) N width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar1__166 SNPSLOPT25_FSDN_V2_1 + PLACED ( 759430 12800 ) N width=1998 height=600 ;
@@ -12076,6 +12068,7 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid16__558 SNPSLOPT25_FSDN_V2_4 + PLACED ( 175792 251000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid_hier10__241 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 491328 293600 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar4__136 SNPSHOPT25_FSDN_V2_1 + PLACED ( 358572 18800 ) N width=1998 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo2__223 SNPSROPT25_FSDN_V2_1 + PLACED ( 604548 125000 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid1__249 SNPSHOPT25_FSDN_V2_4 + PLACED ( 679214 62600 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo6__122 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 192812 92000 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid_hier13__411 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 521520 319400 ) FS width=2812 height=600 ;
@@ -12444,7 +12437,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo4__299 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 402380 31400 ) FS width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar5__17 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 217454 6800 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar15__399 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 107120 410600 ) FS width=2294 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo13__255 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 583902 562400 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar11__423 SNPSROPT25_FSDN_V2_4 + PLACED ( 795172 135800 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid7__53 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 401196 335600 ) N width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid4__77 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 276284 146000 ) N width=2812 height=600 ;
@@ -12789,7 +12781,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo9__196 SNPSSLOPT25_FSDNQ_V3_1 + PLACED ( 796356 404000 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid14__460 SNPSSLOPT25_FSDN_V2_2 + PLACED ( 401048 494600 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar8__67 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 700896 419600 ) N width=1850 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid8__166 SNPSROPT25_FSDN_V2_1 + PLACED ( 700452 408800 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar16__299 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 82552 158600 ) FS width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid_hier13__364 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 538096 458600 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo16__9 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 34600 277400 ) FS width=2516 height=600 ;
@@ -13090,7 +13081,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid8__188 SNPSLOPT25_FSDN_V2_2 + PLACED ( 700156 517400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo14__153 SNPSHOPT25_FSDN_V2_1 + PLACED ( 336816 542600 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid2__70 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 652426 47600 ) N width=1850 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar14__387 SNPSROPT25_FSDN_V2_1 + PLACED ( 221968 573800 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid13__214 SNPSLOPT25_FSDN_V2_4 + PLACED ( 529438 375200 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar11__48 SNPSROPT25_FSDNQ_V3_4 + PLACED ( 696900 123800 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar16__247 SNPSHOPT25_FSDNQ_V3_1 + PLACED ( 12696 50000 ) N width=2220 height=600 ;
@@ -13255,7 +13245,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar3__193 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 501836 76400 ) N width=1850 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar8__21 SNPSHOPT25_FSDN_V2_4 + PLACED ( 700230 412400 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo15__44 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 58798 568400 ) N width=2812 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo3__251 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 525072 66200 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo14__138 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 381808 560600 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo16__256 SNPSLOPT25_FSDPQB_V2LP_1 + PLACED ( 88546 180800 ) N width=1850 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid4__287 SNPSROPT25_FSDNQ_V3_2 + PLACED ( 291898 50000 ) N width=2812 height=600 ;
@@ -13408,6 +13397,7 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo15__457 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 80554 603200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar7__45 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 8774 13400 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo16__409 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 36228 287600 ) N width=2220 height=600 ;
+hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid2__88 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 598406 125000 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar14__356 SNPSLOPT25_FSDN_V2_4 + PLACED ( 156478 577400 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar13__671 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 490958 592400 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar6__102 SNPSROPT25_FSDN_V2_4 + PLACED ( 118368 48200 ) FS width=2516 height=600 ;
@@ -13416,7 +13406,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar9__33 SNPSLOPT25_FSDPQB_V3_1 + PLACED ( 624084 309200 ) N width=2294 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo10__188 SNPSSLOPT25_FSDNQ_V3_2 + PLACED ( 551638 291800 ) FS width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo5__107 SNPSHOPT25_FSDN_V2_2 + PLACED ( 279540 27200 ) N width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo13__251 SNPSROPT25_FSDN_V2_1 + PLACED ( 581164 562400 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar13__781 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 546828 603200 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo10__110 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 552600 288200 ) FS width=1924 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid4__132 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 296930 70400 ) N width=2960 height=600 ;
@@ -13452,7 +13441,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hie
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar2__264 SNPSHOPT25_FSDN_V2_4 + PLACED ( 608174 6200 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo15__27 SNPSSLOPT25_FSDN_V2_4 + PLACED ( 69676 574400 ) N width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid15__257 SNPSROPT25_FSDN_V2_2 + PLACED ( 129764 553400 ) FS width=2220 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/bar8__107 SNPSLOPT25_FSDNQ_V3_2 + PLACED ( 696900 408800 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid4__219 SNPSHOPT25_FSDNQ_V3_4 + PLACED ( 275544 141800 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/foo2__172 SNPSROPT25_FSDNQ_V3_1 + PLACED ( 673146 49400 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_2/hier_top_mod_0_0/hier_mod_3/mid14__412 SNPSLOPT25_FSDPQB_V2LP_2 + PLACED ( 308474 505400 ) FS width=1924 height=600 ;
@@ -13709,7 +13697,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/bar5__2
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/bar1__83 SNPSHOPT25_FSDN_V2_2 + PLACED ( 703264 114200 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/bar14__717 SNPSSLOPT25_FSDN_V2_1 + PLACED ( 238692 601400 ) FS width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/bar11__64 SNPSLOPT25_FSDN_V2_1 + PLACED ( 796874 57200 ) N width=1998 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo14__551 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 365380 603200 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo13__270 SNPSHOPT25_FSDN_V2_2 + PLACED ( 623566 578000 ) N width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo16__246 SNPSROPT25_FSDN_V2_4 + PLACED ( 47254 263000 ) FS width=2516 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid11__364 SNPSROPT25_FSDN_V2_4 + PLACED ( 647838 292400 ) N width=2516 height=600 ;
@@ -15417,7 +15404,6 @@ hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid15__
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo1__297 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 774304 11000 ) FS width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo13__378 SNPSHOPT25_FSDN_V2_2 + PLACED ( 628524 597800 ) FS width=2220 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid12__74 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 661084 570200 ) FS width=2960 height=600 ;
-hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/foo14__540 SNPSROPT25_FSDN_V2_1 + PLACED ( 362568 603200 ) N width=1998 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid13__121 SNPSSLOPT25_FSDNQ_V3_4 + PLACED ( 462320 332000 ) N width=2960 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid16__200 SNPSHOPT25_FSDNQ_V3_2 + PLACED ( 98166 144800 ) N width=2812 height=600 ;
 hier_top_mod_5/hier_top_mod_4/hier_top_mod_3/hier_top_mod_0_2/hier_mod_2/mid15__255 SNPSLOPT25_FSDNQ_V3_4 + PLACED ( 51620 539000 ) FS width=2960 height=600 ;
