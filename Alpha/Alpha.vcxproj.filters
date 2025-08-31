@@ -56,6 +56,9 @@
     <Filter Include="CompatibleList">
       <UniqueIdentifier>{f70992c7-02a4-4aa6-bf9d-483b5209ea52}</UniqueIdentifier>
     </Filter>
+    <Filter Include="files">
+      <UniqueIdentifier>{a085d2e9-c6c9-4286-92b9-06360ec70c99}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ParserWeights.cpp">
@@ -156,5 +159,13 @@
     <ClInclude Include="DPC.h">
       <Filter>BankingEngine</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="my_beta_output.def">
+      <Filter>files</Filter>
+    </None>
+    <None Include="my_final_output_A.def">
+      <Filter>files</Filter>
+    </None>
   </ItemGroup>
 </Project>

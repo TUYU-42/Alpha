@@ -1252,7 +1252,7 @@ bool WriteOutput::writeVerilog() {
                     if (already) continue; // 有就不補
 
                     // 沒有：補 fallback。 .v 只要最後的 token
-                    int id = getOrAllocFallbackId(baseHier, formalQN);
+                    int id = getOrAllocFallbackId(fullHier, formalQN);
                     std::string fbV = makeVlogFallbackName(id);
                     conns.push_back({ formalQNEsc, fbV });
                 }
@@ -1432,7 +1432,7 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
                     };
 
                 if (missing(netName)) {
-                    int id = getOrAllocFallbackId(baseHier, pinName);
+                    int id = getOrAllocFallbackId(fullHier, pinName);
                     netName = makeVlogFallbackName(id); // .v 只用最後 token
                 }
                 connections.push_back({ pinName, netName });
@@ -1451,7 +1451,7 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
                     };
 
                 if (missing(netName)) {
-                    int id = getOrAllocFallbackId(baseHier, pinName);
+                    int id = getOrAllocFallbackId(fullHier, pinName);
                     netName = makeVlogFallbackName(id); // .v 只用最後 token
                 }
                 connections.push_back({ pinName, netName });
@@ -2064,7 +2064,7 @@ bool WriteOutput::writeDef() {
                         std::string baseHier = dropLastPathElem(fullHier);
 
                         // 同一個 <baseHier, formalQN> 配一個 id；.v/.def 會用到同一個 id
-                        int id = getOrAllocFallbackId(baseHier, mbffQnPin);
+                        int id = getOrAllocFallbackId(fullHier, mbffQnPin);
 
                         // DEF 的 fallback 名稱：<父階層>/SYNOPSYS_UNCONNECTED_new_<id>
                         origQnNet = makeDefFallbackName(baseHier, id);
@@ -2324,6 +2324,7 @@ bool WriteOutput::writeAll() {
 
     g_syn_unconn_new_counter = 0;
     g_qn_fallback_cache.clear();
+    g_qn_fallback_id.clear();
 
 
     bool success = true;
