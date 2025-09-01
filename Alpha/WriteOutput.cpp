@@ -471,67 +471,39 @@ bool WriteOutput::writeMapList() {
     std::cout << "\n[WriteOutput] Writing mapping list to " << mappingFile << "..." << std::endl;
 
     // -------- helpers --------
-    auto lc = [](const std::string& s) { std::string t; t.reserve(s.size());
-    for (unsigned char c : s) t.push_back(std::tolower(c)); return t; };
+    auto lc = [](const std::string& s) {
+        std::string t;
+        t.reserve(s.size());
+        for (unsigned char c : s) t.push_back(std::tolower(c));
+        return t;
+        };
 
-    auto getLibCell = [&](const std::string& cellType)->const LibCell* {
+    auto getLibCell = [&](const std::string& cellType) -> const LibCell* {
         return libParser_ ? libParser_->getCell(cellType) : nullptr;
         };
 
-    auto hasPin = [&](const LibCell* c, const std::string& p)->bool {
+    auto hasPin = [&](const LibCell* c, const std::string& p) -> bool {
         return c && (c->pins.find(p) != c->pins.end());
         };
 
-    auto getClockPinName = [&](const LibCell* c)->std::string {
-        if (!c) return "";
-        for (const auto& kv : c->pins) if (lc(kv.second.signalType) == "clock") return kv.first;
-        for (const char* k : { "CK","CLK","CP" }) if (hasPin(c, k)) return k;
-        for (const auto& kv : c->pins) { auto n = lc(kv.first); if (n == "ck" || n == "clk" || n.find("clk") != std::string::npos) return kv.first; }
-        return "";
-        };
+    // -------- 從 Verilog 收集實際使用的 pins --------
+    std::unordered_map<std::string, std::set<std::string>> actualPinsUsed; // instance -> set of pins
 
-    auto getBundleMember = [&](const LibCell* c, const std::string& b, size_t bit, const std::string& fb)->std::string {
-        if (c && c->hasBundle(b)) {
-            auto mem = c->getBundleMembers(b);
-            if (bit < mem.size()) return mem[bit];
-        }
-        return fb + std::to_string(bit);
-        };
+    if (verilogParser_) {
+        for (const auto& inst : verilogParser_->getInstances()) {
+            std::string instName = inst.instName;
+            // 處理 escaped identifier
+            if (!instName.empty() && instName[0] == '\\' && instName.back() == ' ') {
+                instName = instName.substr(1, instName.size() - 2);
+            }
 
-    auto findScanByTypeOrName = [&](const LibCell* c, const std::string& kind)->std::string {
-        if (!c) return "";
-        std::string st = (kind == "in" ? "test_scan_in" : (kind == "out" ? "test_scan_out" : "test_scan_enable"));
-        for (const auto& kv : c->pins) if (lc(kv.second.signalType) == st) return kv.first;
-        if (kind == "in" && hasPin(c, "SI")) return "SI";
-        if (kind == "out" && hasPin(c, "SO")) return "SO";
-        if (kind == "enable" && hasPin(c, "SE")) return "SE";
-        return "";
-        };
-
-    // 常見控制腳別名群組（同名優先，否則在同群找可用）
-    auto mapCtrlByNameOrType = [&](const std::string& srcPin, const LibPin& srcInfo, const LibCell* dst)->std::string {
-        if (!dst) return "";
-        if (hasPin(dst, srcPin)) return srcPin; // 同名優先
-        static const std::vector<std::vector<std::string>> groups = {
-            {"RD","RN","RESET","RST","CLR","ARST","ARSTB","RESETB","RSTB"},
-            {"SD","SN","SET","PRE","PRESET","SETB"},
-            {"EN","CE","ENABLE"},
-            {"SE"}
-        };
-        auto eq = [&](const std::string& a, const std::string& b) {return lc(a) == lc(b);};
-        for (const auto& g : groups) {
-            bool inGrp = false; for (const auto& x : g) if (eq(srcPin, x)) { inGrp = true; break; }
-            if (inGrp) { for (const auto& x : g) if (hasPin(dst, x)) return x; }
-        }
-        // 用 signalType 對（含 scan 以外可能的自定義型別）
-        std::string st = lc(srcInfo.signalType);
-        if (!st.empty()) {
-            for (const auto& dv : dst->pins) {
-                if (lc(dv.second.direction) != "inout" && lc(dv.second.signalType) == st) return dv.first;
+            for (const auto& conn : inst.connections) {
+                if (!conn.second.empty() && conn.second != "UNCONNECTED") {
+                    actualPinsUsed[instName].insert(conn.first);
+                }
             }
         }
-        return "";
-        };
+    }
 
     // -------- collect merged groups --------
     std::unordered_set<std::string> consumed;
@@ -539,110 +511,223 @@ bool WriteOutput::writeMapList() {
 
     std::unordered_map<std::string, const FlipFlopInfo*> ffLut;
     for (const auto& ff : originalDefData_.flipFlops) {
-        ffLut[ff.instName] = &ff; ffLut[WO_normPath(ff.instName)] = &ff;
-        if (!ff.instName.empty() && ff.instName[0] == '\\') ffLut[WO_unescapeOnce(ff.instName)] = &ff;
+        ffLut[ff.instName] = &ff;
+        ffLut[WO_normPath(ff.instName)] = &ff;
+        if (!ff.instName.empty() && ff.instName[0] == '\\') {
+            ffLut[WO_unescapeOnce(ff.instName)] = &ff;
+        }
     }
 
     for (const auto& m : mergedFFResults_) {
-        std::vector<const FlipFlopInfo*> vs; bool ok = true;
+        std::vector<const FlipFlopInfo*> vs;
+        bool ok = true;
         for (const auto& name : m.mergedFFs) {
             const FlipFlopInfo* fi = nullptr;
             auto it = ffLut.find(name);
             if (it == ffLut.end()) it = ffLut.find(WO_normPath(name));
             if (it == ffLut.end()) it = ffLut.find(WO_basename(name));
             if (it != ffLut.end()) fi = it->second;
-            if (!fi) { std::cerr << "  Warning: Cannot find FF info for " << name << " in " << m.newInstanceName << "\n"; ok = false; break; }
+            if (!fi) {
+                std::cerr << "  Warning: Cannot find FF info for " << name << " in " << m.newInstanceName << "\n";
+                ok = false;
+                break;
+            }
             vs.push_back(fi);
         }
         if (ok && !vs.empty()) {
-            groups.push_back({ &m,vs });
-            for (auto* fi : vs) { consumed.insert(fi->instName); consumed.insert(WO_normPath(fi->instName)); }
+            groups.push_back({ &m, vs });
+            for (auto* fi : vs) {
+                consumed.insert(fi->instName);
+                consumed.insert(WO_normPath(fi->instName));
+            }
         }
     }
 
     // -------- count & header --------
-    int mergedCount = (int)groups.size(), unmerged = 0;
-    for (const auto& ff : originalDefData_.flipFlops)
-        if (!consumed.count(ff.instName) && !consumed.count(WO_normPath(ff.instName))) unmerged++;
+    int mergedCount = (int)groups.size();
+    int unmerged = 0;
+    for (const auto& ff : originalDefData_.flipFlops) {
+        if (!consumed.count(ff.instName) && !consumed.count(WO_normPath(ff.instName))) {
+            unmerged++;
+        }
+    }
+
     int total = mergedCount + unmerged;
     std::cout << "  Valid merged groups: " << mergedCount << "\n"
         << "  Unmerged FFs: " << unmerged << "\n"
         << "  Total instances: " << total << "\n";
     mapFile << "CellInst " << total << "\n";
 
-    // -------- merged mapping：左邊(SBFF)「所有 pin」都嘗試；右邊(MBFF)有才寫 --------
+    // -------- merged mapping --------
     for (const auto& [m, sbList] : groups) {
-        const LibCell* dst = getLibCell(m->mbffType);
+        const LibCell* dstCell = getLibCell(m->mbffType);
         const std::string& mbffName = m->newInstanceName;
 
-        // 目標 bit/共用腳資訊
-        std::string dstCLK = getClockPinName(dst);
-        std::string dstSI = findScanByTypeOrName(dst, "in");
-        std::string dstSO = findScanByTypeOrName(dst, "out");
-        std::string dstSE = findScanByTypeOrName(dst, "enable");
+        // 收集 MBFF 在 Verilog 中實際使用的 pins
+        std::set<std::string> mbffActualPins;
+        if (actualPinsUsed.count(mbffName)) {
+            mbffActualPins = actualPinsUsed[mbffName];
+        }
+        // 也檢查簡單名稱
+        std::string mbffSimple = mbffName;
+        size_t lastSlash = mbffSimple.find_last_of('/');
+        if (lastSlash != std::string::npos) {
+            mbffSimple = mbffSimple.substr(lastSlash + 1);
+        }
+        if (actualPinsUsed.count(mbffSimple)) {
+            for (const auto& pin : actualPinsUsed[mbffSimple]) {
+                mbffActualPins.insert(pin);
+            }
+        }
 
         for (size_t bit = 0; bit < sbList.size(); ++bit) {
             const auto* sb = sbList[bit];
             const std::string& sbName = sb->instName;
-            const LibCell* src = getLibCell(sb->cellType);
-            if (!src) continue;
+            const LibCell* srcCell = getLibCell(sb->cellType);
+            if (!srcCell) continue;
 
-            // 來源共用腳，用於同名比對
-            std::string srcCLK = getClockPinName(src);
-            std::string srcSI = findScanByTypeOrName(src, "in");
-            std::string srcSO = findScanByTypeOrName(src, "out");
-            std::string srcSE = findScanByTypeOrName(src, "enable");
-
-            // ---- bit-wise：D / Q / QN（存在才寫）----
-            if (hasPin(src, "D")) {
-                std::string dDst = getBundleMember(dst, "D", bit, "D");
-                if (hasPin(dst, dDst)) mapFile << sbName << "/D map " << mbffName << "/" << dDst << "\n";
+            // 收集這個 SBFF 在 Verilog 中實際使用的 pins
+            std::set<std::string> sbActualPins;
+            if (actualPinsUsed.count(sbName)) {
+                sbActualPins = actualPinsUsed[sbName];
             }
-            {
-                std::string qDst = getBundleMember(dst, "Q", bit, "Q");
-                if (hasPin(src, "Q") && hasPin(dst, qDst))  mapFile << sbName << "/Q map " << mbffName << "/" << qDst << "\n";
-                std::string qnDst = getBundleMember(dst, "QN", bit, "QN");
-                if (hasPin(src, "QN") && hasPin(dst, qnDst)) mapFile << sbName << "/QN map " << mbffName << "/" << qnDst << "\n";
+            // 也檢查簡單名稱
+            std::string sbSimple = sbName;
+            size_t slash = sbSimple.find_last_of('/');
+            if (slash != std::string::npos) {
+                sbSimple = sbSimple.substr(slash + 1);
+            }
+            if (actualPinsUsed.count(sbSimple)) {
+                for (const auto& pin : actualPinsUsed[sbSimple]) {
+                    sbActualPins.insert(pin);
+                }
             }
 
-            // ---- 共用腳：CLK / SI / SE / SO（你要每顆 SBFF 都對一次）----
-            if (!srcCLK.empty() && !dstCLK.empty())
-                mapFile << sbName << "/" << srcCLK << " map " << mbffName << "/" << dstCLK << "\n";
+            // Helper: 取得 MBFF 的對應 pin 名稱
+            auto getMBFFPin = [&](const std::string& bundle, size_t idx, const std::string& fallback) -> std::string {
+                if (dstCell && dstCell->hasBundle(bundle)) {
+                    auto members = dstCell->getBundleMembers(bundle);
+                    if (idx < members.size()) return members[idx];
+                }
+                return fallback + std::to_string(idx);
+                };
 
-            if (!srcSI.empty() && !dstSI.empty())
-                mapFile << sbName << "/" << srcSI << " map " << mbffName << "/" << dstSI << "\n";
-            if (!srcSE.empty() && !dstSE.empty())
-                mapFile << sbName << "/" << srcSE << " map " << mbffName << "/" << dstSE << "\n";
-            if (!srcSO.empty() && !dstSO.empty())
-                mapFile << sbName << "/" << srcSO << " map " << mbffName << "/" << dstSO << "\n";
+            // ---- 處理所有在 Verilog 中出現的 SBFF pins ----
+            for (const auto& pinName : sbActualPins) {
+                std::string mappedPin;
 
-            // ---- 其他所有 pin（包含 VDD/VSS、inout、reset/set/enable 自訂名稱…）
-            for (const auto& kv : src->pins) {
-                const std::string& pnm = kv.first; const LibPin& pin = kv.second;
+                // 特殊處理 bit-wise pins
+                if (pinName == "D") {
+                    mappedPin = getMBFFPin("D", bit, "D");
+                }
+                else if (pinName == "Q") {
+                    mappedPin = getMBFFPin("Q", bit, "Q");
+                }
+                else if (pinName == "QN") {
+                    mappedPin = getMBFFPin("QN", bit, "QN");
+                    // 只有當 MBFF 也有這個 QN pin 時才寫出
+                    if (!mbffActualPins.count(mappedPin) && !hasPin(dstCell, mappedPin)) {
+                        continue;
+                    }
+                }
+                else if (pinName == "SI" && bit == 0) {
+                    mappedPin = "SI";
+                }
+                else if (pinName == "SO" && bit == sbList.size() - 1) {
+                    mappedPin = "SO";
+                }
+                else if (pinName == "CK" || pinName == "CLK") {
+                    // Clock pin 映射
+                    if (hasPin(dstCell, "CK")) {
+                        mappedPin = "CK";
+                    }
+                    else if (hasPin(dstCell, "CLK")) {
+                        mappedPin = "CLK";
+                    }
+                    else {
+                        mappedPin = pinName; // 保持原名
+                    }
+                }
+                else if (pinName == "SE") {
+                    mappedPin = "SE";
+                }
+                else {
+                    // 其他 pins (VSS, VDD, reset, etc.)
+                    // 先嘗試同名映射
+                    if (hasPin(dstCell, pinName)) {
+                        mappedPin = pinName;
+                    }
+                    else {
+                        // 嘗試找相似的 pin
+                        static const std::vector<std::vector<std::string>> pinGroups = {
+                            {"RD", "RN", "RESET", "RST", "CLR", "ARST", "ARSTB", "RESETB", "RSTB"},
+                            {"SD", "SN", "SET", "PRE", "PRESET", "SETB"},
+                            {"EN", "CE", "ENABLE"},
+                            {"VSS"},
+                            {"VDD"}
+                        };
 
-                // 已處理過的跳過（避免重複：D/Q/QN/CLK/SI/SE/SO）
-                if (pnm == "D" || pnm == "Q" || pnm == "QN" ||
-                    (!srcCLK.empty() && pnm == srcCLK) ||
-                    pnm == srcSI || pnm == srcSO || pnm == srcSE) continue;
+                        for (const auto& group : pinGroups) {
+                            bool inGroup = false;
+                            for (const auto& g : group) {
+                                if (lc(pinName) == lc(g)) {
+                                    inGroup = true;
+                                    break;
+                                }
+                            }
+                            if (inGroup) {
+                                for (const auto& g : group) {
+                                    if (hasPin(dstCell, g)) {
+                                        mappedPin = g;
+                                        break;
+                                    }
+                                }
+                                if (!mappedPin.empty()) break;
+                            }
+                        }
 
-                // 規則：同名優先；無同名則用別名群組或 signalType 嘗試；MBFF 有才寫
-                std::string dstPin = mapCtrlByNameOrType(pnm, pin, dst);
-                // 對於 power/ground/inout/其它非典型腳，如果上面找不到，同名已經判過，找不到就算了
-                if (!dstPin.empty() && hasPin(dst, dstPin)) {
-                    mapFile << sbName << "/" << pnm << " map " << mbffName << "/" << dstPin << "\n";
+                        // 如果還是找不到，保持原名
+                        if (mappedPin.empty()) {
+                            mappedPin = pinName;
+                        }
+                    }
+                }
+
+                // 只有當 MBFF 確實有這個 pin 時才寫出映射
+                if (!mappedPin.empty() &&
+                    (mbffActualPins.count(mappedPin) || hasPin(dstCell, mappedPin))) {
+                    mapFile << sbName << "/" << pinName << " map "
+                        << mbffName << "/" << mappedPin << "\n";
                 }
             }
         }
     }
 
-    // -------- unmerged：左邊(單顆)的所有 pin 做 identity --------
+    // -------- unmerged：identity mapping for pins in Verilog --------
     for (const auto& ff : originalDefData_.flipFlops) {
         if (consumed.count(ff.instName) || consumed.count(WO_normPath(ff.instName))) continue;
-        const LibCell* c = getLibCell(ff.cellType);
-        if (!c) continue;
-        for (const auto& kv : c->pins) {
-            const std::string& pnm = kv.first;
-            mapFile << ff.instName << "/" << pnm << " map " << ff.instName << "/" << pnm << "\n";
+
+        // 收集這個 FF 在 Verilog 中實際使用的 pins
+        std::set<std::string> ffActualPins;
+        if (actualPinsUsed.count(ff.instName)) {
+            ffActualPins = actualPinsUsed[ff.instName];
+        }
+        // 也檢查簡單名稱
+        std::string ffSimple = ff.instName;
+        size_t slash = ffSimple.find_last_of('/');
+        if (slash != std::string::npos) {
+            ffSimple = ffSimple.substr(slash + 1);
+        }
+        if (actualPinsUsed.count(ffSimple)) {
+            for (const auto& pin : actualPinsUsed[ffSimple]) {
+                ffActualPins.insert(pin);
+            }
+        }
+
+        // 只為實際使用的 pins 寫出 identity mapping
+        for (const auto& pinName : ffActualPins) {
+            mapFile << ff.instName << "/" << pinName << " map "
+                << ff.instName << "/" << pinName << "\n";
         }
     }
 
@@ -653,7 +738,6 @@ bool WriteOutput::writeMapList() {
     std::cout << "  ✓ Generated " << mappingFile << std::endl;
     return true;
 }
-
 
 void WriteOutput::buildSimpleToFullNameMapping() {
     simpleToFullNameMap_.clear();
