@@ -541,22 +541,25 @@ void Legalizer::detectInitialOverlaps() {
     // 建立位置到 cells 的映射
     std::map<std::pair<double, double>, std::vector<int>> positionMap;
 
-    for (int i = 0; i < cellsToLegalize_.size(); ++i) {
+    for (int i = 0; i < (int)cellsToLegalize_.size(); ++i) {
         auto& cell = cellsToLegalize_[i];
-        auto pos = std::make_pair(cell.origX, cell.origY);
+        std::pair<double, double> pos(cell.origX, cell.origY);
         positionMap[pos].push_back(i);
     }
 
     // 找出重疊的 cells
     int overlapCount = 0;
-    for (const auto& [pos, indices] : positionMap) {
+    for (auto it = positionMap.begin(); it != positionMap.end(); ++it) {
+        const std::pair<double, double>& pos = it->first;
+        const std::vector<int>& indices = it->second;
+
         if (indices.size() > 1) {
             overlapCount++;
             cout << "  Overlap at (" << pos.first << ", " << pos.second
-                << "): " << indices.size() << " cells" << endl;
+                 << "): " << indices.size() << " cells" << endl;
 
             // 標記這些 cells 需要特殊處理
-            for (int i = 1; i < indices.size(); ++i) {
+            for (size_t i = 1; i < indices.size(); ++i) {
                 cellsToLegalize_[indices[i]].hasInitialOverlap = true;
             }
         }
@@ -564,6 +567,7 @@ void Legalizer::detectInitialOverlaps() {
 
     cout << "  Found " << overlapCount << " overlap positions" << endl;
 }
+
 // Identify blockages (macros, blockages, combinational cells)
 void Legalizer::identifyBlockages() {
     blockages_.clear();
@@ -706,7 +710,11 @@ bool Legalizer::findEmergencyPosition(CellToLegalize& cell) {
         [](const auto& a, const auto& b) { return a.second < b.second; });
 
     // 嘗試每個 row
-    for (const auto& [rowIdx, dist] : rowDistances) {
+  // C++14 OK
+    for (const std::pair<int, double>& rd : rowDistances) {
+        const int rowIdx = rd.first;
+        // const double dist = rd.second; // 目前沒用到就先不存
+
         auto& row = rows_[rowIdx];
 
         // 根據 row orientation 決定可用的 orientations
@@ -737,14 +745,14 @@ bool Legalizer::findEmergencyPosition(CellToLegalize& cell) {
         }
 
         // 嘗試每個 orientation
-        for (const auto& orient : tryOrients) {
-            string finalOrient = orient;
+        for (const std::string& orient : tryOrients) {
+            std::string finalOrient = orient;
 
-            double width, height;
+            double width = 0.0, height = 0.0;
             getCellDimensions(cell.cellType, finalOrient, width, height);
 
             int needRows = (height > 1.5 * rowHeight_) ? 2 : 1;
-            int needSites = (int)ceil(width / siteWidth_);
+            int needSites = static_cast<int>(std::ceil(width / siteWidth_));
 
             // 只處理單列 cells (緊急放置通常不處理 tall macros)
             if (needRows > 1) continue;
@@ -771,15 +779,16 @@ bool Legalizer::findEmergencyPosition(CellToLegalize& cell) {
 
                     markSitesOccupied(row, startSite, needSites, cell.instName);
 
-                    cout << "    Emergency placement at row " << row.name
+                    std::cout << "    Emergency placement at row " << row.name
                         << " (orient=" << row.orientation << ")"
                         << ", site " << startSite
-                        << ", cell orient=" << finalOrient << endl;
+                        << ", cell orient=" << finalOrient << std::endl;
                     return true;
                 }
             }
         }
     }
+
 
     return false;
 }

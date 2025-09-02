@@ -48,6 +48,10 @@ private:
     void addWarning(const std::string& warning);
     bool parseBlockageInfo(std::ifstream& file, const std::string& line);
     bool isFlipFlopCell(const std::string& cellType);
+    int declaredComponentsCount_ = -1;
+
+    // （新增）用於抓 "COMPONENTS <N> ;" 的 regex
+    std::regex componentsHeaderRegex_ = std::regex(R"(^\s*COMPONENTS\s+(\d+)\s*;)");
 public:
     // Constructor & Destructor
     DefParser();
@@ -69,7 +73,10 @@ public:
         this->defData_ = newData; // 安砞ず场 DefData Θ跑计暗 data_
     }
     bool isLoaded() const { return isLoaded_; }
-
+    int getDeclaredComponentsCount() const {
+        return (declaredComponentsCount_ > 0) ? declaredComponentsCount_
+            : static_cast<int>(defData_.components.size());
+    }
     // Component access methods
     const std::vector<RowInfo>& getRows() const { return defData_.rows; }
     const std::vector<TrackInfo>& getTracks() const { return defData_.tracks; }

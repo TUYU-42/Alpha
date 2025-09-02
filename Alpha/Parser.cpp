@@ -539,6 +539,7 @@ bool Parser::parseWeights(const string& filename) {
 
 // TODO: Implement other parse methods when parsers are available
 bool Parser::parseDEF(const string& filename) {
+    inputDefPath_ = filename;
     string defFile = filename.empty() ? constructFilePath(baseName_, "def") : filename;
     cout << "Parsing DEF file: " << defFile << "..." << endl;
 
@@ -589,6 +590,7 @@ bool Parser::parseDEF(const string& filename) {
 }
 
 bool Parser::parseVerilog(const string& filename) {
+	inputVerilogPath_ = filename;
     string verilogFile = filename.empty() ? constructFilePath(baseName_, "v") : filename;
 
     cout << "Parsing Verilog file: " << verilogFile << "..." << endl;

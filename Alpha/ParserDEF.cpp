@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <map>
 #include <set>
+#include <regex>
 
 using namespace std;
 
@@ -116,12 +117,17 @@ bool DefParser::parseFile(const string& filename) {
         bool inExtension = false;
         bool inScanDef = false;
 
+        std::smatch m; // ← 提前宣告，等下可重複使用
         cout << "Reading DEF file line by line..." << endl;
 
         while (getline(in, line)) {
             lineCount++;
             if (line.empty() || line[0] == '#') continue;
-
+            if (std::regex_search(line, m, componentsHeaderRegex_)) {
+                declaredComponentsCount_ = std::stoi(m[1]);
+                // 可選：debug 印一下
+                std::cout << "[DEF] Declared COMPONENTS = " << declaredComponentsCount_ << std::endl;
+            }
             // Check for SCANCHAINS section
             if (line.find("SCANCHAINS") != string::npos && line.find("END SCANCHAINS") == string::npos) {
                 inScanChains = true;

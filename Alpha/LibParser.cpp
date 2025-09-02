@@ -28,21 +28,30 @@ static inline bool looksLikeClockPinName(const std::string& pin) {
 // 從 LibPin 取等效 Ceff：優先 capacitance，否則回退到 rise/fall（若存在）
 static inline double effectiveCapFromPin(const LibPin& p) {
     if (p.capacitance > 0) return p.capacitance;
+
     double rc = 0.0, fc = 0.0;
-    if (auto it = p.attributes.find("rise_capacitance"); it != p.attributes.end()) {
+
+    // C++14: 不能用 if(init; condition)，要先宣告 iterator
+    auto it = p.attributes.find("rise_capacitance");
+    if (it != p.attributes.end()) {
         try { rc = std::stod(it->second); }
         catch (...) {}
     }
-    if (auto it = p.attributes.find("fall_capacitance"); it != p.attributes.end()) {
+
+    it = p.attributes.find("fall_capacitance");
+    if (it != p.attributes.end()) {
         try { fc = std::stod(it->second); }
         catch (...) {}
     }
+
     if (rc > 0 && fc > 0) return 0.5 * (rc + fc);
     if (rc > 0) return rc;
     if (fc > 0) return fc;
+
     // 也可選擇回退 min/maxCapacitance；這裡保守回傳 0
     return 0.0;
 }
+
 
 std::string LibParser::getClockPinName(const std::string& cellName) const {
     auto it = cellLibrary_.find(cellName);
@@ -83,11 +92,17 @@ double LibParser::getClockPinCap(const std::string& cellName) const {
     if (it == cellLibrary_.end()) return 0.0;
 
     const LibCell& cell = it->second;
-    for (const auto& [pinName, pin] : cell.pins) {
+    for (std::map<std::string, LibPin>::const_iterator itp = cell.pins.begin();
+        itp != cell.pins.end(); ++itp) {
+
+        const std::string& pinName = itp->first;
+        const LibPin& pin = itp->second;
+
         if (pin.name == "CK") {
             return pin.capacitance; // 優先回傳 CK 腳的 capacitance
         }
     }
+
     // A. signalType=clock 優先
     for (const auto& kv : cell.pins) {
         const auto& p = kv.second;
@@ -561,7 +576,12 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell,
                     updateCellBitWidthFromBundles(cell);
 
                     // 在 cell 收尾時只印一次（優先依 isClock，其次名稱等於 CK/CLK）
-                    for (const auto& [pname, p] : cell.pins) {
+                    for (std::map<std::string, LibPin>::const_iterator itp = cell.pins.begin();
+                        itp != cell.pins.end(); ++itp) {
+
+                        const std::string& pname = itp->first;
+                        const LibPin& p = itp->second;
+
                         if (p.isClock || pname == "CK" || pname == "CLK") {
                             std::cout << "  [DEBUG] " << cell.name
                                 << " clock pin = " << pname
@@ -569,6 +589,7 @@ bool LibParser::parseCell(ifstream& file, const string& cellName, LibCell& cell,
                             break; // 只印一個時鐘腳
                         }
                     }
+
                     return true;
                 }
             }

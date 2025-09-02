@@ -186,7 +186,9 @@ public:
 
     // Get LEF sites
     const std::vector<LefSiteInfo>& getLefSites() const;
-
+    const std::string& inputDefPath() const { return inputDefPath_; }
+    const std::string& inputVerilogPath() const { return inputVerilogPath_; }
+    DefParser* def() const { return defParser_.get(); }
     // Legalization method
     bool performLegalization();
     void setInputVerilogFile(const std::string& filename) { inputVerilogFile_ = filename; }
@@ -197,7 +199,8 @@ private:
     // macro MAP
     std::unordered_map<std::string, LefMacroInfo> macroMap_;
     void buildMacroMap();
-
+    std::string inputDefPath_;
+    std::string inputVerilogPath_;
 
     void addError(const std::string& error) const;
     void addWarning(const std::string& warning) const;
