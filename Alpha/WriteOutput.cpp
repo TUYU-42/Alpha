@@ -559,14 +559,19 @@ bool WriteOutput::writeMapList() {
     mapFile << "CellInst " << total << "\n";
 
     // -------- merged mapping --------
-    for (const auto& [m, sbList] : groups) {
+  // C++14 OK
+    for (auto itg = groups.begin(); itg != groups.end(); ++itg) {
+        auto m = itg->first;                     // 原本的 m
+        const auto& sbList = itg->second;        // 原本的 sbList
+
         const LibCell* dstCell = getLibCell(m->mbffType);
         const std::string& mbffName = m->newInstanceName;
 
         // 收集 MBFF 在 Verilog 中實際使用的 pins
         std::set<std::string> mbffActualPins;
-        if (actualPinsUsed.count(mbffName)) {
-            mbffActualPins = actualPinsUsed[mbffName];
+        auto itAct = actualPinsUsed.find(mbffName);
+        if (itAct != actualPinsUsed.end()) {
+            mbffActualPins = itAct->second;
         }
         // 也檢查簡單名稱
         std::string mbffSimple = mbffName;
@@ -574,8 +579,9 @@ bool WriteOutput::writeMapList() {
         if (lastSlash != std::string::npos) {
             mbffSimple = mbffSimple.substr(lastSlash + 1);
         }
-        if (actualPinsUsed.count(mbffSimple)) {
-            for (const auto& pin : actualPinsUsed[mbffSimple]) {
+        itAct = actualPinsUsed.find(mbffSimple);
+        if (itAct != actualPinsUsed.end()) {
+            for (const std::string& pin : itAct->second) {
                 mbffActualPins.insert(pin);
             }
         }
@@ -588,8 +594,9 @@ bool WriteOutput::writeMapList() {
 
             // 收集這個 SBFF 在 Verilog 中實際使用的 pins
             std::set<std::string> sbActualPins;
-            if (actualPinsUsed.count(sbName)) {
-                sbActualPins = actualPinsUsed[sbName];
+            itAct = actualPinsUsed.find(sbName);
+            if (itAct != actualPinsUsed.end()) {
+                sbActualPins = itAct->second;
             }
             // 也檢查簡單名稱
             std::string sbSimple = sbName;
@@ -597,8 +604,9 @@ bool WriteOutput::writeMapList() {
             if (slash != std::string::npos) {
                 sbSimple = sbSimple.substr(slash + 1);
             }
-            if (actualPinsUsed.count(sbSimple)) {
-                for (const auto& pin : actualPinsUsed[sbSimple]) {
+            itAct = actualPinsUsed.find(sbSimple);
+            if (itAct != actualPinsUsed.end()) {
+                for (const std::string& pin : itAct->second) {
                     sbActualPins.insert(pin);
                 }
             }
@@ -613,7 +621,7 @@ bool WriteOutput::writeMapList() {
                 };
 
             // ---- 處理所有在 Verilog 中出現的 SBFF pins ----
-            for (const auto& pinName : sbActualPins) {
+            for (const std::string& pinName : sbActualPins) {
                 std::string mappedPin;
 
                 // 特殊處理 bit-wise pins
@@ -670,26 +678,18 @@ bool WriteOutput::writeMapList() {
                         for (const auto& group : pinGroups) {
                             bool inGroup = false;
                             for (const auto& g : group) {
-                                if (lc(pinName) == lc(g)) {
-                                    inGroup = true;
-                                    break;
-                                }
+                                if (lc(pinName) == lc(g)) { inGroup = true; break; }
                             }
                             if (inGroup) {
                                 for (const auto& g : group) {
-                                    if (hasPin(dstCell, g)) {
-                                        mappedPin = g;
-                                        break;
-                                    }
+                                    if (hasPin(dstCell, g)) { mappedPin = g; break; }
                                 }
                                 if (!mappedPin.empty()) break;
                             }
                         }
 
                         // 如果還是找不到，保持原名
-                        if (mappedPin.empty()) {
-                            mappedPin = pinName;
-                        }
+                        if (mappedPin.empty()) mappedPin = pinName;
                     }
                 }
 
@@ -915,16 +915,22 @@ bool WriteOutput::writeVerilog() {
         return pin;
         };
     auto ensureUniqueName = [&](unordered_set<string>& used, string n) {
-        auto unesc = [&](string s) { return (!s.empty() && s[0] == '\\' && s.back() == ' ') ? s.substr(1, s.size() - 2) : s; };
+        auto unesc = [&](string s) {
+            return (!s.empty() && s[0] == '\\' && s.back() == ' ') ? s.substr(1, s.size() - 2) : s;
+            };
         string base = unesc(n);
         string cand = base;
         int suf = 0;
         while (used.count(cand)) cand = base + "_mbff" + std::to_string(++suf);
         used.insert(cand);
-        if (cand.find('[') != string::npos || cand.find(']') != string::npos || cand.find("__") != string::npos)
+
+        // 只有遇到中括號才需要 escape；雙底線 __ 不需要
+        if (cand.find('[') != string::npos || cand.find(']') != string::npos) {
             cand = "\\" + cand + " ";
+        }
         return cand;
         };
+
     auto isConstNet = [](const string& s)->bool {
         return s.find('\'') != std::string::npos;
         };
@@ -1345,7 +1351,9 @@ bool WriteOutput::writeVerilog() {
             string instName = g.newInstanceName;
             size_t slash = instName.find_last_of('/');
             if (slash != string::npos) instName = instName.substr(slash + 1);
+            instName = unescapeIfEscaped(instName);              // 先解殼
             instName = ensureUniqueName(localInstNames, instName);
+
 
             fout << g.mbffType << " " << instName << " ( ";
             for (size_t i = 0; i < conns.size(); ++i) {
@@ -1365,12 +1373,13 @@ bool WriteOutput::writeVerilog() {
             const auto& inst = module.instances[i];
             if (!inst.isModuleInstance && consumedIdx.count(i)) continue;
 
-            string instNameOutput = inst.instName;
+            string instNameOutput = unescapeIfEscaped(inst.instName);
+            // 只有碰到中括號才需要 escape，雙底線 __ 不需要
             if (instNameOutput.find('[') != string::npos ||
-                instNameOutput.find(']') != string::npos ||
-                instNameOutput.find("__") != string::npos) {
-                instNameOutput = "\\" + unescapeIfEscaped(instNameOutput) + " ";
+                instNameOutput.find(']') != string::npos) {
+                instNameOutput = "\\" + instNameOutput + " ";
             }
+
 
             fout << inst.cellType << " " << instNameOutput << " ( ";
             for (size_t k = 0; k < inst.connections.size(); ++k) {

@@ -1,4 +1,4 @@
-﻿#include "dpc.h"
+﻿#include "DPC.h"
 #include "DataStructures.h"
 #include "ParserDEF.h"
 #include <iostream>
@@ -16,8 +16,11 @@
 #include <regex>
 #include <iomanip> // for std::setprecision
 #include "LibParser.h"
-
+#include <cmath>
 #include <limits>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 // 放在檔案頂端（.cpp/.h），包含必要的 header
 
 
@@ -82,12 +85,8 @@ void DensityPeakClustering::dumpCkCapReport(const std::string& path) const {
     for (const auto& rep : ckCapReports_) {
         // 尋找對應 merged instance 名稱（你應該能從 mergedFFResults_ 反查；若已有映射更好）
         // 這裡示例：members[0] 所在的新名；若你已有 mergeMap_ 可改成 mergeMap_.getNewName(members[0]).
-        std::string mergedName = "(unknown)";
-        for (const auto& m : mergedFFResults_) {
-            if (!m.mergedFFs.empty() && m.mergedFFs[0] == rep.members.front()) {
-                mergedName = m.newInstanceName; break;
-            }
-        }
+        std::string mergedName = mergeMap_.getMergedName(rep.members.front());
+        if (mergedName.empty()) mergedName = "(unknown)";
 
         // NEW 欄位字串
         std::string fams = join(rep.sbFamiliesUnique, ";");
@@ -691,6 +690,9 @@ const DPCCluster* DensityPeakClustering::getClusterById(int cid) const {
 
 
 void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
+    // --- 失敗原因統計 ---
+    struct MergeStats { int failRow = 0, failCompat = 0, failDist = 0, failCK = 0, failHPWL = 0, pass2 = 0, pass4 = 0, fb22 = 0; } stats;
+
     // === 初始化 ===
     remainingSingleBitFFs.clear();
     mergeMap_.clear();
@@ -764,21 +766,21 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         }
         return (maxx - minx) + (maxy - miny);
         };
-    auto getDNetOtherPts = [&](const std::string& ff)->std::vector<std::pair<double, double>> {
+    auto getDNetOtherPts = [&](const std::string& /*ff*/)->std::vector<std::pair<double, double>> {
         std::vector<std::pair<double, double>> pts; return pts;
         };
-    auto getQNetOtherPts = [&](const std::string& ff)->std::vector<std::pair<double, double>> {
+    auto getQNetOtherPts = [&](const std::string& /*ff*/)->std::vector<std::pair<double, double>> {
         std::vector<std::pair<double, double>> pts; return pts;
         };
 
-    // 同 row 守門（用 y 差與 cell 高度）—— 使用 preset
+    // 同 row 守門（用 y 差與 cell 高度）
     auto isSameRowGroup = [&](const std::vector<std::string>& gg)->bool {
         std::vector<double> hs; hs.reserve(gg.size());
         for (auto& s : gg) { double h = getHeightOf(s); if (h > 0) hs.push_back(h); }
         if (hs.empty()) return true;
         std::sort(hs.begin(), hs.end());
         double rowH = hs[hs.size() / 2];
-        double tol = params_.sameRowTolMul * rowH;  // <== 原本固定 0.6，改用 preset
+        double tol = params_.sameRowTolMul * rowH;
         double y0 = std::get<1>(instGeom.at(gg.front()));
         for (auto& s : gg) {
             double y = std::get<1>(instGeom.at(s));
@@ -788,20 +790,38 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         };
 
     // 4 -> (2,2) 最短總距離配對
+   // C++14 OK
     auto splitBestPairs4 = [&](const std::vector<std::string>& g4)
-        -> std::vector<std::vector<std::string>> {
-        if (g4.size() != 4) return {};
-        auto D = [&](int i, int j) {
-            auto [xi, yi, wi, hi] = instGeom.at(g4[i]);
-            auto [xj, yj, wj, hj] = instGeom.at(g4[j]);
-            double dx = xi - xj, dy = yi - yj; return std::sqrt(dx * dx + dy * dy);
-            };
-        double c01_23 = D(0, 1) + D(2, 3);
-        double c02_13 = D(0, 2) + D(1, 3);
-        double c03_12 = D(0, 3) + D(1, 2);
-        if (c01_23 <= c02_13 && c01_23 <= c03_12) return { {g4[0],g4[1]}, {g4[2],g4[3]} };
-        if (c02_13 <= c03_12)                    return { {g4[0],g4[2]}, {g4[1],g4[3]} };
-        return { {g4[0],g4[3]}, {g4[1],g4[2]} };
+        -> std::vector<std::vector<std::string>>
+        {
+            if (g4.size() != 4) return {};
+
+            auto D = [&](int i, int j) -> double {
+                double xi, yi, wi, hi;
+                double xj, yj, wj, hj;
+
+                // 假設 instGeom: std::unordered_map<std::string, std::tuple<double,double,double,double>> 或同型
+                {
+                    const auto& ti = instGeom.at(g4[i]);
+                    std::tie(xi, yi, wi, hi) = ti;
+                }
+                {
+                    const auto& tj = instGeom.at(g4[j]);
+                    std::tie(xj, yj, wj, hj) = tj;
+                }
+
+                const double dx = xi - xj;
+                const double dy = yi - yj;
+                return std::sqrt(dx * dx + dy * dy);
+                };
+
+            const double c01_23 = D(0, 1) + D(2, 3);
+            const double c02_13 = D(0, 2) + D(1, 3);
+            const double c03_12 = D(0, 3) + D(1, 2);
+
+            if (c01_23 <= c02_13 && c01_23 <= c03_12) return { { g4[0], g4[1] }, { g4[2], g4[3] } };
+            if (c02_13 <= c03_12)                     return { { g4[0], g4[2] }, { g4[1], g4[3] } };
+            return                                       { { g4[0], g4[3] }, { g4[1], g4[2] } };
         };
 
     // 枚舉排列
@@ -812,7 +832,7 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
         return perms;
         };
 
-    // greedy 分群
+    // greedy 分群（沿用你原本的，保留做 4-bit 起手）
     auto findGroupsRemoveUsedGreedy = [&](std::vector<std::string>& tmpList, int bitSize,
         const std::map<std::string, std::pair<double, double>>& coords)
         -> std::vector<std::vector<std::string>> {
@@ -863,13 +883,144 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                 double ck_mb = libParser_->getClockPinCap(mb);
                 double ckSave = c_sb_perbit * bit - ck_mb;                   // ≈ ΣCsb − Cmb
                 double minSave = params_.ckSaveMinFrac * (c_sb_perbit * bit + 1e-12);
-                if (ckSave < minSave) continue;                              // <== 改用相對門檻
+                if (ckSave < minSave) continue;                              // <== 相對門檻
                 if (ckSave > bestSave || (ckSave == bestSave && (area < bestArea || (area == bestArea && leak < bestLeak)))) {
                     best = mb; bestSave = ckSave; bestArea = area; bestLeak = leak;
                 }
             }
             return best;
         };
+
+    // ===== 新增：2-bit 候選 pair 打分 + 不重疊最大匹配 =====
+    auto L1_dist = [&](const std::string& A, const std::string& B)->double {
+        const auto& a = instGeom.at(A);
+        const auto& b = instGeom.at(B);
+        return std::fabs(std::get<0>(a) - std::get<0>(b)) + std::fabs(std::get<1>(a) - std::get<1>(b));
+        };
+
+    struct PairCand {
+        std::string a, b;
+        double score;   // 用 CK 節省當分數
+        double dist;    // 當 tie-break
+        double ckSave;  // 記錄用
+    };
+
+    auto build2BitPairs = [&](const std::vector<std::string>& pool,
+        const std::map<std::string, std::pair<double, double>>& coords,
+        const std::unordered_map<std::string, std::string>& instToSB,
+        double distLimitL1)->std::vector<PairCand> {
+            std::vector<PairCand> out;
+            out.reserve(pool.size());
+            for (size_t i = 0; i < pool.size(); ++i) {
+                for (size_t j = i + 1; j < pool.size(); ++j) {
+                    const std::string& A = pool[i];
+                    const std::string& B = pool[j];
+
+                    // 同 row 守門
+                    if (!isSameRowGroup({ A,B })) { ++stats.failRow; continue; }
+
+                    // 幾何距離門檻（L1）
+                    double d = L1_dist(A, B);
+                    if (d > distLimitL1) { ++stats.failDist; continue; }
+
+                    // 白名單交集（位寬=2）
+                    const std::string& sbA = instToSB.at(A);
+                    const std::string& sbB = instToSB.at(B);
+                    auto itA = bankingCompatibleTable.find(sbA);
+                    auto itB = bankingCompatibleTable.find(sbB);
+                    if (itA == bankingCompatibleTable.end() || itB == bankingCompatibleTable.end()) { ++stats.failCompat; continue; }
+
+                    std::vector<std::string> mb2; mb2.reserve(8);
+                    for (const auto& mb : itA->second) {
+                        if (std::find(itB->second.begin(), itB->second.end(), mb) != itB->second.end()) {
+                            if (getBitWidthFromName(mb) == 2) mb2.push_back(mb);
+                        }
+                    }
+                    if (mb2.empty()) { ++stats.failCompat; continue; }
+
+                    // 估 CK 節省（取最佳者）
+                    double c_sb_avg = 0.5 * (libParser_->getClockPinCap(instToSB.at(A)) +
+                        libParser_->getClockPinCap(instToSB.at(B)));
+                    double bestSave = -1e100;
+                    for (const auto& mb : mb2) {
+                        double ck_mb = libParser_->getClockPinCap(mb);
+                        bestSave = std::max(bestSave, 2.0 * c_sb_avg - ck_mb);
+                    }
+                    double minSave = params_.ckSaveMinFrac * std::max(1e-12, 2.0 * c_sb_avg);
+                    if (bestSave < minSave) { ++stats.failCK; continue; }
+
+                    out.push_back({ A,B,bestSave,d,bestSave });
+                }
+            }
+            std::sort(out.begin(), out.end(), [](const PairCand& x, const PairCand& y) {
+                if (x.score != y.score) return x.score > y.score;
+                return x.dist < y.dist;
+                });
+            return out;
+        };
+
+    auto greedyPickPairs = [&](const std::vector<PairCand>& pairs)
+        -> std::vector<std::vector<std::string>> {
+        std::unordered_set<std::string> used;
+        std::vector<std::vector<std::string>> groups2; groups2.reserve(pairs.size());
+        for (const auto& p : pairs) {
+            if (used.count(p.a) || used.count(p.b)) continue;
+            used.insert(p.a); used.insert(p.b);
+            groups2.push_back({ p.a, p.b });
+        }
+        return groups2;
+        };
+
+    // 2-opt：在合法候選內重組 2-bit 配對以最大化總 CK 節省
+    auto improvePairs2Opt = [&](std::vector<std::vector<std::string>>& groups2,
+        const std::vector<PairCand>& allPairs,
+        int maxIters = 200) {
+            auto key = [](const std::string& x, const std::string& y) {
+                return (x < y) ? (x + "|" + y) : (y + "|" + x);
+                };
+            std::unordered_map<std::string, double> w;
+            w.reserve(allPairs.size() * 2);
+            for (const auto& p : allPairs) {
+                w[key(p.a, p.b)] = p.score;   // 分數 = CK 節省
+            }
+            auto scoreOf = [&](const std::string& u, const std::string& v) -> double {
+                auto it = w.find(key(u, v));
+                return (it == w.end()) ? -1e100 : it->second; // 非候選視為極差，避免違規重組
+                };
+
+            const int n = static_cast<int>(groups2.size());
+            if (n <= 1) return;
+
+            for (int it = 0; it < maxIters; ++it) {
+                bool improved = false;
+                for (int i = 0; i < n && !improved; ++i) {
+                    for (int j = i + 1; j < n && !improved; ++j) {
+                        const auto& P1 = groups2[i];
+                        const auto& P2 = groups2[j];
+                        if (P1.size() != 2 || P2.size() != 2) continue;
+                        const std::string& a1 = P1[0];
+                        const std::string& b1 = P1[1];
+                        const std::string& a2 = P2[0];
+                        const std::string& b2 = P2[1];
+                        const double cur = scoreOf(a1, b1) + scoreOf(a2, b2);
+                        const double s1 = scoreOf(a1, a2) + scoreOf(b1, b2);
+                        const double s2 = scoreOf(a1, b2) + scoreOf(b1, a2);
+                        if (s1 > cur && s1 >= s2) {
+                            groups2[i] = { a1, a2 };
+                            groups2[j] = { b1, b2 };
+                            improved = true;
+                        }
+                        else if (s2 > cur) {
+                            groups2[i] = { a1, b2 };
+                            groups2[j] = { b1, a2 };
+                            improved = true;
+                        }
+                    }
+                }
+                if (!improved) break; // 收斂
+            }
+        };
+    // ===== 2-bit 配對副程式結束 =====
 
     // === 逐 cluster（同 clock domain 已由 DPC 保證）===
     for (const auto& cluster : clusters_) {
@@ -902,17 +1053,27 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
             // 濾掉已用
             std::vector<std::string> instList; instList.reserve(pg.second.size());
             for (const auto& nm : pg.second) if (!usedInstances.count(nm)) instList.push_back(nm);
-            if (instList.size() < 2) { for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm); continue; }
+            if (instList.size() < 2) {
+                for (const auto& nm : instList) remainingSingleBitFFs.push_back(nm);
+                continue;
+            }
 
-            // 先 4 後 2
+            // 先 4 後 2：4b 沿用原 greedy，2b 改為候選打分+最大匹配 (+2-opt)
             auto tmp4 = instList;
             auto groups4 = findGroupsRemoveUsedGreedy(tmp4, 4, coords);
-            auto groups2 = findGroupsRemoveUsedGreedy(tmp4, 2, coords);
 
-            // 一組 group 嘗試合併（含 anchor+perm + ΔHPWL 守門）
+            const double dc = (cutoffDistance_ > 0 ? cutoffDistance_ : 1.0);
+            const double rR = (rhoRadius_ > 0 ? rhoRadius_ : 4.0 * dc);
+            const double distLimitRel2 = std::min(params_.dist2_rhoMul * rR, params_.dist2_dcMul * dc);
+            auto pairCands = build2BitPairs(tmp4, coords, instToSB, distLimitRel2);
+            auto groups2 = greedyPickPairs(pairCands);
+            // 使用 2-opt 對 2-bit 配對做局部最佳化（僅在合法候選內重組）
+            improvePairs2Opt(groups2, pairCands);
+
+            // 嘗試合併（含 anchor+perm + ΔHPWL 守門）
             auto tryMergeGroup = [&](const std::vector<std::string>& g, int bit)->bool {
                 // 幾何先決
-                if (!isSameRowGroup(g)) return false;
+                if (!isSameRowGroup(g)) { ++stats.failRow; return false; }
 
                 // 兼容名單交集
                 std::vector<const std::vector<std::string>*> whites; whites.reserve(g.size());
@@ -922,7 +1083,7 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                     if (itW == bankingCompatibleTable.end()) { whites.clear(); break; }
                     whites.push_back(&(itW->second));
                 }
-                if (whites.empty()) return false;
+                if (whites.empty()) { ++stats.failCompat; return false; }
 
                 std::vector<std::string> commonMBFF = *whites[0];
                 auto intersect_inplace = [&](const std::vector<std::string>& b) {
@@ -932,14 +1093,14 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                     commonMBFF.swap(tmp);
                     };
                 for (size_t i = 1; i < whites.size(); ++i) intersect_inplace(*whites[i]);
-                if (commonMBFF.empty()) return false;
+                if (commonMBFF.empty()) { ++stats.failCompat; return false; }
 
                 std::vector<std::string> bitMatched;
                 bitMatched.reserve(commonMBFF.size());
                 for (const auto& mb : commonMBFF) if (getBitWidthFromName(mb) == bit) bitMatched.push_back(mb);
-                if (bitMatched.empty()) return false;
+                if (bitMatched.empty()) { ++stats.failCompat; return false; }
 
-                // 距離上限（4b 更嚴）—— 使用 preset
+                // 距離上限（4b 更嚴）
                 auto max_pairwise_dist = [&](const std::vector<std::string>& gg)->double {
                     double best = 0.0;
                     for (size_t i = 0; i < gg.size(); ++i) {
@@ -950,13 +1111,12 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                         }
                     } return best;
                     };
-                const double dc = (cutoffDistance_ > 0 ? cutoffDistance_ : 1.0);
-                const double rR = (rhoRadius_ > 0 ? rhoRadius_ : 4.0 * dc);
-
+                const double dcL = (cutoffDistance_ > 0 ? cutoffDistance_ : 1.0);
+                const double rRL = (rhoRadius_ > 0 ? rhoRadius_ : 4.0 * dcL);
                 double distLimit = (bit == 4)
-                    ? std::min(params_.dist4_rhoMul * rR, params_.dist4_dcMul * dc)
-                    : std::min(params_.dist2_rhoMul * rR, params_.dist2_dcMul * dc);
-                if (max_pairwise_dist(g) > distLimit) return false;
+                    ? std::min(params_.dist4_rhoMul * rRL, params_.dist4_dcMul * dcL)
+                    : std::min(params_.dist2_rhoMul * rRL, params_.dist2_dcMul * dcL);
+                if (max_pairwise_dist(g) > distLimit) { ++stats.failDist; return false; }
 
                 // CK-cap 準備
                 double c_sb_sum = 0.0;
@@ -965,14 +1125,14 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
 
                 // CK 優先挑型（含相對門檻）
                 std::string bestFF = chooseBestMBFF(bitMatched, bit, c_sb_avg);
-                if (bestFF.empty()) return false;
+                if (bestFF.empty()) { ++stats.failCK; return false; }
 
                 // 退化型覆蓋 sanity
                 if (const auto* cell = libParser_->getCell(bestFF)) {
                     const std::string& deg = cell->singleBitDegenerate;
                     if (!deg.empty()) {
                         bool hit = false; for (auto& s : g) if (instToSB.at(s) == deg) { hit = true; break; }
-                        if (!hit) return false;
+                        if (!hit) { ++stats.failCompat; return false; }
                     }
                 }
 
@@ -980,7 +1140,7 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                 double ck_mb = libParser_->getClockPinCap(bestFF);
                 double ck_save = c_sb_sum - ck_mb;
                 double min_save = params_.ckSaveMinFrac * std::max(1e-12, c_sb_sum);
-                if (ck_save < min_save) return false;
+                if (ck_save < min_save) { ++stats.failCK; return false; }
 
                 // ΔHPWL 守門 + anchor+perm 搜尋 —— 使用 preset
                 std::unordered_map<std::string, double> hpwlD_before, hpwlQ_before;
@@ -992,8 +1152,8 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                 }
                 auto perms = allPerms(bit);
                 double wQ = params_.hpwlWeightQ;
-                double thrD = params_.hpwlThrDMul * dc;
-                double thrQ = params_.hpwlThrQMul * dc;
+                double thrD = params_.hpwlThrDMul * dcL;
+                double thrQ = params_.hpwlThrQMul * dcL;
 
                 double bestCost = 1e100; int bestAnchor = -1; std::vector<int> bestPerm;
 
@@ -1017,7 +1177,7 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                         if (pass && cost < bestCost) { bestCost = cost; bestAnchor = anchor; bestPerm = perm; }
                     }
                 }
-                if (bestAnchor < 0) return false;
+                if (bestAnchor < 0) { ++stats.failHPWL; return false; }
 
                 // === 建立輸出（採最佳 anchor+perm） ===
                 ++totalMergeCount;
@@ -1031,10 +1191,12 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                 merged.newX = (int)std::lround(A0.first);
                 merged.newY = (int)std::lround(A0.second);
 
-                if (const auto it = allCells.find(bestFF); it != allCells.end()) {
-                    merged.area = (float)it->second.area;
-                    merged.power = (float)it->second.cellLeakagePower;
+                auto it = allCells.find(bestFF);
+                if (it != allCells.end()) {
+                    merged.area = static_cast<float>(it->second.area);
+                    merged.power = static_cast<float>(it->second.cellLeakagePower);
                 }
+
                 for (int i = 0; i < bit; ++i) {
                     std::string d = "D" + std::to_string(i);
                     std::string q = "Q" + std::to_string(i);
@@ -1072,7 +1234,8 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
 
                 mergedFFResults_.push_back(std::move(merged));
                 for (const auto& s : g) usedInstances.insert(s);
-                if (bit == 4) ++fourbitFF; else if (bit == 2) ++twobitFF;
+                if (bit == 4) { ++fourbitFF; ++stats.pass4; }
+                else if (bit == 2) { ++twobitFF; ++stats.pass2; }
                 return true;
                 };
 
@@ -1088,7 +1251,7 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
                             auto pairs = splitBestPairs4(g);
                             for (auto& p : pairs) {
                                 bool anyUsed2 = false; for (auto& s : p) if (usedInstances.count(s)) { anyUsed2 = true; break; }
-                                if (!anyUsed2) (void)tryMergeGroup(p, 2);
+                                if (!anyUsed2) { ++stats.fb22; (void)tryMergeGroup(p, 2); }
                             }
                         }
                     }
@@ -1115,7 +1278,20 @@ void DensityPeakClustering::analyzeSingleBitMergeCandidates() {
     std::cout << "\n[DPC] Found " << mergedFFResults_.size()
         << " merged instances. (4-bit: " << fourbitFF
         << ", 2-bit: " << twobitFF << ")\n";
+
+    std::cout << "[DPC] merge stats: "
+        << "row=" << stats.failRow
+        << ", compat=" << stats.failCompat
+        << ", dist=" << stats.failDist
+        << ", ck=" << stats.failCK
+        << ", hpwl=" << stats.failHPWL
+        << ", pass2=" << stats.pass2
+        << ", pass4=" << stats.pass4
+        << ", fb22=" << stats.fb22
+        << std::endl;
 }
+
+
 
 
 
@@ -1478,7 +1654,7 @@ void DensityPeakClustering::computeRhoGrid_() {
     const int N = (int)points_.size();
     if (N == 0) return;
 
-    const double dc = cutoffDistance_;
+    const double dc = (cutoffDistance_ > 1e-9 ? cutoffDistance_ : 1.0);
     const double inv2dc2 = 1.0 / (dc * dc);
 
     for (int i = 0; i < N; ++i) points_[i].rho = 0.0;
@@ -1817,7 +1993,7 @@ std::vector<DensityPeakClustering::DpcParams> makeFivePresets() {
         P.ckSaveMinFrac = 0.000;
 
         v.push_back(P);
-}
+    }
 
     return v;
 }
