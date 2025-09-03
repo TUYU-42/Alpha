@@ -11,7 +11,6 @@
 #include <memory>
 #include <set>
 #include <unordered_map>
-#include"CrossReferenceManager.h"
 // Forward declarations
 class DefParser;
 class VerilogParser;
