@@ -21,6 +21,32 @@ static std::string readBracketSuffixes(const std::string& s, size_t& i) {
     }
     return suf;
 }
+// 在 ParserVerilog.cpp 頂端 helpers 區域加一個讀大括號的工具：
+static std::string readBraceExpr(const std::string& s, size_t& i) {
+    // Pre: s[i] == '{'
+    size_t n = s.size();
+    int depth = 0;
+    std::string out;
+    while (i < n) {
+        char c = s[i++];
+        out.push_back(c);
+        if (c == '{') ++depth;
+        else if (c == '}') {
+            if (--depth == 0) break;
+        }
+        else if (c == '\\') {
+            // 轉義識別字：保留到下一個空白或界定符，避免中途被逗號/括號打斷
+            // （這段不是必要，但能讓大括號裡的 \in12[1] 一次吃乾淨）
+            // 回退一步，交給原本的 readEscapedIdentifier 規則處理
+            --i;
+            std::string esc = VerilogParser::readEscapedIdentifier(s, i);
+            out.append(esc);
+        }
+        // 其它字元原樣保留（包括逗號、空白、數字、位選、常數等）
+    }
+    return out;
+}
+
 VerilogParser::VerilogParser() = default;
 static inline std::string normalizeId(const std::string& s) {
     if (!s.empty() && s.front() == '\\' && !s.empty() && s.back() == ' ')
@@ -544,18 +570,18 @@ void VerilogParser::parseInstanceConnections(const std::string& args,
             std::string net;
             bool isEsc = false;
 
-            if (i < n && args[i] == '\\') {
+            if (i < n && args[i] == '{') {
+                net = readBraceExpr(args, i);           // 例："{ a[2], b[1], 1'b0 }"
+            }
+            else if (i < n && args[i] == '\\') {
                 isEsc = true;
-                net = readEscapedIdentifier(args, i);   // 例如 "\in1[72] "
+                net = readEscapedIdentifier(args, i);   // 例："\\in1[72] "
             }
             else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) {
-                // 識別字或常數開頭
                 size_t idBeg = i;
-                net = readIdentifier(args, i);          // 先拿到 "in1"
-                // NEW: 把緊跟的 [..] 後綴補上 -> "in1[72]" / "in1[99:0]"
+                net = readIdentifier(args, i);
                 net += readBracketSuffixes(args, i);
             }
-
             // 跳到逗號
             while (i < n && args[i] != ',') ++i;
             if (i < n && args[i] == ',') ++i;
@@ -589,12 +615,14 @@ void VerilogParser::parseInstanceConnections(const std::string& args,
 
         // 讀 net
         std::string net;
-        if (i < n && args[i] == '\\') {
-            net = readEscapedIdentifier(args, i);       // "\in1[72] "
+        if (i < n && args[i] == '{') {
+            net = readBraceExpr(args, i);           // 例："{ SYNOPSYS_UNCONNECTED_8, in12[2], in12[1], 1'b0 }"
+        }
+        else if (i < n && args[i] == '\\') {
+            net = readEscapedIdentifier(args, i);
         }
         else if (i < n && (isIdentifierStart(args[i]) || args[i] == '0' || args[i] == '1')) {
-            net = readIdentifier(args, i);              // "in1"
-            // NEW: 把 [..] 後綴補上 -> "in1[72]"
+            net = readIdentifier(args, i);
             net += readBracketSuffixes(args, i);
         }
 

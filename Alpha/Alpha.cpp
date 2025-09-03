@@ -1,10 +1,8 @@
 ﻿#include "Parser.h"
 #include "DataStructures.h"
-#include "place.h"
 #include "DPC.h"
 #include "Legalizer.h"
 #include "WriteOutput.h"
-#include "MetricsEstimator.h"
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -411,6 +409,7 @@ int main(int argc, char* argv[]) {
         DensityPeakClustering dpc;
 
         auto presets = makeFivePresets();
+        if (tcId == 1);
         size_t pick = 7; // 想跑哪組就改這個索引
 
         dpc.setParams(presets.at(pick)); // at() 有界限檢查
@@ -475,14 +474,7 @@ int main(int argc, char* argv[]) {
         DefData& defDataFin = parser.getDefParser()->getDefData();
 
 
-        // 已完成 setDefData(defData) 與 performLegalization()
-     //   parser.identifyFFInstances();  // 重新用目前 DEF 的 components 建 flipFlops
-
-      // const DefData& afterDef = parser.getDefParser()->getDefData();
-
-       // FFMetrics afterM = est.compute(afterDef);  // 這次會用新的 flipFlops
-     //   FFAreaPowerEstimator::printReport(baseM, afterM);
-      // est.writeDetailedReport(afterDef, args.outputName + "_ff_after.txt", &baseM);
+  
 
         // Step 1: 創建 WriteOutput 物件
         WriteOutput writer(args.outputName,

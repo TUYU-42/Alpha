@@ -136,7 +136,6 @@
     <ClCompile Include="HierarchicalClustering.cpp" />
     <ClCompile Include="Legalizer.cpp" />
     <ClCompile Include="LibParser.cpp" />
-    <ClCompile Include="MetricsEstimator.cpp" />
     <ClCompile Include="Parser.cpp" />
     <ClCompile Include="ParserDEF.cpp" />
     <ClCompile Include="ParserLEF.cpp" />
@@ -144,7 +143,6 @@
     <ClCompile Include="ParserTech.cpp" />
     <ClCompile Include="ParserVerilog.cpp" />
     <ClCompile Include="ParserWeights.cpp" />
-    <ClCompile Include="place.cpp" />
     <ClCompile Include="WriteOutput.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -154,7 +152,6 @@
     <ClInclude Include="HierarchicalClustering.h" />
     <ClInclude Include="Legalizer.h" />
     <ClInclude Include="LibParser.h" />
-    <ClInclude Include="MetricsEstimator.h" />
     <ClInclude Include="Parser.h" />
     <ClInclude Include="ParserDEF.h" />
     <ClInclude Include="ParserLEF.h" />
@@ -162,7 +159,6 @@
     <ClInclude Include="ParserTech.h" />
     <ClInclude Include="ParserVerilog.h" />
     <ClInclude Include="ParserWeights.h" />
-    <ClInclude Include="place.h" />
     <ClInclude Include="WriteOutput.h" />
   </ItemGroup>
   <ItemGroup>

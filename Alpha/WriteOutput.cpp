@@ -829,6 +829,51 @@ void WriteOutput::buildSimpleToFullNameMapping() {
         }
     }
 }
+// --- brace-concat helpers ---
+auto trim = [](std::string s) { size_t a = 0, b = s.size();
+while (a < b && std::isspace((unsigned char)s[a])) ++a;
+while (b > a && std::isspace((unsigned char)s[b - 1])) --b;
+return s.substr(a, b - a);
+    };
+
+auto isBraceConcat = [&](const std::string& s)->bool {
+    std::string t = trim(s);
+    return !t.empty() && t.front() == '{' && t.back() == '}';
+    };
+
+// 以 brace-depth 感知切分頂層逗號；支援 \escaped 、常數、位選與巢狀 { }
+auto splitBraceTopElems = [&](const std::string& expr)->std::vector<std::string> {
+    std::vector<std::string> out;
+    std::string t = trim(expr);
+    if (t.size() < 2 || t.front() != '{' || t.back() != '}') return out;
+    size_t i = 1, n = t.size() - 1; int depth = 0;
+    size_t beg = i;
+    auto push = [&](size_t l, size_t r) {
+        if (r > l) { std::string x = trim(t.substr(l, r - l)); if (!x.empty()) out.push_back(x); }
+        };
+    while (i < n) {
+        char c = t[i];
+        if (c == '{') { ++depth; ++i; }
+        else if (c == '}') { --depth; ++i; }
+        else if (c == '\\') {            // 轉義識別字：吃到空白/分隔
+            size_t j = i + 1;
+            while (j < n && !std::isspace((unsigned char)t[j]) && t[j] != ',' && t[j] != '}') ++j;
+            i = j;
+        }
+        else if (c == '(' || c == '[') { // 括號/中括號：吃到配對
+            char open = c, close = (c == '(' ? ')' : ']'); int d = 1; size_t j = i + 1;
+            while (j < n && d>0) { if (t[j] == open) ++d; else if (t[j] == close) --d; ++j; }
+            i = j;
+        }
+        else if (c == ',' && depth == 0) {
+            push(beg, i); beg = i + 1; ++i;
+        }
+        else { ++i; }
+    }
+    push(beg, n);
+    return out;
+    };
+
 bool WriteOutput::writeVerilog() {
     using std::string;
     using std::vector;
@@ -987,6 +1032,7 @@ bool WriteOutput::writeVerilog() {
         };
     auto needsEscapeActual = [&](const string& s)->bool {
         if (s.empty()) return false;
+        if (isBraceConcat(s)) return false;            // NEW: concat 原樣輸出
         if (s == "VDD" || s == "VSS" || s == "UNCONNECTED") return false;
         if (isConstNet(s)) return false;
         if (!s.empty() && s[0] == '\\') return false;
@@ -997,6 +1043,7 @@ bool WriteOutput::writeVerilog() {
         return false;
         };
     auto fmtActualNet = [&](string net)->string {
+        if (isBraceConcat(net)) return trim(net);      // NEW: 直接回寫 "{ ... }"
         return needsEscapeActual(net) ? (string("\\") + net + " ") : net;
         };
     auto fmtDeclName = [&](string net)->string {
@@ -1077,22 +1124,35 @@ bool WriteOutput::writeVerilog() {
                 string netName = conn.second;
                 if (netName == "UNCONNECTED" || netName == "VSS" || netName == "VDD") continue;
 
-                bool esc = isEscaped(netName);                         // CHANGED
-                string netNorm = unescapeIfEscaped(netName);
-                if (!netNorm.empty()) {
-                    usedNets.insert(netNorm);
-                    if (!esc) {
-                        // 只有非 escaped 的 a[3]/a[7:0] 視為真正 bit-select
-                        touchBitUse(netNorm);                          // CHANGED
+                auto feedOneNetToken = [&](const string& token) {
+                    if (token.empty()) return;
+                    if (isConstNet(token)) return;
+
+                    bool escTok = isEscaped(token);
+                    string normTok = unescapeIfEscaped(token);
+
+                    // 記錄 base 的位元使用，供 bus 宣告
+                    if (!escTok) {
+                        touchBitUse(normTok);
                     }
                     else {
-                        // 記錄 \a[3] 這類 scalar 的 base，禁止後面自動宣告 bus
                         string base;
-                        if (isEscapedBitLike(netName, &base)) {        // CHANGED
-                            basesFromEscapedBit.insert(base);
-                        }
+                        if (isEscapedBitLike(token, &base)) basesFromEscapedBit.insert(base);
+                    }
+
+                    // 對於純 scalar 的 token，加入 usedNets（bit-select 不宣告 scalar）
+                    if (!isBitSelect(normTok)) usedNets.insert(normTok);
+                    };
+
+                if (isBraceConcat(netName)) {
+                    for (auto& el : splitBraceTopElems(netName)) {
+                        feedOneNetToken(el);
                     }
                 }
+                else {
+                    feedOneNetToken(netName);
+                }
+
             }
         }
 
