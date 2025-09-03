@@ -216,8 +216,8 @@ void Parser::performHierarchicalClustering() {
         hierarchicalClustering_->printClusteringSummary();
 
         // Export results
-        string clusteringFile = outputName_ + "_clustering.txt";
-        hierarchicalClustering_->exportToFile(clusteringFile);
+       // string clusteringFile = outputName_ + "_clustering.txt";
+     //   hierarchicalClustering_->exportToFile(clusteringFile);
     }
     else {
         clusteringPerformed_ = false;

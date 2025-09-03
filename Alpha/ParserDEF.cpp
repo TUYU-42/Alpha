@@ -128,6 +128,10 @@ bool DefParser::parseFile(const string& filename) {
                 // ¿Éßx£ºdebug Ó¡Ò»ÏÂ
                 std::cout << "[DEF] Declared COMPONENTS = " << declaredComponentsCount_ << std::endl;
             }
+            if (std::regex_search(line, m, netsHeaderRegex_)) {
+                declaredNetsCount_ = std::stoi(m[1]);
+                std::cout << "[DEF] Declared NETS = " << declaredNetsCount_ << std::endl;
+            }
             // Check for SCANCHAINS section
             if (line.find("SCANCHAINS") != string::npos && line.find("END SCANCHAINS") == string::npos) {
                 inScanChains = true;

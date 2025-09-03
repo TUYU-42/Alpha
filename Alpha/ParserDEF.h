@@ -49,7 +49,8 @@ private:
     bool parseBlockageInfo(std::ifstream& file, const std::string& line);
     bool isFlipFlopCell(const std::string& cellType);
     int declaredComponentsCount_ = -1;
-
+    int declaredNetsCount_ = -1;
+    std::regex netsHeaderRegex_ = std::regex(R"(^\s*NETS\s+(\d+)\s*;)");
     // （新增）用於抓 "COMPONENTS <N> ;" 的 regex
     std::regex componentsHeaderRegex_ = std::regex(R"(^\s*COMPONENTS\s+(\d+)\s*;)");
 public:
@@ -77,6 +78,11 @@ public:
         return (declaredComponentsCount_ > 0) ? declaredComponentsCount_
             : static_cast<int>(defData_.components.size());
     }
+    int getDeclaredNetsCount() const {
+        return (declaredNetsCount_ > 0) ? declaredNetsCount_
+            : static_cast<int>(defData_.nets.size());
+    }
+
     // Component access methods
     const std::vector<RowInfo>& getRows() const { return defData_.rows; }
     const std::vector<TrackInfo>& getTracks() const { return defData_.tracks; }
