@@ -1401,10 +1401,7 @@ bool WriteOutput::writeVerilog() {
                     }
                     if (already) continue; // 有就不補
 
-                    // 沒有：補 fallback。 .v 只要最後的 token
-                    int id = getOrAllocFallbackId(fullHier, formalQN);
-                    std::string fbV = makeVlogFallbackName(id);
-                    conns.push_back({ formalQNEsc, fbV });
+                    conns.push_back({ formalQNEsc, "" });  // 之後輸出成 ".QNx ( )"
                 }
             }
 
@@ -1586,7 +1583,8 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
 
                 if (missing(netName)) {
                     int id = getOrAllocFallbackId(fullHier, pinName);
-                    netName = makeVlogFallbackName(id); // .v 只用最後 token
+                    netName.clear();  // 會輸出 ".QNx ( )"
+
                 }
                 connections.push_back({ pinName, netName });
             }
@@ -1605,7 +1603,8 @@ vector<pair<string, string>> WriteOutput::getMBFFPinConnections(const MergedFF& 
 
                 if (missing(netName)) {
                     int id = getOrAllocFallbackId(fullHier, pinName);
-                    netName = makeVlogFallbackName(id); // .v 只用最後 token
+                    netName.clear();  // 會輸出 ".QNx ( )"
+
                 }
                 connections.push_back({ pinName, netName });
             }
@@ -2212,18 +2211,10 @@ bool WriteOutput::writeDef() {
                     // fallback to qnNet discovered earlier from leafPin2Net
                     if (origQnNet.empty() && !qnNet.empty()) origQnNet = qnNet;
 
-                    if (origQnNet.empty()) {
-                        std::string fullHier = WO_normPath(mbff.newInstanceName);
-                        std::string baseHier = dropLastPathElem(fullHier);
-
-                        // 同一個 <baseHier, formalQN> 配一個 id；.v/.def 會用到同一個 id
-                        int id = getOrAllocFallbackId(fullHier, mbffQnPin);
-
-                        // DEF 的 fallback 名稱：<父階層>/SYNOPSYS_UNCONNECTED_new_<id>
-                        origQnNet = makeDefFallbackName(baseHier, id);
+                    if (!origQnNet.empty() && origQnNet != "UNCONNECTED") {
+                        ensureConnectedFast(origQnNet, mbff.newInstanceName, mbffQnPin);
+                        // 若真的有 net 才維持必要標記
                     }
-
-                    ensureConnectedFast(origQnNet, mbff.newInstanceName, mbffQnPin);
 
                     // 標記 + USE SIGNAL（你的 DEF 輸出會讀這個欄位）
                     auto itIdx = netIndex.find(origQnNet);
