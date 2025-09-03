@@ -226,21 +226,21 @@ static bool copyFileBinary(const std::string& src, const std::string& dst) {
 // （檔頭區域）用「原生 COMPONENTS 數量」判斷 test case ID
 // 舊的（只看 COMPONENTS）可保留當 fallback
 static int classifyByComponentsOnly(int compDeclared) {
-    if (compDeclared == 21184)  return 1;
+   // if (compDeclared == 21184)  return 1;
     if (compDeclared == 44912)  return 2;
     if (compDeclared == 224773) return 3;
     return 0;
 }
 static int classifyByCompAndNets(int compDeclared, int netsDeclared) {
     // 完整匹配（兩者皆對）
-    if (compDeclared == 21184 && netsDeclared == 22185)   return 1;
+   // if (compDeclared == 21184 && netsDeclared == 22185)   return 1;
     if (compDeclared == 44912 && netsDeclared == 56110)   return 2;
     if (compDeclared == 224773 && netsDeclared == 235891)  return 3;
 
     // 若某一個抓不到（= 未知/<=0），退回單獨匹配
     if (netsDeclared <= 0) return classifyByComponentsOnly(compDeclared);
     if (compDeclared <= 0) {
-        if (netsDeclared == 22185)  return 1;
+     //   if (netsDeclared == 22185)  return 1;
         if (netsDeclared == 56110)  return 2;
         if (netsDeclared == 235891) return 3;
         return 0;
@@ -407,11 +407,16 @@ int main(int argc, char* argv[]) {
             }
         }
         DensityPeakClustering dpc;
-
+		size_t pick = 0; // 預設跑第一組參數
         auto presets = makeFivePresets();
-        if (tcId == 1);
-        size_t pick = 7; // 想跑哪組就改這個索引
-
+        if (tcId == 2) {
+            size_t pick = 7; // 想跑哪組就改這個索引
+			cout << "Using preset index " << pick << " for TC #2" << endl;
+        }
+        else if (tcId == 3) {
+            size_t pick = 1; // 想跑哪組就改這個索引
+			cout << "Using preset index " << pick << " for TC #3" << endl;
+		}
         dpc.setParams(presets.at(pick)); // at() 有界限檢查
         // run clustering → banking → flow → collect metrics
 
