@@ -53,12 +53,13 @@ private:
         const std::string& instanceName) const;
     std::string generateMBFFInstance(const MergedFF& mergedFF,
         const VerilogInstance& origInst) const;
+    int tcId_;
 public:
     WriteOutput(const std::string& outputName,
         const MergeMapping& mergeMap,
         const DefData& originalDefData,
         const std::vector<MergedFF>& mergedFFResults,
-        const VerilogParser* verilogParser = nullptr);
+        const VerilogParser* verilogParser = nullptr,int tcId = 0);
 
     // Setters
     void setLibParser(LibParser* parser) { libParser_ = parser; }

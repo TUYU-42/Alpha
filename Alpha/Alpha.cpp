@@ -367,7 +367,8 @@ int main(int argc, char* argv[]) {
                 /* mergeMap */         MergeMapping{},                 // 空的即可
                 /* originalDefData */ defDataForCopy,     // 你原本存取 DefData 的方式
                 /* mergedFFResults */  std::vector<MergedFF>{},        // 空
-                /* verilogParser */ parser.getVerilogParser()                // 你手上的 VerilogParser
+                /* verilogParser */ parser.getVerilogParser()  ,
+                0// 你手上的 VerilogParser
             );
             if (!writer.writeMapList()) {
                 std::cerr << "[Alpha][WARN] writeMapList() failed.\n";
@@ -407,14 +408,14 @@ int main(int argc, char* argv[]) {
             }
         }
         DensityPeakClustering dpc;
-		size_t pick = 0; // 預設跑第一組參數
+		 size_t pick = 0; // 預設跑第一組參數
         auto presets = makeFivePresets();
         if (tcId == 2) {
-            size_t pick = 7; // 想跑哪組就改這個索引
+             pick = 7; // 想跑哪組就改這個索引
 			cout << "Using preset index " << pick << " for TC #2" << endl;
         }
         else if (tcId == 3) {
-            size_t pick = 1; // 想跑哪組就改這個索引
+             pick = 1; // 想跑哪組就改這個索引
 			cout << "Using preset index " << pick << " for TC #3" << endl;
 		}
         dpc.setParams(presets.at(pick)); // at() 有界限檢查
@@ -486,7 +487,8 @@ int main(int argc, char* argv[]) {
             map,           // 合併映射
             defDataFin,                 // 最終 DEF 資料
             dpc.getMergedFFResults(),     // 合併結果
-            parser.getVerilogParser());   // Verilog Parser
+            parser.getVerilogParser(),
+            tcId);   // Verilog Parser
 
         // Step 2: 設定 LibParser（重要！用於判斷 FF 和取得 pin 資訊）
         writer.setLibParser(parser.getLibParser());
